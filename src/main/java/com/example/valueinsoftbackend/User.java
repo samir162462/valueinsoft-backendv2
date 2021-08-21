@@ -2,18 +2,17 @@ package com.example.valueinsoftbackend;
 
 public class User {
 
-    int UserId;
+    String UserId;
     String UserName;
     String UserPassword;
 
-
-    public User(int userId, String userName, String userPassword) {
+    public User(String userId, String userName, String userPassword) {
         UserId = userId;
         UserName = userName;
         UserPassword = userPassword;
     }
 
-    public int getUserId() {
+    public String getUserId() {
         return UserId;
     }
 
