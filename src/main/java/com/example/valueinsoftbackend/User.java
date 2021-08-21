@@ -5,11 +5,23 @@ public class User {
     String UserId;
     String UserName;
     String UserPassword;
+    String Role;
+
+    public User(String userId, String userName, String userPassword, String role) {
+        UserId = userId;
+        UserName = userName;
+        UserPassword = userPassword;
+        Role = role;
+    }
 
     public User(String userId, String userName, String userPassword) {
         UserId = userId;
         UserName = userName;
         UserPassword = userPassword;
+    }
+
+    public String getRole() {
+        return Role;
     }
 
     public String getUserId() {
