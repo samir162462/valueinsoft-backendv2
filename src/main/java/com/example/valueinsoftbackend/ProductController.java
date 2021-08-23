@@ -3,6 +3,8 @@ package com.example.valueinsoftbackend;
 
 import Model.Product;
 import com.example.valueinsoftbackend.User;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -53,4 +55,13 @@ public class ProductController {
         return productArrayList;
     }
 
+
+
+    @PostMapping("/saveProduct")
+    Product newEmployee(@RequestBody Product newproProduct) {
+        System.out.println(newproProduct.getProductName());
+        ValueinsoftBackendApplication.productArrayList.add(newproProduct);
+        System.out.println(ValueinsoftBackendApplication.productArrayList.size());
+        return newproProduct;
+    }
 }

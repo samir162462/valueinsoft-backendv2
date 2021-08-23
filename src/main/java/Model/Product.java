@@ -1,5 +1,7 @@
 package Model;
 
+import java.util.Random;
+
 public class Product {
     int productId;
     String productName;
@@ -21,7 +23,7 @@ public class Product {
 
 
     public Product(int productId, String productName, String buyingDay, String activationPeriod, int rPrice, int lPrice, int bPrice, String companyName, String type, String ownerName, String serial, String desc, int batteryLife, String ownerPhone, String ownerNI, int quantity, String pState) {
-        this.productId = productId;
+        this.productId = hashCode(productName,buyingDay);
         this.productName = productName;
         this.buyingDay = buyingDay;
         this.activationPeriod = activationPeriod;
@@ -39,6 +41,8 @@ public class Product {
         this.quantity = quantity;
         this.pState = pState;
     }
+
+
 
     public int getProductId() {
         return productId;
@@ -106,5 +110,21 @@ public class Product {
 
     public String getpState() {
         return pState;
+    }
+
+    private int hashCode(String name ,String buyDay) {
+        Random rand = new Random();
+        int hashnum = 0 ;
+        hashnum = (int) rand.nextInt(1000) * name.hashCode() * buyDay.hashCode();
+        if (hashnum<0)
+        {
+            hashnum = hashnum*-1;
+        }
+        if (hashnum==0)
+        {
+            hashnum = (int) rand.nextInt(1000) *(hashnum+1);
+        }
+
+        return hashnum;
     }
 }
