@@ -6,9 +6,10 @@ public class ShiftPeriod {
     int shiftID;
     String StartTime;
     String EndTime;
-    ArrayList<OrderShift> orderShiftList;
 
-    public ShiftPeriod(int shiftID, String startTime, String endTime, ArrayList<OrderShift> orderShiftList) {
+    ArrayList<Order> orderShiftList;
+
+    public ShiftPeriod(int shiftID, String startTime, String endTime, ArrayList<Order> orderShiftList) {
         this.shiftID = shiftID;;
         StartTime = startTime;
         EndTime = endTime;
@@ -18,23 +19,17 @@ public class ShiftPeriod {
     public int getShiftID() {
         return shiftID;
     }
-
     public String getStartTime() {
         return StartTime;
     }
-
     public String getEndTime() {
         return EndTime;
     }
-
-    public ArrayList<OrderShift> getOrderShiftList() {
+    public ArrayList<Order> getOrderShiftList() {
         return orderShiftList;
     }
-
-    public void setOrderShiftList(ArrayList<OrderShift> orderShiftList) {
+    public void setOrderShiftList(ArrayList<Order> orderShiftList) {
         this.orderShiftList = orderShiftList;
     }
-
-
 
 }

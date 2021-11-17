@@ -16,16 +16,7 @@ import java.util.List;
 @CrossOrigin("*")
 public class ProductController {
 
-    @GetMapping
-    public Product getgreet() {
-        for (int i = 0; i < ValueinsoftBackendApplication.productArrayList.size(); i++) {
-            Product p = ValueinsoftBackendApplication.productArrayList.get(i);
-            if (p.getProductId() == 111) {
-                return p;
-            }
-        }
-        return null;
-    }
+
 
 
 
@@ -50,7 +41,7 @@ public class ProductController {
                 return DbPosProduct.getProductBySearchText(words,id);
             case "comName":
                 System.out.println("comName");
-                return DbPosProduct.getProductBySearchCompanyName(text,id);
+                return DbPosProduct.getProductBySearchCompanyName(text.trim(),id);
             case "shortCate":
                 System.out.println("shortCate");
                 break;

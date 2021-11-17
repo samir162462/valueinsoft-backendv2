@@ -27,13 +27,12 @@ public class DbUsers {
 
             while (rs.next())
             {
+                rs.close();
+                st.close();
+                conn.close();
                 return true;
-
-
-                // print the results
             }
 
-            conn.close();
         }catch (Exception e)
         {
             System.out.println(" no user exist");
@@ -65,17 +64,18 @@ public class DbUsers {
 
 
                 User user = new User(rs.getInt(1), rs.getString(2),rs.getString(3),rs.getString(4),rs.getString(5) );
+                rs.close();
+                st.close();
+                conn.close();
                 return user;
 
                 // print the results
             }
 
 
-            st.close();
-            conn.close();
         }catch (Exception e)
         {
-            System.out.println("err : "+e.getMessage());
+            System.out.println("err in get user : "+e.getMessage());
 
         }
         return null;
@@ -106,6 +106,7 @@ public class DbUsers {
             int i=stmt.executeUpdate();
             System.out.println(i+" records inserted");
 
+            stmt.close();
             conn.close();
 
         }catch (Exception e )

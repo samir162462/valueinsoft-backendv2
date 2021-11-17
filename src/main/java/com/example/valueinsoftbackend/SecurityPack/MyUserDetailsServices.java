@@ -21,7 +21,8 @@ public class MyUserDetailsServices implements UserDetailsService {
     public UserDetails loadUserByUsername(String userName) throws UsernameNotFoundException {
 
         com.example.valueinsoftbackend.Model.User user = DbUsers.getUser(userName);
-        System.out.println(user.getUserName());
+       // System.out.println();
+        //System.out.println(user.getUserName());
         return new User(user.getUserName(),user.getUserPassword(),new ArrayList<>());
 
     }

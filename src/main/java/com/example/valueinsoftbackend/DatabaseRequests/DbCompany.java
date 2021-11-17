@@ -11,17 +11,15 @@ import java.util.ArrayList;
 public class DbCompany {
 
 
-
-    public static Company getCompanyByOwnerId(String id )
-    {
+    public static Company getCompanyByOwnerId(String id) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
-            ArrayList<Branch>bsList = new ArrayList<>();
+            ArrayList<Branch> bsList = new ArrayList<>();
             Company company = null;
             String query = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\"\n" +
-                    "\tFROM public.\"Company\" where \"ownerId\" = " +id+";";
+                    "\tFROM public.\"Company\" where \"ownerId\" = " + id + ";";
 
             String qu1 = "SELECT * FROM public.users\n" +
                     "ORDER BY id ASC ";
@@ -29,79 +27,76 @@ public class DbCompany {
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 
-            while (rs.next())
-            {
-                System.out.println("add  connected to company "+rs.getString(1));
+            while (rs.next()) {
+                System.out.println("add  connected to company " + rs.getString(1));
 
 
-                 company = new Company(rs.getInt(1), rs.getString(2),rs.getTimestamp(3),rs.getString(5),rs.getInt(6),null );
+                company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), null);
 
                 // print the results
+
             }
 
 
-            st.close();
-
             bsList = DbBranch.getBranchByCompanyId(company.getCompanyId());
             company.setBranchList(bsList);
-
+            rs.close();
+            st.close();
+            conn.close();
             return company;
 
-        }catch (Exception e)
-        {
-            System.out.println("err : "+e.getMessage());
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
 
         }
         return null;
 
     }
-    public static Company getCompanyById(String id )
-    {
+
+    public static Company getCompanyById(String id) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
-            ArrayList<Branch>bsList = new ArrayList<>();
+            ArrayList<Branch> bsList = new ArrayList<>();
             Company company = null;
             String query = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\"\n" +
-                    "\tFROM public.\"Company\" where \"id\" = " +id+";";
+                    "\tFROM public.\"Company\" where \"id\" = " + id + ";";
 
             // create the java statement
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 
-            while (rs.next())
-            {
-                System.out.println("add  connected to company "+rs.getString(1));
+            while (rs.next()) {
+                System.out.println("add  connected to company " + rs.getString(1));
 
 
-                company = new Company(rs.getInt(1), rs.getString(2),rs.getTimestamp(3),rs.getString(5),rs.getInt(6),null );
+                company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), null);
 
                 // print the results
             }
 
 
-            st.close();
 
             bsList = DbBranch.getBranchByCompanyId(company.getCompanyId());
             company.setBranchList(bsList);
-
+            rs.close();
+            st.close();
+            conn.close();
             return company;
 
-        }catch (Exception e)
-        {
-            System.out.println("err : "+e.getMessage());
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
 
         }
         return null;
 
     }
 
-    static public String AddCompany(String companyName,String branchName , String plan, int price,String username)
-    {
+    static public String AddCompany(String companyName, String branchName, String plan, int price, String username) {
         try {
 
-            int ownerId= 0;
+            int ownerId = 0;
             User u1 = DbUsers.getUser(username);
             ownerId = u1.getUserId();
 
@@ -109,23 +104,22 @@ public class DbCompany {
             Connection conn = ConnectionPostgres.getConnection();
 
 
-            PreparedStatement stmt=conn.prepareStatement("INSERT INTO public.\"Company\"(\n" +
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO public.\"Company\"(\n" +
                     " \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\")\n" +
                     "\tVALUES ( ?, ?, ?, ?, ?);");
 
-            stmt.setString(1,companyName);
-            stmt.setTimestamp(2,new Timestamp(System.currentTimeMillis()));
-            stmt.setInt(3,ownerId);
-            stmt.setString(4,plan);
-            stmt.setInt(5,price);
+            stmt.setString(1, companyName);
+            stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+            stmt.setInt(3, ownerId);
+            stmt.setString(4, plan);
+            stmt.setInt(5, price);
 
-            int i=stmt.executeUpdate();
-            System.out.println(i+" records inserted");
-
+            int i = stmt.executeUpdate();
+            System.out.println(i + " records inserted");
+            stmt.close();
             conn.close();
 
-        }catch (Exception e )
-        {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             return "the user not added bs error!";
 

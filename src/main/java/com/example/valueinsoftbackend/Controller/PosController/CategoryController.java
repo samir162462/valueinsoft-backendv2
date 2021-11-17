@@ -6,8 +6,13 @@ import com.example.valueinsoftbackend.Model.Category;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.SubCategory;
 import com.example.valueinsoftbackend.util.CustomPair;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import org.postgresql.util.PGobject;
 import org.springframework.web.bind.annotation.*;
 
+import java.sql.Array;
 import java.util.*;
 
 
@@ -17,53 +22,53 @@ import java.util.*;
 public class CategoryController {
 
 
-    @PostMapping("/{branchId}/saveProduct")
-    Map<String, Object> newEmployee(@RequestBody Map<String, Object> body, @PathVariable String branchId) {
 
-        //Delete
-        DbPosCategory.DeleteCategoryByBranchId(Integer.valueOf(branchId));
 
-        // DbPosProduct.AddProduct(newProProduct,branchId);
-        ArrayList<Category> cateList = new ArrayList<>();
-        System.out.println(body);
-        for (String key : body.keySet()) {
-            Object values = body.get(key);
-            System.out.println(key);
-            ArrayList<String>strList = new ArrayList<>();
-            ArrayList<SubCategory>subCategories = new ArrayList<>();
-            for (int i = 0; i < Arrays.asList(values).size(); i++) {
-                System.out.println(Arrays.asList(values).get(i).getClass());
-                strList.add(Arrays.asList(values).get(i).toString());
-                SubCategory sc = new SubCategory(1,strList,1);
-                subCategories.add(sc);
+    @PostMapping("/{branchId}/saveCategory")
+
+    String  newCategory(@RequestBody String payload, @PathVariable int branchId) {
+
+        DbPosCategory.AddCategoryJson(branchId,payload);//getCategoryJson
+
+
+
+        return payload;
+    }
+    @RequestMapping(path = "/getCategoryJson/{branchId}", method = RequestMethod.GET)
+    public ArrayList<CustomPair> getCategoriesJson(@PathVariable int branchId) {
+
+        try {
+
+            ArrayList<CustomPair>customPairs = new ArrayList<>();
+
+            // CustomPair customPair= new CustomPair()
+            Map<String, Object> response = new ObjectMapper().readValue(DbPosCategory.getCategoryJson(branchId), HashMap.class);
+            for (int i = 0; i < response.size(); i++) {
+                ArrayList<String> list1 = new ArrayList<String>();
+                String[] Data = response.values().toArray()[i].toString().trim().replace("[","").replace("]","").split(",");
+                for (int j = 0; j < Data.length; j++) {
+                    list1.add(Data[j]);
+                }
+                CustomPair customPair  = new CustomPair(response.keySet().toArray()[i].toString(),list1 );
+                customPairs.add(customPair);
+                System.out.println(response.keySet().toArray()[i]);
+                System.out.println(Data);
             }
-              Category cate = new Category(1,key,Integer.valueOf(branchId),subCategories);
-            System.out.println(cate.toString());
-            cateList.add(cate);
-        }
-        DbPosCategory.AddCategory(cateList);
-        DbPosCategory.AddSubCategory(cateList);
 
-        return body;
-    }
+            return customPairs;
 
-    @RequestMapping(path = "/getCategories/{branchId}", method = RequestMethod.GET)
-    public ArrayList<CustomPair> getCategories(@PathVariable int branchId) {
-
-        // code here
-        ArrayList<CustomPair>customPairs = new ArrayList<>();
-
-        ArrayList<Category> categoryArrayList= DbPosCategory.getCategoriesByBranchId(branchId);
-        for (int i = 0; i < categoryArrayList.size(); i++) {
-            Category cate = categoryArrayList.get(i);
-            System.out.println(DbPosCategory.getSubCategoriesByCategoryId(cate.getId()));
-            CustomPair customPair = new CustomPair(cate.getName(),DbPosCategory.getSubCategoriesByCategoryId(cate.getId()).getNames());
-            customPairs.add(customPair);
+        }catch (Exception e)
+        {
+            System.out.println(e);
         }
 
-        return customPairs;
+
+        return null;
 
     }
+
+
+
 
 
 }

@@ -57,6 +57,7 @@ public class DbPosProduct {
                 // print the results
             }
 
+            rs.close();
             st.close();
             conn.close();
             return  productArrayList;
@@ -82,6 +83,7 @@ public class DbPosProduct {
                     "\"pState\"" +
                     "\tFROM public.\"PosProduct_"+branchId+"\" where \"companyName\" = '"+comName+"' ";
 
+            System.out.println(branchId+" comName:"+comName);
 
             // create the java statement
 
@@ -101,6 +103,7 @@ public class DbPosProduct {
                 // print the results
             }
 
+            rs.close();
             st.close();
             conn.close();
             return  productArrayList;
@@ -151,6 +154,7 @@ public class DbPosProduct {
 
             int i = stmt.executeUpdate();
             System.out.println(i + " records inserted");
+            stmt.close();
             conn.close();
             return "The Product Saved";
 

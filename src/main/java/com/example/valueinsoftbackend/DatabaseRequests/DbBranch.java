@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -33,7 +34,7 @@ public class DbBranch {
                 // print the results
             }
 
-
+            rs.close();
             st.close();
             conn.close();
             return bsList;
@@ -64,6 +65,7 @@ public class DbBranch {
             }
 
 
+            rs.close();
             st.close();
             conn.close();
         } catch (Exception e) {
@@ -95,6 +97,8 @@ public class DbBranch {
                 // print the results
             }
 
+            rs.close();
+            st.close();
             conn.close();
         }catch (Exception e)
         {
@@ -132,8 +136,10 @@ public class DbBranch {
             conn.close();
 
             // Crate Branch table for new branch in DB
-            CreateBranchTable(getBranchIdByCompanyNameAndBranchName(companyId,branchName));
-
+            int branchId = getBranchIdByCompanyNameAndBranchName(companyId,branchName);
+            CreateBranchTable(branchId);
+            CreateOrderTable(branchId);
+            CreateOrderDetailsTable(branchId);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             return "the user not added bs error!";
@@ -179,17 +185,82 @@ public class DbBranch {
                     "TABLESPACE pg_default;\n" +
                     "\n" +
                     "ALTER TABLE public.\"PosProduct\"\n" +
-                    "    OWNER to postgres;");
+                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
 
 
             int i = stmt.executeUpdate();
             System.out.println(i + " Table Established in PosProduct_"+branchId);
 
+            stmt.close();
             conn.close();
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
         return false;
+        }
+        return true;
+    }
+
+    static public boolean CreateOrderTable(int branchId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS public.\"PosOrder_"+branchId+"\"\n" +
+                    "(\n" +
+                    "    \"orderId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                    "    \"orderTime\" timestamp without time zone NOT NULL,\n" +
+                    "    \"clientName\" character varying COLLATE pg_catalog.\"default\",\n" +
+                    "    \"orderType\" character varying(10) COLLATE pg_catalog.\"default\",\n" +
+                    "    \"orderDiscount\" integer,\n" +
+                    "    \"orderTotal\" integer,\n" +
+                    "    \"salesUser\" character varying COLLATE pg_catalog.\"default\",\n" +
+                    "    CONSTRAINT \"PosOrder_pkey_"+branchId+"\" PRIMARY KEY (\"orderId\")\n" +
+                    ")\n" +
+                    "\n" +
+                    "TABLESPACE pg_default;\n" +
+                    "\n" +
+                    "ALTER TABLE public.\"PosOrder\"" +
+                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
+
+            int i = stmt.executeUpdate();
+            System.out.println(i + " Table Established in PosOrder_"+branchId);
+            stmt.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+        return true;
+    }
+    static public boolean CreateOrderDetailsTable(int branchId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS public.\"PosOrderDetail_"+branchId+"\"\n" +
+                    "(\n" +
+                    "    \"orderDetailsId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                    "    \"itemId\" integer,\n" +
+                    "    \"itemName\" character varying COLLATE pg_catalog.\"default\",\n" +
+                    "    quantity integer,\n" +
+                    "    price integer,\n" +
+                    "    total integer,\n" +
+                    "    \"orderId\" integer,\n" +
+                    "    CONSTRAINT \"orderDetail_pkey_"+branchId+"\" PRIMARY KEY (\"orderDetailsId\"),\n" +
+                    "    CONSTRAINT \"OrderHasDetails\" FOREIGN KEY (\"orderId\")\n" +
+                    "        REFERENCES public.\"PosOrder\" (\"orderId\") MATCH SIMPLE\n" +
+                    "        ON UPDATE CASCADE\n" +
+                    "        ON DELETE CASCADE\n" +
+                    "        NOT VALID\n" +
+                    ")\n" +
+                    "TABLESPACE pg_default;" +
+                    "ALTER TABLE public.\"PosOrderDetail\"" +
+                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
+
+            int i = stmt.executeUpdate();
+            System.out.println(i + " Table Established in PosOrderDetails_"+branchId);
+            stmt.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
         }
         return true;
     }
