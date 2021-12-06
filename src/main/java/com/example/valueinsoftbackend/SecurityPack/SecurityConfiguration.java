@@ -19,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,7 +43,8 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 
     @Override
     protected void configure(HttpSecurity http) throws Exception{
-
+        http.authorizeRequests().antMatchers("/authenticate").permitAll().and().sessionManagement().
+                sessionCreationPolicy(SessionCreationPolicy.STATELESS);
         http.cors().and().csrf().disable().authorizeRequests().antMatchers().permitAll().antMatchers("/authenticate").permitAll().antMatchers("/users/saveUser").permitAll().antMatchers("/Company/getCompany").permitAll()
                 .antMatchers("/Company/getCompanyById").permitAll()
                 .antMatchers("/users/saveUser").hasAnyAuthority("Admin","Owner").
@@ -85,4 +87,8 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
         return NoOpPasswordEncoder.getInstance();
     }
 
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS").allowedOrigins("*");
+    }
 }
