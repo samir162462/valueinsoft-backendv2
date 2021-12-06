@@ -57,7 +57,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
     public CorsConfigurationSource corsConfigurationSource() {
         final CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(new ArrayList<>(
-                Arrays.asList("http://localhost:3000","https://valueinsoft-backv2.herokuapp.com")));
+                Arrays.asList("http://localhost:3000","https://valueinsoft-backv2.herokuapp.com/","valueinsoft-backv2.herokuapp.com","valueinsoft-backv2.herokuapp.com/","https://valueinsoft-backv2.herokuapp.com")));
         configuration.setAllowedMethods(new ArrayList<>(
                 Arrays.asList("HEAD",
                 "GET", "POST", "PUT", "DELETE", "PATCH")));
