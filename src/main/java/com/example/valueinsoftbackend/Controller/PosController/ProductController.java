@@ -37,7 +37,6 @@ public class ProductController {
 
                 }
 
-
                 return DbPosProduct.getProductBySearchText(words,id);
             case "comName":
                 System.out.println("comName");

@@ -94,6 +94,50 @@ public class DbClient {
 
     }
 
+    public static ArrayList<Client> getLatestClients(int max ,int branchId) {
+        ArrayList<Client> cList = new ArrayList<>();
+
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query ="";
+            Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+            System.out.println(timestamp);
+
+
+                query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
+                        "\tFROM public.\"Clinet\" where \"branchId\" ="+branchId+"  ORDER BY c_id DESC LIMIT  "+max+";";
+
+
+
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next()) {
+                System.out.println("add  connected to company " + rs.getString(1));
+
+                Client cl = new Client(
+                        rs.getInt(1),
+                        rs.getString(2),
+                        rs.getString(3),
+                        rs.getString(4),
+                        rs.getString(5)
+                );
+                cList.add(cl);
+                // print the results
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+            return cList;
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+
+        }
+        return null;
+
+    }
 
     static public String AddClient(String clientName, String phoneNumber, int branchId ,String gender,String desc) {
         try {

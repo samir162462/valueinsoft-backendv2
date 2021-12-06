@@ -83,26 +83,16 @@ public class DbPosProduct {
                     "\"pState\"" +
                     "\tFROM public.\"PosProduct_"+branchId+"\" where \"companyName\" = '"+comName+"' ";
 
-            System.out.println(branchId+" comName:"+comName);
-
-            // create the java statement
-
-
-
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
-
             while (rs.next())
             {
                 System.out.println("add user connected to user "+rs.getString(1));
-
                 Product prod = new Product(rs.getInt(1) ,rs.getString(2),rs.getTimestamp(3),rs.getString(4),rs.getInt(5),rs.getInt(6),rs.getInt(7),rs.getString(8),rs.getString(9),rs.getString(10),rs.getString(11),rs.getString(12),
                         rs.getInt(13),rs.getString(14),rs.getString(15),rs.getInt(16),rs.getString(17));
                 productArrayList.add(prod);
-
                 // print the results
             }
-
             rs.close();
             st.close();
             conn.close();
@@ -114,7 +104,6 @@ public class DbPosProduct {
             return null;
 
         }
-
     }
 
     static public String AddProduct(Product prod,String branchId) {

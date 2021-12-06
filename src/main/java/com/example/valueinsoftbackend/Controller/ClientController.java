@@ -31,6 +31,17 @@ public class ClientController {
         return  DbClient.getClientByPhoneNumberOrName( phone,null,null,null,bid).get(0);
     }
 
+    @RequestMapping(path = "/getLatestClients/{max}/{bid}", method = RequestMethod.GET)
+    @ResponseBody
+    public ArrayList<Client> getLastClients(
+            @PathVariable ("max") int max,
+            @PathVariable ("bid") int bid
+
+    ) {
+        //get just the client in the list
+        return  DbClient.getLatestClients( max,bid);
+    }
+
     @RequestMapping(path = "/getClientsByName/{name}/{bid}", method = RequestMethod.GET)
     @ResponseBody
     public ArrayList<Client> getClientsByName(

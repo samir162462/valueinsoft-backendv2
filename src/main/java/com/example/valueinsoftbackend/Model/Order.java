@@ -11,10 +11,11 @@ public class Order {
     int orderTotal;
     String salesUser;
     int branchId;
+    int clientId;
     ArrayList<OrderDetails> orderDetails;
 
 
-    public Order(int orderId, String orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, ArrayList<OrderDetails> orderDetails) {
+    public Order(int orderId, String orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, int clientId, ArrayList<OrderDetails> orderDetails) {
         this.orderId = orderId;
         this.orderTime = orderTime;
         this.clientName = clientName;
@@ -23,11 +24,20 @@ public class Order {
         this.orderTotal = orderTotal;
         this.salesUser = salesUser;
         this.branchId = branchId;
+        this.clientId = clientId;
         this.orderDetails = orderDetails;
     }
 
     public long getOrderId() {
         return orderId;
+    }
+
+    public int getClientId() {
+        return clientId;
+    }
+
+    public void setClientId(int clientId) {
+        this.clientId = clientId;
     }
 
     public void setOrderId(int orderId) {

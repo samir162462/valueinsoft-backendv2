@@ -45,7 +45,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 
         http.cors().and().csrf().disable().authorizeRequests().antMatchers().permitAll().antMatchers("/authenticate").permitAll().antMatchers("/users/saveUser").permitAll().antMatchers("/Company/getCompany").permitAll()
                 .antMatchers("/Company/getCompanyById").permitAll()
-                .
+                .antMatchers("/users/saveUser").hasAnyAuthority("Admin","Owner").
                 anyRequest().authenticated().and().sessionManagement().
                 sessionCreationPolicy(SessionCreationPolicy.STATELESS).and();
         http.addFilterBefore(JwtRequestFilter, UsernamePasswordAuthenticationFilter.class);

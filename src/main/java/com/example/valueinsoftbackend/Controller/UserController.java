@@ -48,7 +48,9 @@ public class UserController {
 
     public ResponseEntity<Object> newUser(@RequestBody Map<String, String> requestBody) {
 
-        String answer = DbUsers.AddUser(requestBody.get("userName"),requestBody.get("userPassword"),requestBody.get("email"),requestBody.get("userRole"));
+
+        String answer = DbUsers.AddUser(requestBody.get("userName"),requestBody.get("userPassword"),requestBody.get("email"),requestBody.get("role"),requestBody.get("firstName")
+                ,requestBody.get("lastName"),Integer.valueOf(requestBody.get("gender")),requestBody.get("userPhone"),Integer.valueOf(requestBody.get("branchId")) );
 
 
 

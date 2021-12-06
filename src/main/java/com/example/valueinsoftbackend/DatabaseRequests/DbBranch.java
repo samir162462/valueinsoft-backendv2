@@ -213,6 +213,7 @@ public class DbBranch {
                     "    \"orderDiscount\" integer,\n" +
                     "    \"orderTotal\" integer,\n" +
                     "    \"salesUser\" character varying COLLATE pg_catalog.\"default\",\n" +
+                    "    \"clientId\" integer,\n" +
                     "    CONSTRAINT \"PosOrder_pkey_"+branchId+"\" PRIMARY KEY (\"orderId\")\n" +
                     ")\n" +
                     "\n" +
@@ -243,9 +244,11 @@ public class DbBranch {
                     "    price integer,\n" +
                     "    total integer,\n" +
                     "    \"orderId\" integer,\n" +
+                    "    \"productId\" integer,\n"+
+                    "    \"bouncedBack\" integer,\n"+
                     "    CONSTRAINT \"orderDetail_pkey_"+branchId+"\" PRIMARY KEY (\"orderDetailsId\"),\n" +
-                    "    CONSTRAINT \"OrderHasDetails\" FOREIGN KEY (\"orderId\")\n" +
-                    "        REFERENCES public.\"PosOrder\" (\"orderId\") MATCH SIMPLE\n" +
+                    "    CONSTRAINT \"OrderHasDetails_"+branchId+"\" FOREIGN KEY (\"orderId\")\n" +
+                    "        REFERENCES public.\"PosOrder_"+branchId+"\" (\"orderId\") MATCH SIMPLE\n" +
                     "        ON UPDATE CASCADE\n" +
                     "        ON DELETE CASCADE\n" +
                     "        NOT VALID\n" +
@@ -256,6 +259,29 @@ public class DbBranch {
 
             int i = stmt.executeUpdate();
             System.out.println(i + " Table Established in PosOrderDetails_"+branchId);
+            stmt.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+        return true;
+    }
+    //Delete
+    static public boolean deleteBranch(int branchId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            PreparedStatement stmt = conn.prepareStatement("Begin;\n" +
+                    "DELETE FROM public.\"Branch\"\n" +
+                    "\tWHERE \"branchId\" = "+branchId+";\n" +
+                    "DROP TABLE IF EXISTS public.\"PosOrderDetail_"+branchId+"\" CASCADE;\n" +
+                    "DROP TABLE IF EXISTS public.\"PosOrder_"+branchId+"\" CASCADE;\n" +
+                    "DROP TABLE IF EXISTS public.\"PosProduct_"+branchId+"\" CASCADE;\n" +
+                    "\n" +
+                    "commit;");
+
+            int i = stmt.executeUpdate();
+            System.out.println(branchId + " Deleted! ");
             stmt.close();
             conn.close();
         } catch (Exception e) {

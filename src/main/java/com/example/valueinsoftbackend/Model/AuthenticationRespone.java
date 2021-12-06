@@ -7,10 +7,14 @@ public class AuthenticationRespone {
 
     private final String jwt;
     private final String username;
+    private final String role;
 
-    public AuthenticationRespone(String jwt, String username) {
+
+
+    public AuthenticationRespone(String jwt, String username, String role) {
         this.jwt = jwt;
         this.username = username;
+        this.role = role;
     }
 
     public String getJwt() {
@@ -20,6 +24,7 @@ public class AuthenticationRespone {
         HashMap<String, String> map = new HashMap<>();
         map.put("username", username);
         map.put("jwt", jwt);
+        map.put("role", role);
         return map;
     }
 

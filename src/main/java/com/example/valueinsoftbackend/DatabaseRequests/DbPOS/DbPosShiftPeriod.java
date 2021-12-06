@@ -1,10 +1,16 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
+import com.example.valueinsoftbackend.Model.Order;
+import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ShiftPeriod;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
+import java.lang.reflect.Type;
 import java.sql.*;
+import java.util.ArrayList;
 
 public class DbPosShiftPeriod {
 
@@ -30,7 +36,7 @@ public class DbPosShiftPeriod {
             ShiftPeriod sp = null ;
             while (rs.next())
             {
-                 sp = new ShiftPeriod(rs.getInt(1),rs.getString(2),null,null);
+                 sp = new ShiftPeriod(rs.getInt(1),rs.getTimestamp(2),null,null);
                 // print the results
             }
 
@@ -76,6 +82,45 @@ public class DbPosShiftPeriod {
             return null;
 
         }
+
+    }
+    public static ShiftPeriod dealingWithCurrentShiftData(int branchId ,boolean withDetails)
+    {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT \"PosSOID\", \"ShiftStartTime\", \"ShiftEndTime\", \"branchId\"\n" +
+                    "\tFROM public.\"PosShiftPeriod\" where \"branchId\" = "+branchId+" and \"ShiftEndTime\" IS NULL;";
+
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            ShiftPeriod sf = null;
+            while (rs.next())
+            {
+                System.out.println("add user connected to user "+rs.getString(1));
+                 sf = new ShiftPeriod(
+                        rs.getInt(1),rs.getTimestamp(2),rs.getTimestamp(3),null
+                );
+
+
+                // print the results
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            if (withDetails ) {
+                sf.setOrderShiftList(DbPosOrder.getOrdersByPeriod(branchId,sf.getStartTime(),new Timestamp(System.currentTimeMillis())));
+            }
+            return  sf;
+
+
+        }catch (Exception e)
+        {
+            System.out.println("err : "+e.getMessage());
+            return null;
+
+        }
+
+
 
     }
 
