@@ -4,6 +4,7 @@ package com.example.valueinsoftbackend.Controller.PosController;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
+import com.google.gson.JsonObject;
 import org.springframework.web.bind.annotation.*;
 
 import java.lang.reflect.Type;
@@ -44,6 +45,9 @@ public class ProductController {
             case "shortCate":
                 System.out.println("shortCate");
                 break;
+            case "allData":
+                System.out.println("allData");
+                break;
         }
 
 
@@ -52,8 +56,13 @@ public class ProductController {
 
 
     @PostMapping("/{branchId}/saveProduct")
-    Product newEmployee(@RequestBody Product newProProduct,@PathVariable String branchId) {
-        DbPosProduct.AddProduct(newProProduct,branchId);
-        return newProProduct;
+    String newProduct(@RequestBody Product newProProduct, @PathVariable String branchId) {
+        return DbPosProduct.AddProduct(newProProduct,branchId).toString();
+    }
+
+    //--------------editProduct------------------
+    @PutMapping("/{branchId}/editProduct")
+    String EditProduct(@RequestBody Product editProduct, @PathVariable String branchId) {
+        return DbPosProduct.EditProduct(editProduct,branchId).toString();
     }
 }

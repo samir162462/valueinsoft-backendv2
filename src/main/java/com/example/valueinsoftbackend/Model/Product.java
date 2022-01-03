@@ -21,8 +21,10 @@ public class Product {
     String ownerNI;
     int quantity;
     String pState;
+    int supplierId;
+    String major;
 
-    public Product(int productId, String productName, Timestamp buyingDay, String activationPeriod, int rPrice, int lPrice, int bPrice, String companyName, String type, String ownerName, String serial, String desc, int batteryLife, String ownerPhone, String ownerNI, int quantity, String pState) {
+    public Product(int productId, String productName, Timestamp buyingDay, String activationPeriod, int rPrice, int lPrice, int bPrice, String companyName, String type, String ownerName, String serial, String desc, int batteryLife, String ownerPhone, String ownerNI, int quantity, String pState, int supplierId, String major) {
         this.productId = productId;
         this.productName = productName;
         this.buyingDay = buyingDay;
@@ -40,6 +42,24 @@ public class Product {
         this.ownerNI = ownerNI;
         this.quantity = quantity;
         this.pState = pState;
+        this.supplierId = supplierId;
+        this.major = major;
+    }
+
+    public String getMajor() {
+        return major;
+    }
+
+    public void setMajor(String major) {
+        this.major = major;
+    }
+
+    public int getSupplierId() {
+        return supplierId;
+    }
+
+    public void setSupplierId(int supplierId) {
+        this.supplierId = supplierId;
     }
 
     public int getProductId() {

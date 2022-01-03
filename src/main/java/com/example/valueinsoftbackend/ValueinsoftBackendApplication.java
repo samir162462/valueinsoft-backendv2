@@ -24,8 +24,7 @@ public static String DatabaseOwner = "krdszavicoqkpf";
     public static void main(String[] args) {
         SpringApplication.run(ValueinsoftBackendApplication.class, args);
 
-        DbBranch.deleteBranch(1012);
-
+        //DbBranch.AddBranch("Filfilco1","Sharkia,Egypt",1000);
     }
 
 

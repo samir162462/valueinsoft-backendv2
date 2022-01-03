@@ -19,11 +19,11 @@ public class ConnectionPostgres {
             return conn;
         } else {
             //Online Database Heroku
-            ValueinsoftBackendApplication.DatabaseOwner = "krdszavicoqkpf";
+            ValueinsoftBackendApplication.DatabaseOwner = "xdbclqyeafclrb";
             Class.forName("org.postgresql.Driver");
-            String url = "jdbc:postgresql://ec2-176-34-105-15.eu-west-1.compute.amazonaws.com:5432/ddq97lo8kkor9k";
+            String url = "jdbc:postgresql://ec2-52-215-22-82.eu-west-1.compute.amazonaws.com:5432/dcp1madep62ah3";
 
-            Connection conn = DriverManager.getConnection(url, "krdszavicoqkpf", "48892245c9bbf412155094a8b8e3c64ab86f80280c01fb9b558c6a50531ee62f");
+            Connection conn = DriverManager.getConnection(url, "xdbclqyeafclrb", "0961698bab96b15477229c7686b5598da85b35387127bc9c98e3012e5429260f");
             return conn;
         }
 
