@@ -3,7 +3,6 @@ package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
-import com.example.valueinsoftbackend.util.ConvertStringToTimeStamp;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -21,8 +20,8 @@ public class DbPosOrder {
             String query = "" +
                     "with new_order as (\n" +
                     "INSERT INTO public.\"PosOrder_" + branchId + "\"(\n" +
-                    "\t \"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\" , \"clientId\")\n" +
-                    "\tVALUES ( ? , ?, ?, ?,?, ?,?)\n" +
+                    "\t \"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\" , \"clientId\", \"orderIncome\")\n" +
+                    "\tVALUES ( ? , ?, ?, ?,?, ?,?,?)\n" +
                     "  returning \"orderId\"\n" +
 
                     ")\n" +
@@ -58,6 +57,7 @@ public class DbPosOrder {
             stmt.setInt(5, order.getOrderTotal());
             stmt.setString(6, order.getSalesUser());
             stmt.setInt(7, order.getClientId());
+            stmt.setInt(8, order.getOrderIncome());
 
 
             int i = stmt.executeUpdate();
@@ -78,6 +78,7 @@ public class DbPosOrder {
 
     static public ArrayList<Order> getOrdersByPeriod(int branchId, Timestamp startTime, Timestamp endTime) {
         try {
+            System.out.println("in getOrdersByPeriod ");
             Connection conn = ConnectionPostgres.getConnection();
             ArrayList<Order> ordersArrayList = new ArrayList<>();
             String query = "SELECT public.\"PosOrder_" + branchId + "\".* , orderDetails\n" +
@@ -86,18 +87,65 @@ public class DbPosOrder {
                     "            FROM public.\"PosOrderDetail_" + branchId + "\" AS orderDetail \n" +
                     "            GROUP BY orderDetail.\"orderId\") orderDetails \n" +
                     "ON order_id = public.\"PosOrder_" + branchId + "\".\"orderId\"    \n" +
-                    "JOIN public.\"PosOrderDetail_" + branchId + "\" ON public.\"PosOrderDetail_" + branchId + "\".\"orderDetailsId\" = public.\"PosOrder_" + branchId + "\".\"orderId\"\n" +
                     "WHERE public.\"PosOrder_" + branchId + "\".\"orderTime\" between '" + startTime + "' and '" + endTime + "' order by \"orderId\" DESC";
 
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
+            System.out.println(query);
             while (rs.next()) {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Order ord = new Order(
                         rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                        rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8), null
+                        rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9), null
                 );
-                String details = rs.getString(9);
+                String details = rs.getString(10);
+                Gson gson = new Gson();
+                Type listType = new TypeToken<ArrayList<OrderDetails>>() {
+                }.getType();
+                ArrayList<OrderDetails> detailsArrayList = gson.fromJson(details, listType);
+                ord.setOrderDetails(detailsArrayList);
+                System.out.println("orders In Loop get otder Time " + ord.getOrderTime());
+                ordersArrayList.add(ord);
+                // print the results
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return ordersArrayList;
+
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return null;
+
+        }
+
+    }
+    static public ArrayList<Order> getOrdersByShiftId(int branchId, int spId) {
+        try {
+            System.out.println("in getOrdersByPeriod ");
+            Connection conn = ConnectionPostgres.getConnection();
+            ArrayList<Order> ordersArrayList = new ArrayList<>();
+            String query = "WITH sales AS (\n" +
+                    "SELECT \"ShiftStartTime\" , \"ShiftEndTime\" FROM public.\"PosShiftPeriod\" where \"branchId\" = "+branchId+" AND \"PosSOID\" = "+spId+"\n" +
+                    "     )\n" +
+                    "SELECT public.\"PosOrder_"+branchId+"\".* , orderDetails\n" +
+                    "FROM public.\"PosOrder_"+branchId+"\" \n" +
+                    "LEFT JOIN  (SELECT array_to_json(array_agg(json_build_object('odId', orderDetail.\"orderDetailsId\" ,'itemId',orderDetail.\"itemId\",'itemName',orderDetail.\"itemName\",'quantity',orderDetail.\"quantity\",'price',orderDetail.\"price\", 'total',orderDetail.\"total\", 'productId',orderDetail.\"productId\", 'bouncedBack',orderDetail.\"bouncedBack\"))) AS orderDetails,orderDetail.\"orderId\" AS order_id \n" +
+                    "            FROM public.\"PosOrderDetail_"+branchId+"\" AS orderDetail \n" +
+                    "            GROUP BY orderDetail.\"orderId\") orderDetails \n" +
+                    "ON order_id = public.\"PosOrder_"+branchId+"\".\"orderId\"    \n" +
+                    "WHERE public.\"PosOrder_"+branchId+"\".\"orderTime\" between (SELECT \"ShiftStartTime\" FROM sales) and (SELECT \"ShiftEndTime\" FROM sales) order by \"orderId\" DESC";
+
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            System.out.println(query);
+            while (rs.next()) {
+                System.out.println("add user connected to user " + rs.getString(1));
+                Order ord = new Order(
+                        rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9), null
+                );
+                String details = rs.getString(10);
                 Gson gson = new Gson();
                 Type listType = new TypeToken<ArrayList<OrderDetails>>() {
                 }.getType();

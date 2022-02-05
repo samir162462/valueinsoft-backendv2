@@ -1,130 +1,188 @@
 /*
- * Copyright (c) Samir Filifl 
+ * Copyright (c) Samir Filifl
  */
 
 package com.example.valueinsoftbackend.DatabaseRequests;
 
+import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Supplier;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.google.gson.JsonObject;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class DbSupplier {
 
-    public static ArrayList<Supplier> getSuppliers(int branchId )
-    {
+
+//todo Get
+    public static ArrayList<Supplier> getSuppliers(int branchId) {
         ArrayList<Supplier> supList = new ArrayList<>();
         try {
             Connection conn = ConnectionPostgres.getConnection();
-
-            String query = "SELECT \"supplierId\", \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\"\n" +
-                    "\tFROM public.\"supplier_"+branchId+"\";";
-
-
-            // create the java statement
+            String query = "SELECT \"supplierId\", \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\" , \"suplierMajor\"\n" +
+                    "\tFROM public.\"supplier_" + branchId + "\";";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 
-            while (rs.next())
-            {
-                Supplier sup = new Supplier(rs.getInt(1),rs.getString(2),rs.getString(3),rs.getString(4),rs.getString(5));
+            while (rs.next()) {
+                Supplier sup = new Supplier(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6));
                 supList.add(sup);
-
-
-
-                // print the results
             }
             rs.close();
             st.close();
             conn.close();
             return supList;
-
-
-        }catch (Exception e)
-        {
-            System.out.println("err in get user : "+e.getMessage());
-
+        } catch (Exception e) {
+            System.out.println("err in get user : " + e.getMessage());
         }
         return null;
-
     }
 
-    static public String AddSupplier(String name,String phone1, String phone2, String loaction ,int branchId )
-    {
+
+    static public String AddSupplier(String name, String phone1, String phone2, String loaction, String major, int branchId) {
         try {
-
-
             Connection conn = ConnectionPostgres.getConnection();
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO public.supplier_" + branchId + "(\n" +
+                    "\t \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\",\"suplierMajor\")\n" +
+                    "\tVALUES ( ?, ?, ?, ?,?);");
 
-            PreparedStatement stmt=conn.prepareStatement("INSERT INTO public.supplier_"+branchId+"(\n" +
-                    "\t \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?);");
-
-
-
-            stmt.setString(1,name);
-            stmt.setString(2,phone1);
-            stmt.setString(3,phone2);
-            stmt.setString(4,loaction);
-
-
-            int i=stmt.executeUpdate();
-            System.out.println(i+" supplier added records inserted");
-
+            stmt.setString(1, name);
+            stmt.setString(2, phone1);
+            stmt.setString(3, phone2);
+            stmt.setString(4, loaction);
+            stmt.setString(5, major);
+            int i = stmt.executeUpdate();
+            System.out.println(i + " supplier added records inserted");
             stmt.close();
             conn.close();
-
-        }catch (Exception e )
-        {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             return "the supplier not added bs error!";
-
         }
-
         return "the supplier added! ok 200";
     }
 
-
-    //Supplier service -------------
-    public static JsonObject getRemainingSupplierAmountByProductId(int id, int branchId )
-    {
-
+    //todo Update
+    static public String updateSupplier(Supplier supplier, int branchId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT public.\"PosProduct_"+branchId+"\".\"productId\",public.\"InventoryTransactions_"+branchId+"\".\"time\",public.\"InventoryTransactions_"+branchId+"\".\"payType\" as payType , public.\"InventoryTransactions_"+branchId+"\".\"RemainingAmount\" as remainingAmount\n" +
-                    "FROM public.\"PosProduct_"+branchId+"\" \n" +
+            PreparedStatement stmt = conn.prepareStatement("UPDATE public.supplier_" + branchId + "\n" +
+                    "\tSET \"supplierId\"=?, \"SupplierName\"=?, \"supplierPhone1\"=?, \"supplierPhone2\"=?, \"SupplierLocation\"=?, \"suplierMajor\"=?\n" +
+                    "\tWHERE \"supplierId\" = " + supplier.getSupplierId() + ";");
+
+            stmt.setInt(1, supplier.getSupplierId());
+            stmt.setString(2, supplier.getSupplierName());
+            stmt.setString(3, supplier.getSupplierPhone1());
+            stmt.setString(4, supplier.getSupplierPhone2());
+            stmt.setString(5, supplier.getSuplierLocation());
+            stmt.setString(6, supplier.getSuplierMajor());
+            int i = stmt.executeUpdate();
+            System.out.println(i + " supplier update record ");
+            stmt.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return "the supplier not updates by error!";
+        }
+        return "the supplier updates with (ok 200)";
+    }
+
+    //todo -- delete
+    public static boolean deleteSupp(int suppId, int branchId) {
+        System.out.println("text -> " + suppId + " " + branchId);
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            String query = "DELETE FROM public.supplier_" + branchId + "\n" +
+                    "\tWHERE \"supplierId\" = " + suppId + ";";
+
+            PreparedStatement pstmt = null;
+            pstmt = conn.prepareStatement(query);
+            pstmt.executeUpdate();
+            // create the java statement
+            pstmt.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println("err in get user : " + e.getMessage());
+            return false;
+        }
+        return true;
+    }
+
+    //Supplier service -------------
+    public static JsonObject getRemainingSupplierAmountByProductId(int id, int branchId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT public.\"PosProduct_" + branchId + "\".\"productId\",public.\"InventoryTransactions_" + branchId + "\".\"time\",public.\"InventoryTransactions_" + branchId + "\".\"payType\" as payType , public.\"InventoryTransactions_" + branchId + "\".\"RemainingAmount\" as remainingAmount\n" +
+                    "FROM public.\"PosProduct_" + branchId + "\" \n" +
                     "INNER JOIN\n" +
-                    "    public.\"InventoryTransactions_"+branchId+"\" \n" +
+                    "    public.\"InventoryTransactions_" + branchId + "\" \n" +
                     "ON\n" +
-                    "   public.\"PosProduct_"+branchId+"\".\"productId\" = public.\"InventoryTransactions_"+branchId+"\".\"productId\" where public.\"PosProduct_"+branchId+"\".\"productId\" = "+id+" ORDER BY public.\"InventoryTransactions_"+branchId+"\".\"time\" DESC LIMIT 1 ; ";
+                    "   public.\"PosProduct_" + branchId + "\".\"productId\" = public.\"InventoryTransactions_" + branchId + "\".\"productId\" where public.\"PosProduct_" + branchId + "\".\"productId\" = " + id + " ORDER BY public.\"InventoryTransactions_" + branchId + "\".\"time\" DESC LIMIT 1 ; ";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             JsonObject json = new JsonObject();
 
-            while (rs.next())
-            {
+            while (rs.next()) {
                 // print the results
-                json.addProperty("productId",rs.getInt(1));
-                json.addProperty("time",rs.getString(2));
-                json.addProperty("payType",rs.getString(3));
-                json.addProperty("remainingAmount",rs.getInt(4));
-
+                json.addProperty("productId", rs.getInt(1));
+                json.addProperty("time", rs.getString(2));
+                json.addProperty("payType", rs.getString(3));
+                json.addProperty("remainingAmount", rs.getInt(4));
             }
-
             System.out.println(json.toString());
             rs.close();
             st.close();
             conn.close();
-            return  json;
-
-        }catch (Exception e)
-        {
-            System.out.println("err : "+e.getMessage());
+            return json;
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
             return null;
 
         }
 
     }
+
+    //todo get Suppliers sales
+    public static ArrayList<InventoryTransaction> getSupplierSales(int branchId, int supplierId) {
+        ArrayList<InventoryTransaction> suppliersSales = new ArrayList<>();
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\"\n" +
+                    "\tFROM public.\"InventoryTransactions_" + branchId + "\"  where \"supplierId\" =" + supplierId + " ;";
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next()) {
+                InventoryTransaction inventoryTransaction = new InventoryTransaction(
+                        rs.getInt(1),
+                        rs.getInt(2),
+                        rs.getString(3),
+                        rs.getInt(4),
+                        rs.getString(5),
+                        rs.getInt(6),
+                        rs.getInt(7),
+                        rs.getString(8),
+                        rs.getTimestamp(9),
+                        rs.getInt(10)
+                );
+                // print the results
+                suppliersSales.add(inventoryTransaction);
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return suppliersSales;
+
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return null;
+
+        }
+
+
+    }
+
 }

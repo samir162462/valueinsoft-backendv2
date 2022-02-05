@@ -10,6 +10,8 @@ import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
 import java.sql.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 
 public class DbPosShiftPeriod {
@@ -83,7 +85,13 @@ public class DbPosShiftPeriod {
 
         }
 
+    }//ShiftOrdersById
+    public static ArrayList<Order> ShiftOrdersByPeriod(int branchId ,int spId)
+    {
+
+        return DbPosOrder.getOrdersByShiftId(branchId,spId);
     }
+
     public static ShiftPeriod dealingWithCurrentShiftData(int branchId ,boolean withDetails)
     {
         try {
@@ -111,6 +119,46 @@ public class DbPosShiftPeriod {
                 sf.setOrderShiftList(DbPosOrder.getOrdersByPeriod(branchId,sf.getStartTime(),new Timestamp(System.currentTimeMillis())));
             }
             return  sf;
+
+
+        }catch (Exception e)
+        {
+            System.out.println("err : "+e.getMessage());
+            return null;
+
+        }
+
+
+
+    }
+
+    public static ArrayList<ShiftPeriod> currentBranchShiftData(int branchId )
+    {
+        try {
+
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT * FROM public.\"PosShiftPeriod\" where \"branchId\" = "+branchId+" \n" +
+                    "ORDER BY \"PosSOID\" DESC  ;";
+
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            ShiftPeriod sf = null;
+            ArrayList<ShiftPeriod> shiftPeriods = new ArrayList<>();
+            while (rs.next())
+            {
+                System.out.println(" connected to currentBranchShiftData "+rs.getString(1));
+                sf = new ShiftPeriod(
+                        rs.getInt(1),rs.getTimestamp(2),rs.getTimestamp(3),null
+                );
+                shiftPeriods.add(sf);
+
+                // print the results
+            }
+            rs.close();
+            st.close();
+            conn.close();
+
+            return  shiftPeriods;
 
 
         }catch (Exception e)

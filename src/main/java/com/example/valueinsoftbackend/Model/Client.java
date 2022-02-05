@@ -1,19 +1,30 @@
 package com.example.valueinsoftbackend.Model;
 
+import java.sql.Timestamp;
+
 public class Client {
     int clientId;
     String clientName;
     String clientPhone;
     String gender;
     String description;
+    Timestamp registeredTime;
 
-
-    public Client(int clientId, String clientName, String clientPhone, String gender, String description) {
+    public Client(int clientId, String clientName, String clientPhone, String gender, String description, Timestamp registeredTime) {
         this.clientId = clientId;
         this.clientName = clientName;
         this.clientPhone = clientPhone;
         this.gender = gender;
         this.description = description;
+        this.registeredTime = registeredTime;
+    }
+
+    public Timestamp getRegisteredTime() {
+        return registeredTime;
+    }
+
+    public void setRegisteredTime(Timestamp registeredTime) {
+        this.registeredTime = registeredTime;
     }
 
     public int getClientId() {

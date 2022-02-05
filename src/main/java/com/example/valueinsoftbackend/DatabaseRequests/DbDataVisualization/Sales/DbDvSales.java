@@ -5,6 +5,7 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbDataVisualization.Sales;
 
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.DvSales;
+import com.example.valueinsoftbackend.Model.Sales.SalesProduct;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 
 import java.sql.Connection;
@@ -48,6 +49,42 @@ public class DbDvSales {
         }catch (Exception e)
         {
             System.out.println(" no user exist");
+            return null;
+
+        }
+
+    }
+
+    static public ArrayList<SalesProduct> getSalesProductsByPeriod(int branchId , String startTime , String endTime)
+    {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "WITH salesPeriod AS (\n" +
+                    "((SELECT \"orderId\" from \"PosOrder_"+branchId+"\" where  \"orderTime\"  >= '"+startTime+"' Order BY \"orderId\" asc  LIMIT 1)\n" +
+                    "UNION ALL \n" +
+                    "(SELECT \"orderId\" from \"PosOrder_"+branchId+"\" where  \"orderTime\"  <= '"+endTime+"' Order BY \"orderId\" DESC  LIMIT 1)  )\n" +
+                    ")\n" +
+                    "SELECT \"itemName\", count(\"itemId\")::integer NumberOfOrders ,  sum(quantity)::integer SumQuantity ,SUM(\"total\") sumTotal " +
+                    "\tFROM public.\"PosOrderDetail_"+branchId+"\"  where \"bouncedBack\" <> 1 and \"orderId\" between (select  \"orderId\" from salesPeriod limit 1 ) and (select  \"orderId\" from salesPeriod where \"orderId\"> (select  \"orderId\" from salesPeriod limit 1 ) )\n" +
+                    "\tGROUP BY \"itemName\"  Order by SumQuantity DESC,NumberOfOrders ;"
+                    ;
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            ArrayList<SalesProduct> salesProducts = new ArrayList<>();
+            while (rs.next())
+            {
+                SalesProduct salesProduct = new SalesProduct(rs.getString(1),rs.getInt(2),rs.getInt(3),rs.getInt(4));
+                salesProducts.add(salesProduct);
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return salesProducts;
+
+        }catch (Exception e)
+        {
+            System.out.println(" no SalesProduct exist");
             return null;
 
         }

@@ -12,10 +12,11 @@ public class Order {
     String salesUser;
     int branchId;
     int clientId;
+    int orderIncome;
     ArrayList<OrderDetails> orderDetails;
 
 
-    public Order(int orderId, String orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, int clientId, ArrayList<OrderDetails> orderDetails) {
+    public Order(int orderId, String orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, int clientId, int orderIncome, ArrayList<OrderDetails> orderDetails) {
         this.orderId = orderId;
         this.orderTime = orderTime;
         this.clientName = clientName;
@@ -25,19 +26,12 @@ public class Order {
         this.salesUser = salesUser;
         this.branchId = branchId;
         this.clientId = clientId;
+        this.orderIncome = orderIncome;
         this.orderDetails = orderDetails;
     }
 
-    public long getOrderId() {
+    public int getOrderId() {
         return orderId;
-    }
-
-    public int getClientId() {
-        return clientId;
-    }
-
-    public void setClientId(int clientId) {
-        this.clientId = clientId;
     }
 
     public void setOrderId(int orderId) {
@@ -98,6 +92,22 @@ public class Order {
 
     public void setBranchId(int branchId) {
         this.branchId = branchId;
+    }
+
+    public int getClientId() {
+        return clientId;
+    }
+
+    public void setClientId(int clientId) {
+        this.clientId = clientId;
+    }
+
+    public int getOrderIncome() {
+        return orderIncome;
+    }
+
+    public void setOrderIncome(int orderIncome) {
+        this.orderIncome = orderIncome;
     }
 
     public ArrayList<OrderDetails> getOrderDetails() {

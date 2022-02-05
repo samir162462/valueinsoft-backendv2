@@ -9,15 +9,25 @@ public class Supplier {
     int supplierId;
     String supplierName;
     String supplierPhone1;
-    String supplierphone2;
+    String supplierPhone2;
     String suplierLocation;
+    String suplierMajor;
 
-    public Supplier(int supplierId, String supplierName, String supplierPhone1, String supplierphone2, String suplierLocation) {
+    public Supplier(int supplierId, String supplierName, String supplierPhone1, String supplierPhone2, String suplierLocation, String suplierMajor) {
         this.supplierId = supplierId;
         this.supplierName = supplierName;
         this.supplierPhone1 = supplierPhone1;
-        this.supplierphone2 = supplierphone2;
+        this.supplierPhone2 = supplierPhone2;
         this.suplierLocation = suplierLocation;
+        this.suplierMajor = suplierMajor;
+    }
+
+    public String getSuplierMajor() {
+        return suplierMajor;
+    }
+
+    public void setSuplierMajor(String suplierMajor) {
+        this.suplierMajor = suplierMajor;
     }
 
     public int getSupplierId() {
@@ -44,12 +54,12 @@ public class Supplier {
         this.supplierPhone1 = supplierPhone1;
     }
 
-    public String getSupplierphone2() {
-        return supplierphone2;
+    public String getSupplierPhone2() {
+        return supplierPhone2;
     }
 
-    public void setSupplierphone2(String supplierphone2) {
-        this.supplierphone2 = supplierphone2;
+    public void setSupplierPhone2(String supplierPhone2) {
+        this.supplierPhone2 = supplierPhone2;
     }
 
     public String getSuplierLocation() {
