@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Locale;
 
 @RestController
-@CrossOrigin(origins = "*", exposedHeaders="Access-Control-Allow-Origin")
+@CrossOrigin(origins = "*")
 
 public class AuthenticateController {
     private AuthenticationRequest auth;
