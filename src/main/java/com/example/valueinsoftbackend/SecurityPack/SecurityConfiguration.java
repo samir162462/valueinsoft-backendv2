@@ -64,7 +64,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
     public CorsConfigurationSource corsConfigurationSource() {
         final CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(new ArrayList<>(
-                Arrays.asList("http://localhost:3000","https://valueinsoft-backv2.herokuapp.com/","valueinsoft-backv2.herokuapp.com","valueinsoft-backv2.herokuapp.com/","https://valueinsoft-backv2.herokuapp.com")));
+                Arrays.asList("https://valueinsoft-backv2.herokuapp.com/","valueinsoft-backv2.herokuapp.com","valueinsoft-backv2.herokuapp.com/","https://valueinsoft-backv2.herokuapp.com","http://localhost:3000","https://valueinsoft-backv2.herokuapp.com/authenticate")));
         configuration.setAllowedMethods(new ArrayList<>(
                 Arrays.asList("HEAD",
                 "GET", "POST", "PUT", "DELETE", "PATCH")));
@@ -92,8 +92,5 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
         return NoOpPasswordEncoder.getInstance();
     }
 
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**")
-                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS").allowedOrigins("*");
-    }
+
 }
