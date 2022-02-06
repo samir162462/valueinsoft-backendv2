@@ -64,13 +64,13 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
     public CorsConfigurationSource corsConfigurationSource() {
         final CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(new ArrayList<>(
-                Arrays.asList("https://valueinsoft-backv2.herokuapp.com/","valueinsoft-backv2.herokuapp.com","valueinsoft-backv2.herokuapp.com/","https://valueinsoft-backv2.herokuapp.com","http://localhost:3000","https://valueinsoft-backv2.herokuapp.com/authenticate")));
+                Arrays.asList("https://valueinsoft-backv2.herokuapp.com/","valueinsoft-backv2.herokuapp.com","valueinsoft-backv2.herokuapp.com/","https://valueinsoft-backv2.herokuapp.com","http://localhost:3000","https://valueinsoft-backv2.herokuapp.com/authenticate","valueinsoft-backv2","*")));
         configuration.setAllowedMethods(new ArrayList<>(
-                Arrays.asList("HEAD",
-                "GET", "POST", "PUT", "DELETE", "PATCH")));
+                Arrays.asList("GET", "POST", "PUT", "DELETE", "PUT","OPTIONS","PATCH", "DELETE")));
         // setAllowCredentials(true) is important, otherwise:
         // The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'.
-        configuration.setAllowCredentials(true);
+        //TODO --
+        //configuration.setAllowCredentials(true);
         // setAllowedHeaders is important! Without it, OPTIONS preflight request
         // will fail with 403 Invalid CORS request
         configuration.setAllowedHeaders(new ArrayList<>(
