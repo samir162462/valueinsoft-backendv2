@@ -10,7 +10,7 @@ import java.sql.*;
 public class DbUsers {
 
 
-    private static boolean checkExistUsername(String userName)
+    public static boolean checkExistUsername(String userName)
     {
 
         try {
@@ -40,6 +40,34 @@ public class DbUsers {
         }
         return false;
 
+    }
+    public static boolean checkExistingEmail(String email) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            String query = "SELECT  \"userEmail\"\n" +
+                    "\tFROM public.users where \"userEmail\" = '"+email+"';";
+
+            // create the java statement
+            Statement st = conn.createStatement();
+
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next())
+            {
+                rs.close();
+                st.close();
+                conn.close();
+                return true;
+            }
+
+        }catch (Exception e)
+        {
+            System.out.println(" no user exist");
+            return true;
+
+        }
+        return false;
     }
 
     public static User getUser(String userName )
@@ -183,6 +211,7 @@ public class DbUsers {
 
         return "the user Role Updated!";
     }
+
 
 
 }

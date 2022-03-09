@@ -24,6 +24,17 @@ public class UserController {
     public User getPersonsByNames(@RequestParam("id") String id) {
         return DbUsers.getUser(id);
     }
+    @RequestMapping(value = "/checkUserEmail/{Email}", method = RequestMethod.GET)
+    @ResponseBody
+    public boolean checkUserEmail(@PathVariable("Email") String Email) {
+        return DbUsers.checkExistingEmail(Email);
+    }
+    @RequestMapping(value = "/checkUserUserName/{UserName}", method = RequestMethod.GET)
+    @ResponseBody
+    public boolean checkUserName(@PathVariable("UserName") String UserName) {
+        return DbUsers.checkExistUsername(UserName);
+    }
+
 
     @RequestMapping(value = "/getUserImg", method = RequestMethod.GET)
     @ResponseBody
