@@ -22,27 +22,29 @@ import java.util.Map;
 @CrossOrigin("*")
 public class SupplierController {
 
-    @RequestMapping(value = "/all/{id}", method = RequestMethod.GET)
+    @RequestMapping(value = "/all/{companyId}/{branchId}", method = RequestMethod.GET)
     @ResponseBody
     public ArrayList<Supplier> getsuppliers(
 
-            @PathVariable int id
+            @PathVariable int companyId,
+            @PathVariable int branchId
     ) {
 
 
-        return DbSupplier.getSuppliers(id);
+        return DbSupplier.getSuppliers(branchId,companyId);
     }
 
 
-    @RequestMapping(value = "{branchId}/remain/{productId}", method = RequestMethod.GET)
+    @RequestMapping(value = "{companyId}{branchId}/remain/{productId}", method = RequestMethod.GET)
     @ResponseBody
     public String getRemaining(
 
             @PathVariable int productId,
+            @PathVariable int companyId,
             @PathVariable int branchId
     ) {
 
-        return DbSupplier.getRemainingSupplierAmountByProductId(productId, branchId).toString();
+        return DbSupplier.getRemainingSupplierAmountByProductId(productId, branchId,companyId).toString() ;
     }
 
     @PostMapping("/saveSupplier")
@@ -50,7 +52,7 @@ public class SupplierController {
     public ResponseEntity<Object> newSupplier(@RequestBody Map<String, String> requestBody) {
 
 
-        String answer = DbSupplier.AddSupplier(requestBody.get("supplierName"), requestBody.get("supplierPhone1"), requestBody.get("supplierPhone2"), requestBody.get("suplierLocation"), requestBody.get("suplierMajor"), Integer.valueOf(requestBody.get("branchId")));
+        String answer = DbSupplier.AddSupplier(requestBody.get("supplierName"), requestBody.get("supplierPhone1"), requestBody.get("supplierPhone2"), requestBody.get("suplierLocation"), requestBody.get("suplierMajor"), Integer.valueOf(requestBody.get("branchId")), Integer.valueOf(requestBody.get("companyId")));
 
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
@@ -58,40 +60,44 @@ public class SupplierController {
     }
 
 
-    @RequestMapping(value = "{branchId}/update/{id}", method = RequestMethod.PUT)
+    @RequestMapping(value = "{companyId}/{branchId}/update/{id}", method = RequestMethod.PUT)
     public Map<String, String> updateSupplier(
             @RequestBody Supplier supplier,
-            @PathVariable int branchId
+            @PathVariable int branchId,
+            @PathVariable int companyId
 
     ) {
 
         //todo --update method
         Map<String, String> response = new HashMap<>();
-        response.put("Response", DbSupplier.updateSupplier(supplier, branchId));
+        response.put("Response", DbSupplier.updateSupplier(supplier, branchId,companyId));
         return response;
     }
 
     //todo --Delete
-    @DeleteMapping("{branchId}/delete/{id}")
+    @DeleteMapping("{companyId}/{branchId}/delete/{id}")
     public Map<String, Boolean> deleteUser(
             @PathVariable(value = "id") int supplierId,
-            @PathVariable int branchId
+            @PathVariable int branchId,
+            @PathVariable int companyId
+
     ) throws Exception {
         Map<String, Boolean> response = new HashMap<>();
-        boolean bol = DbSupplier.deleteSupp(supplierId, branchId);
+        boolean bol = DbSupplier.deleteSupp(supplierId, branchId,companyId);
         response.put("deleted", bol);
         return response;
     }
 
-    @RequestMapping(value = "{branchId}/SupplierSales/{supplierId}", method = RequestMethod.GET)
+    @RequestMapping(value = "{companyId}/{branchId}/SupplierSales/{supplierId}", method = RequestMethod.GET)
     @ResponseBody
     public ArrayList<InventoryTransaction> getSupplierSales(
 
             @PathVariable int supplierId,
+            @PathVariable int companyId,
             @PathVariable int branchId
     ) {
 
-        return DbSupplier.getSupplierSales(branchId, supplierId);
+        return DbSupplier.getSupplierSales(branchId, supplierId,companyId);
     }
 
 }

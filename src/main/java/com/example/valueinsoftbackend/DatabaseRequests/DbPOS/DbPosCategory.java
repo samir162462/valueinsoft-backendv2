@@ -1,9 +1,6 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
-import com.example.valueinsoftbackend.Model.Branch;
-import com.example.valueinsoftbackend.Model.Category;
-import com.example.valueinsoftbackend.Model.Product;
-import com.example.valueinsoftbackend.Model.SubCategory;
+import com.example.valueinsoftbackend.Model.*;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import org.postgresql.util.PGobject;
 
@@ -16,12 +13,12 @@ public class DbPosCategory {
 
 
 
-    static public ArrayList<Category> getCategoriesByBranchId(int branchId) {
+    static public ArrayList<Category> getCategoriesByBranchId(int branchId ,int companyId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             ArrayList<Category> categoryArrayList = new ArrayList<>();
             String query = "SELECT \"categoryId\", \"categoryName\", \"branchId\"\n" +
-                    "\tFROM public.\"PosCategory\" where \"branchId\" = " + branchId + " ;";
+                    "\tFROM C_"+companyId+".\"PosCategory\" where \"branchId\" = " + branchId + " ;";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             while (rs.next()) {
@@ -42,13 +39,13 @@ public class DbPosCategory {
 
 
     //------------------------Delete------------------------------
-    static public boolean DeleteCategoryByBranchId(int branchId) {
-        ArrayList<Category> categoryArrayList = getCategoriesByBranchId(branchId);
+    static public boolean DeleteCategoryByBranchId(int branchId ,int companyId) {
+        ArrayList<Category> categoryArrayList = getCategoriesByBranchId(branchId, companyId);
 
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            String query = "DELETE FROM public.\"PosCateJson\"" +
+            String query = "DELETE FROM C_"+companyId+".\"PosCateJson\"" +
                     "\tWHERE \"BranchId\" = " + branchId + " ;";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
@@ -67,13 +64,13 @@ public class DbPosCategory {
 
     //json--------
 
-    public static String AddCategoryJson(int branchId, String s) {
+    public static String AddCategoryJson(int branchId, String s ,int companyId) {
         try {
 
 
             Connection conn = ConnectionPostgres.getConnection();
 
-            String query = "INSERT INTO public.\"PosCateJson\"(\n" +
+            String query = "INSERT INTO C_"+companyId+".\"PosCateJson\"(\n" +
                     "\t \"CategoryData\", \"BranchId\")\n" +
                     "\tVALUES ( ?, ?);";
 
@@ -100,12 +97,12 @@ public class DbPosCategory {
         return "the Branch added!";
     }
 
-    static public String getCategoryJson(int branchId) {
+    static public String getCategoryJson(int branchId,int companyId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             ArrayList<Category> categoryArrayList = new ArrayList<>();
             String query = "SELECT \"CategoryJID\", \"CategoryData\", \"BranchId\"\n" +
-                    "\tFROM public.\"PosCateJson\" where \"BranchId\" = " + branchId + " ;";
+                    "\tFROM C_"+companyId+".\"PosCateJson\" where \"BranchId\" = " + branchId + " ;";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             String payload = "";
@@ -116,6 +113,32 @@ public class DbPosCategory {
             st.close();
             conn.close();
             return payload;
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+        }
+        return null;
+    }
+
+
+    static public ArrayList<MainMajor> getMainMajors(int companyId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            ArrayList<Category> categoryArrayList = new ArrayList<>();
+            String query = "SELECT \"MId\", \"CateName\", \"AppType\"" +
+                    "\tFROM c_"+companyId+".\"MainMajor\" ;";
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            String payload = "";
+            ArrayList<MainMajor> MainMajors = new ArrayList<>();
+            while (rs.next()) {
+                MainMajor mainMajor = new MainMajor(rs.getInt(1),rs.getString(2),rs.getString(3));
+                MainMajors.add(mainMajor);
+                System.out.println(rs.getString(2));
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return MainMajors;
         } catch (Exception e) {
             System.out.println("err : " + e.getMessage());
         }

@@ -47,7 +47,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 
         http.authorizeRequests().antMatchers("/authenticate").permitAll().and().sessionManagement().
                 sessionCreationPolicy(SessionCreationPolicy.STATELESS);
-        http.cors().and().authorizeRequests().antMatchers().permitAll().antMatchers("/authenticate").permitAll().antMatchers("/users/saveUser").permitAll().antMatchers("/Company/getCompany").permitAll()
+        http.cors().and().authorizeRequests().antMatchers().permitAll().antMatchers("/authenticate").permitAll().antMatchers("/users/saveNewUser").permitAll().antMatchers("/Company/getCompany").permitAll()
                 .antMatchers("/Company/getCompanyById").permitAll()
                 .antMatchers("/users/saveUser").hasAnyAuthority("Admin","Owner").
                 anyRequest().authenticated().and().sessionManagement().

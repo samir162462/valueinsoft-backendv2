@@ -19,6 +19,7 @@ public class User {
     int branchId;
     Timestamp creationTime;
 
+
     public User(int userId, String userName, String userPassword, String email, String firstName, String lastName, String userPhone, String role, int gender, int branchId, Timestamp creationTime) {
         this.userId = userId;
         this.userName = userName;

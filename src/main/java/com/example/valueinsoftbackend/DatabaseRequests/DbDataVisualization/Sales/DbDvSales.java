@@ -15,7 +15,7 @@ import java.util.ArrayList;
 
 public class DbDvSales {
 
-     static public ArrayList<DvSales> getMonthlySales(String currentMonth , int branchId)
+     static public ArrayList<DvSales> getMonthlySales(int companyId,String currentMonth , int branchId)
     {
 
         try {
@@ -26,7 +26,7 @@ public class DbDvSales {
                     "\t(date_trunc('month', '"+currentMonth+"'::date) + interval '1 month' - interval '1 day')::date AS lastDay,\n" +
                     "\n" +
                     "\tSUM(\"orderTotal\") sum\n" +
-                    "FROM public.\"PosOrder_"+branchId+"\"\n" +
+                    "FROM C_"+companyId+".\"PosOrder_"+branchId+"\"\n" +
                     "where  \"orderTime\" <= now()::date+1 And \"orderTime\" >= cast(date_trunc('month', current_date) as date)\n" +
                     "GROUP BY\n" +
                     "\tDATE(\"orderTime\")\n" +
@@ -55,17 +55,17 @@ public class DbDvSales {
 
     }
 
-    static public ArrayList<SalesProduct> getSalesProductsByPeriod(int branchId , String startTime , String endTime)
+    static public ArrayList<SalesProduct> getSalesProductsByPeriod(int companyId,int branchId , String startTime , String endTime)
     {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             String query = "WITH salesPeriod AS (\n" +
-                    "((SELECT \"orderId\" from \"PosOrder_"+branchId+"\" where  \"orderTime\"  >= '"+startTime+"' Order BY \"orderId\" asc  LIMIT 1)\n" +
+                    "((SELECT \"orderId\" from C_"+companyId+".\"PosOrder_"+branchId+"\" where  \"orderTime\"  >= '"+startTime+"' Order BY \"orderId\" asc  LIMIT 1)\n" +
                     "UNION ALL \n" +
-                    "(SELECT \"orderId\" from \"PosOrder_"+branchId+"\" where  \"orderTime\"  <= '"+endTime+"' Order BY \"orderId\" DESC  LIMIT 1)  )\n" +
+                    "(SELECT \"orderId\" from  C_"+companyId+".\"PosOrder_"+branchId+"\" where  \"orderTime\"  <= '"+endTime+"' Order BY \"orderId\" DESC  LIMIT 1)  )\n" +
                     ")\n" +
                     "SELECT \"itemName\", count(\"itemId\")::integer NumberOfOrders ,  sum(quantity)::integer SumQuantity ,SUM(\"total\") sumTotal " +
-                    "\tFROM public.\"PosOrderDetail_"+branchId+"\"  where \"bouncedBack\" <> 1 and \"orderId\" between (select  \"orderId\" from salesPeriod limit 1 ) and (select  \"orderId\" from salesPeriod where \"orderId\"> (select  \"orderId\" from salesPeriod limit 1 ) )\n" +
+                    "\tFROM C_"+companyId+".\"PosOrderDetail_"+branchId+"\"  where \"bouncedBack\" <> 1 and \"orderId\" between (select  \"orderId\" from salesPeriod limit 1 ) and (select  \"orderId\" from salesPeriod where \"orderId\"> (select  \"orderId\" from salesPeriod limit 1 ) )\n" +
                     "\tGROUP BY \"itemName\"  Order by SumQuantity DESC,NumberOfOrders ;"
                     ;
             // create the java statement
@@ -84,7 +84,7 @@ public class DbDvSales {
 
         }catch (Exception e)
         {
-            System.out.println(" no SalesProduct exist");
+            System.out.println(" no SalesProduct exist"+e);
             return null;
 
         }

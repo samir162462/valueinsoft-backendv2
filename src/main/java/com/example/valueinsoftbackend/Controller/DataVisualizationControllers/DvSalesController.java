@@ -22,22 +22,29 @@ public class DvSalesController {
     public ArrayList<DvSales> salesOfMonth(@RequestBody Map<String,Object> body  ) throws Exception
     {
         int branchId = (int) body.get("branchId");
+        int companyId = (int) body.get("companyId");
         String currentMonth = body.get("currentMonth").toString();
 
         System.out.println("in");
 
-        return DbDvSales.getMonthlySales(currentMonth,branchId);
+        return DbDvSales.getMonthlySales(companyId,currentMonth,branchId);
 
     }
     @RequestMapping(value = "/salesProductsByPeriod",method = RequestMethod.POST)
     public ArrayList<SalesProduct> salesProductsByPeriod(@RequestBody Map<String,Object> body  ) throws Exception
     {
+
         int branchId = (int) body.get("branchId");
+        System.out.println("CompanyId: ");
+
+        int companyId = (int) body.get("companyId");
+
         String startTime = body.get("startTime").toString();
         String endTime = body.get("endTime").toString();
 
+        System.out.println("CompanyId: "+companyId);
 
-        return DbDvSales.getSalesProductsByPeriod(branchId,startTime,endTime);
+        return DbDvSales.getSalesProductsByPeriod(companyId,branchId,startTime,endTime);
 
     }
 }

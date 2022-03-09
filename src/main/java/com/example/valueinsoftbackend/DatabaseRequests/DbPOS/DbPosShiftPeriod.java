@@ -17,7 +17,7 @@ import java.util.ArrayList;
 public class DbPosShiftPeriod {
 
 
-    static public ShiftPeriod startShiftPeriod( int branchId) {
+    static public ShiftPeriod startShiftPeriod(int comId, int branchId) {
         try {
 
 
@@ -26,7 +26,7 @@ public class DbPosShiftPeriod {
 
 
             String stmt = new String("with newShift as (\n" +
-                    "INSERT INTO public.\"PosShiftPeriod\"(\n" +
+                    "INSERT INTO C_"+comId+".\"PosShiftPeriod\"(\n" +
                     "\t \"ShiftStartTime\", \"ShiftEndTime\" , \"branchId\")\n" +
                     "\tVALUES ( '"+new Timestamp(System.currentTimeMillis())+"', null, "+branchId+")\n" +
                     "\treturning \"PosSOID\" , \"ShiftStartTime\"\n" +
@@ -57,10 +57,10 @@ public class DbPosShiftPeriod {
 
     }
 
-    static public String endShiftPeriod( int shiftPeriodId ) {
+    static public String endShiftPeriod(int comId, int shiftPeriodId ) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("UPDATE public.\"PosShiftPeriod\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("UPDATE C_"+comId+".\"PosShiftPeriod\"\n" +
                     "\tSET   \"ShiftEndTime\"= '"+new Timestamp(System.currentTimeMillis())+"'\n" +
                     "\tWHERE \"PosSOID\"= ? ;");
 
@@ -86,18 +86,18 @@ public class DbPosShiftPeriod {
         }
 
     }//ShiftOrdersById
-    public static ArrayList<Order> ShiftOrdersByPeriod(int branchId ,int spId)
+    public static ArrayList<Order> ShiftOrdersByPeriod(int comId,int branchId ,int spId)
     {
 
-        return DbPosOrder.getOrdersByShiftId(branchId,spId);
+        return DbPosOrder.getOrdersByShiftId(comId,branchId,spId);
     }
 
-    public static ShiftPeriod dealingWithCurrentShiftData(int branchId ,boolean withDetails)
+    public static ShiftPeriod dealingWithCurrentShiftData(int comId,int branchId ,boolean withDetails)
     {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             String query = "SELECT \"PosSOID\", \"ShiftStartTime\", \"ShiftEndTime\", \"branchId\"\n" +
-                    "\tFROM public.\"PosShiftPeriod\" where \"branchId\" = "+branchId+" and \"ShiftEndTime\" IS NULL;";
+                    "\tFROM C_"+comId+".\"PosShiftPeriod\" where \"branchId\" = "+branchId+" and \"ShiftEndTime\" IS NULL;";
 
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
@@ -116,7 +116,7 @@ public class DbPosShiftPeriod {
             st.close();
             conn.close();
             if (withDetails ) {
-                sf.setOrderShiftList(DbPosOrder.getOrdersByPeriod(branchId,sf.getStartTime(),new Timestamp(System.currentTimeMillis())));
+                sf.setOrderShiftList(DbPosOrder.getOrdersByPeriod(branchId,sf.getStartTime(),new Timestamp(System.currentTimeMillis()), comId));
             }
             return  sf;
 
@@ -132,12 +132,12 @@ public class DbPosShiftPeriod {
 
     }
 
-    public static ArrayList<ShiftPeriod> currentBranchShiftData(int branchId )
+    public static ArrayList<ShiftPeriod> currentBranchShiftData(int comId,int branchId )
     {
         try {
 
             Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT * FROM public.\"PosShiftPeriod\" where \"branchId\" = "+branchId+" \n" +
+            String query = "SELECT * FROM C_"+comId+".\"PosShiftPeriod\" where \"branchId\" = "+branchId+" \n" +
                     "ORDER BY \"PosSOID\" DESC  ;";
 
             Statement st = conn.createStatement();

@@ -137,12 +137,13 @@ public class DbBranch {
 
             // Crate Branch tables for new branch in schema
             int branchId = getBranchIdByCompanyNameAndBranchName(companyId,branchName);
-            CreateBranchTable(branchId);
-            CreateOrderTable(branchId);
-            CreateOrderDetailsTable(branchId);
-            CreateSupplierTable(branchId);
-            CreateTransactionTable(branchId);
-            CreateSupplierTable(branchId);
+            System.out.println("branchId => "+branchId);
+            CreatePosProductTable(branchId,companyId);
+            CreateOrderTable(branchId,companyId);
+            CreateOrderDetailsTable(branchId,companyId);
+            CreateSupplierTable(branchId,companyId);
+            CreateTransactionTable(branchId,companyId);
+            CreateSupplierTable(branchId,companyId);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             return "the user not added bs error!";
@@ -154,16 +155,16 @@ public class DbBranch {
 
 
     //---------------------Create DB Branch Section----------------------------
-    static public boolean CreateBranchTable(int branchId) {
+    static public boolean CreatePosProductTable(int branchId, int comId) {
         try {
 
 
             Connection conn = ConnectionPostgres.getConnection();
 
 
-            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS public.\"PosProduct_"+branchId+"\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS C_"+comId+".\"PosProduct_"+branchId+"\"\n" +
                     "(\n" +
-                    "    \"productId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                    "    \"productId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 11110000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                     "    \"productName\" character varying(30) COLLATE pg_catalog.\"default\",\n" +
                     "    \"buyingDay\" timestamp without time zone,\n" +
                     "    \"activationPeriod\" integer,\n" +
@@ -189,8 +190,7 @@ public class DbBranch {
                     ")\n" +
                     "TABLESPACE pg_default;\n" +
                     "\n" +
-                    "ALTER TABLE public.\"PosProduct\"\n" +
-                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
+                    "");
 
 
             int i = stmt.executeUpdate();
@@ -206,12 +206,12 @@ public class DbBranch {
         return true;
     }
 
-    static public boolean CreateOrderTable(int branchId) {
+    static public boolean CreateOrderTable(int branchId,int comId ) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS public.\"PosOrder_"+branchId+"\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS C_"+comId+".\"PosOrder_"+branchId+"\"\n" +
                     "(\n" +
-                    "    \"orderId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                    "    \"orderId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 106245000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                     "    \"orderTime\" timestamp without time zone NOT NULL,\n" +
                     "    \"clientName\" character varying COLLATE pg_catalog.\"default\",\n" +
                     "    \"orderType\" character varying(10) COLLATE pg_catalog.\"default\",\n" +
@@ -225,8 +225,7 @@ public class DbBranch {
                     "\n" +
                     "TABLESPACE pg_default;\n" +
                     "\n" +
-                    "ALTER TABLE public.\"PosOrder\"" +
-                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
+                    ";");
 
             int i = stmt.executeUpdate();
             System.out.println(i + " Table Established in PosOrder_"+branchId);
@@ -239,10 +238,10 @@ public class DbBranch {
         return true;
     }
 
-    static public boolean CreateSupplierTable(int branchId) {
+    static public boolean CreateSupplierTable(int branchId,int comId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS public.\"supplier_"+branchId+"\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS C_"+comId+".\"supplier_"+branchId+"\"\n" +
                     "(\n" +
                     "    \"supplierId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1000 MINVALUE 1000 MAXVALUE 2147483647 CACHE 1 ),\n" +
                     "    \"SupplierName\" character varying COLLATE pg_catalog.\"default\" NOT NULL,\n" +
@@ -255,8 +254,7 @@ public class DbBranch {
                     "\n" +
                     "TABLESPACE pg_default;\n" +
                     "\n" +
-                    "ALTER TABLE public.\"PosOrder\"" +
-                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
+                    "");
 
             int i = stmt.executeUpdate();
             System.out.println(i + " Table Established in Supplier_"+branchId);
@@ -268,10 +266,10 @@ public class DbBranch {
         }
         return true;
     }
-    static public boolean CreateTransactionTable(int branchId) {
+    static public boolean CreateTransactionTable(int branchId,int comId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS public.\"InventoryTransactions_"+branchId+"\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS C_"+comId+".\"InventoryTransactions_"+branchId+"\"\n" +
                     "(\n" +
                     "  \"transId\" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY ( INCREMENT 1 START 1000 MINVALUE 1000 MAXVALUE 2147483647 CACHE 1 ),\n" +
                     "    \"productId\" integer,\n" +
@@ -285,7 +283,7 @@ public class DbBranch {
                     "    \"RemainingAmount\" integer,\n" +
                     "    CONSTRAINT inventorytransactions_pkey_"+branchId+" PRIMARY KEY (\"transId\"),\n" +
                     "    CONSTRAINT \"product_invTrans\" FOREIGN KEY (\"productId\")\n" +
-                    "        REFERENCES public.\"PosProduct_"+branchId+"\" (\"productId\") MATCH SIMPLE\n" +
+                    "        REFERENCES C_"+comId+".\"PosProduct_"+branchId+"\" (\"productId\") MATCH SIMPLE\n" +
                     "        ON UPDATE NO ACTION\n" +
                     "        ON DELETE NO ACTION\n" +
                     "        NOT VALID\n" +
@@ -293,8 +291,7 @@ public class DbBranch {
                     "\n" +
                     "TABLESPACE pg_default;\n" +
                     "\n" +
-                    "ALTER TABLE public.\"InventoryTransactions_"+branchId+"\"" +
-                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
+                    "");
 
             int i = stmt.executeUpdate();
             System.out.println(i + " Table Established in TransTable"+branchId);
@@ -306,10 +303,10 @@ public class DbBranch {
         }
         return true;
     }
-    static public boolean CreateOrderDetailsTable(int branchId) {
+    static public boolean CreateOrderDetailsTable(int branchId,int comId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS public.\"PosOrderDetail_"+branchId+"\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS C_"+comId+".\"PosOrderDetail_"+branchId+"\"\n" +
                     "(\n" +
                     "    \"orderDetailsId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                     "    \"itemId\" integer,\n" +
@@ -322,14 +319,13 @@ public class DbBranch {
                     "    \"bouncedBack\" integer,\n"+
                     "    CONSTRAINT \"orderDetail_pkey_"+branchId+"\" PRIMARY KEY (\"orderDetailsId\"),\n" +
                     "    CONSTRAINT \"OrderHasDetails_"+branchId+"\" FOREIGN KEY (\"orderId\")\n" +
-                    "        REFERENCES public.\"PosOrder_"+branchId+"\" (\"orderId\") MATCH SIMPLE\n" +
+                    "        REFERENCES C_"+comId+".\"PosOrder_"+branchId+"\" (\"orderId\") MATCH SIMPLE\n" +
                     "        ON UPDATE CASCADE\n" +
                     "        ON DELETE CASCADE\n" +
                     "        NOT VALID\n" +
                     ")\n" +
                     "TABLESPACE pg_default;" +
-                    "ALTER TABLE public.\"PosOrderDetail\"" +
-                    "    OWNER to "+ ValueinsoftBackendApplication.DatabaseOwner+" ;");
+                    "");
 
             int i = stmt.executeUpdate();
             System.out.println(i + " Table Established in PosOrderDetails_"+branchId);
@@ -342,17 +338,17 @@ public class DbBranch {
         return true;
     }
     //Delete
-    static public boolean deleteBranch(int branchId) {
+    static public boolean deleteBranch(int branchId,String comId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             PreparedStatement stmt = conn.prepareStatement("Begin;\n" +
                     "DELETE FROM public.\"Branch\"\n" +
                     "\tWHERE \"branchId\" = "+branchId+";\n" +
-                    "DROP TABLE IF EXISTS public.\"PosOrderDetail_"+branchId+"\" CASCADE;\n" +
-                    "DROP TABLE IF EXISTS public.\"PosOrder_"+branchId+"\" CASCADE;\n" +
-                    "DROP TABLE IF EXISTS public.\"PosProduct_"+branchId+"\" CASCADE;\n" +
-                    "DROP TABLE IF EXISTS public.\"InventoryTransactions_"+branchId+"\" CASCADE;\n" +
-                    "DROP TABLE IF EXISTS public.\"supplier_"+branchId+"\" CASCADE;\n" +
+                    "DROP TABLE IF EXISTS "+comId+".\"PosOrderDetail_"+branchId+"\" CASCADE;\n" +
+                    "DROP TABLE IF EXISTS "+comId+".\"PosOrder_"+branchId+"\" CASCADE;\n" +
+                    "DROP TABLE IF EXISTS "+comId+".\"PosProduct_"+branchId+"\" CASCADE;\n" +
+                    "DROP TABLE IF EXISTS "+comId+".\"InventoryTransactions_"+branchId+"\" CASCADE;\n" +
+                    "DROP TABLE IF EXISTS "+comId+".\"supplier_"+branchId+"\" CASCADE;\n" +
                     "\n" +
                     "commit;");
 

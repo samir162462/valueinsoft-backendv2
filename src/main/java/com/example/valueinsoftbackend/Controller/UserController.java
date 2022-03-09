@@ -19,44 +19,46 @@ import java.util.Map;
 public class UserController {
 
 
-
-    @GetMapping
-    public String Adduser()
-    {
-        return "hello fuckers" ;
-    }
-
-
-
-
-
     @RequestMapping(value = "/getUser", method = RequestMethod.GET)
     @ResponseBody
-    public User getPersonsByNames(
+    public User getPersonsByNames(@RequestParam("id") String id) {
+        return DbUsers.getUser(id);
+    }
 
-
-            @RequestParam("id") String id
-
-    ) {
-
-
-        return  DbUsers.getUser(id);
+    @RequestMapping(value = "/getUserImg", method = RequestMethod.GET)
+    @ResponseBody
+    public String getUserImgByUserName(@RequestParam("id") String id) {
+        return DbUsers.getUserImg(id);
     }
 
 
-    @PostMapping("/saveUser")
+    @PostMapping("/saveNewUser")
 
-    public ResponseEntity<Object> newUser(@RequestBody Map<String, String> requestBody) {
+    public ResponseEntity<Object> saveNewUser(@RequestBody Map<String, String> requestBody) {
 
-
-        String answer = DbUsers.AddUser(requestBody.get("userName"),requestBody.get("userPassword"),requestBody.get("email"),requestBody.get("role"),requestBody.get("firstName")
-                ,requestBody.get("lastName"),Integer.valueOf(requestBody.get("gender")),requestBody.get("userPhone"),Integer.valueOf(requestBody.get("branchId")) );
-
+        String inputString = requestBody.get("imgFile");
+        String answer = DbUsers.AddUser(requestBody.get("userName"), requestBody.get("userPassword"), requestBody.get("email"), requestBody.get("userRole"), requestBody.get("firstName")
+                , requestBody.get("lastName"), Integer.valueOf(requestBody.get("gender")), requestBody.get("userPhone"), Integer.valueOf(requestBody.get("branchId")), inputString);
 
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
 
     }
 
+    @PostMapping("/saveUser")
+
+    public ResponseEntity<Object> newUser(@RequestBody Map<String, String> requestBody) {
+
+        String inputString = requestBody.get("imgFile");
+
+        String answer = DbUsers.AddUser(requestBody.get("userName"), requestBody.get("userPassword"), requestBody.get("email"), requestBody.get("role"), requestBody.get("firstName")
+                , requestBody.get("lastName"), Integer.valueOf(requestBody.get("gender")), requestBody.get("userPhone")
+                , Integer.valueOf(requestBody.get("branchId"))
+                , inputString);
+
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
+
+    }
 }
 

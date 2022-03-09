@@ -19,7 +19,7 @@ import java.util.Date;
 public class DbDvCompany {
 
 
-    static public JsonArray getShiftTotalAndIncomeOfAllBranches(ArrayList<Branch>branchArrayList,String hours)
+    static public JsonArray getShiftTotalAndIncomeOfAllBranches(int compId,ArrayList<Branch>branchArrayList,String hours)
     {
 
         try {
@@ -29,7 +29,7 @@ public class DbDvCompany {
             for (int i = 0; i < branchArrayList.size(); i++) {
                 Branch branch = branchArrayList.get(i);
                 int branchId = +branch.getBranchID();
-                stringBuilder.append("SELECT * from (select  sum(public.\"PosOrder_"+branchId+"\".\"orderTotal\") as sumTotal ,  sum(public.\"PosOrder_"+branchId+"\".\"orderIncome\") as sumincome , count(public.\"PosOrder_"+branchId+"\".\"orderId\") as countProducts, (now()::date + interval '"+hours+"') as Time  from public.\"PosOrder_"+branchId+"\" where  public.\"PosOrder_"+branchId+"\".\"orderTime\">= now()::date + interval '"+hours+"') a\n");
+                stringBuilder.append("SELECT * from (select  sum(C_"+compId+".\"PosOrder_"+branchId+"\".\"orderTotal\") as sumTotal ,  sum(C_"+compId+".\"PosOrder_"+branchId+"\".\"orderIncome\") as sumincome , count(C_"+compId+".\"PosOrder_"+branchId+"\".\"orderId\") as countProducts, (now()::date + interval '"+hours+"') as Time  from C_"+compId+".\"PosOrder_"+branchId+"\" where  C_"+compId+".\"PosOrder_"+branchId+"\".\"orderTime\">= now()::date + interval '"+hours+"') a\n");
                 if (i < branchArrayList.size()-1) {
                     stringBuilder.append("union All ");
                 }
@@ -78,7 +78,7 @@ public class DbDvCompany {
 
 
 
-    static public ArrayList<DvCompanyChartSalesIncome> getShiftTotalAndIncomeOfAllBranchesPerDay(ArrayList<Branch>branchArrayList,String hours)
+    static public ArrayList<DvCompanyChartSalesIncome> getShiftTotalAndIncomeOfAllBranchesPerDay(int compId,ArrayList<Branch>branchArrayList,String hours)
     {
 
         try {
@@ -89,7 +89,7 @@ public class DbDvCompany {
                 Branch branch = branchArrayList.get(i);
                 int branchId = +branch.getBranchID();
                 stringBuilder.append("SELECT ("+branchId+") as branchId, CONCAT(Date_Part('month',\"orderTime\"),'-',Date_Part('day',\"orderTime\")) as daym ,sum(\"orderTotal\") as orderTotal,sum(\"orderIncome\") as orderIncome \n" +
-                        "\tFROM public.\"PosOrder_"+branchId+"\" where public.\"PosOrder_"+branchId+"\".\"orderTime\">= now()::date + interval '"+hours+"'  GROUP BY daym  ");
+                        "\tFROM C_"+compId+".\"PosOrder_"+branchId+"\" where C_"+compId+".\"PosOrder_"+branchId+"\".\"orderTime\">= now()::date + interval '"+hours+"'  GROUP BY daym  ");
                 if (i < branchArrayList.size()-1) {
                     stringBuilder.append("union All ");
                 }

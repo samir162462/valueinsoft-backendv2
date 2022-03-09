@@ -54,15 +54,16 @@ public class DamagedItemController {
     }
 
     //TODO UPDATE
-    @RequestMapping(value = "{branchId}/update/{id}", method = RequestMethod.PUT)
+    @RequestMapping(value = "{companyId}/{branchId}/update/{id}", method = RequestMethod.PUT)
     public Map<String, String> updateSupplier(
             @RequestBody Supplier supplier,
-            @PathVariable int branchId
+            @PathVariable int branchId,
+            @PathVariable int companyId
 
     ) {
 
         Map<String, String> response = new HashMap<>();
-        response.put("Response", DbSupplier.updateSupplier(supplier, branchId));
+        response.put("Response", DbSupplier.updateSupplier(supplier, branchId,companyId));
         return response;
     }
 

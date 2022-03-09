@@ -10,9 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 
-
 import java.util.Map;
-
 
 
 @RestController
@@ -22,7 +20,7 @@ import java.util.Map;
 public class CompanyController {
 
 
-    @RequestMapping(value = "/getCompany", method = RequestMethod.GET )
+    @RequestMapping(value = "/getCompany", method = RequestMethod.GET)
     @ResponseBody
     public Company getPersonsByNames(
 
@@ -31,13 +29,24 @@ public class CompanyController {
 
     ) {
 
-        User u1 =  DbUsers.getUser(id);
+        User u1 = DbUsers.getUser(id);
 
-        return  DbCompany.getCompanyByOwnerId(u1.getUserId()+"");
+        return DbCompany.getCompanyByOwnerId(u1.getUserId() + "");
     }
 
+    //getCompanyAndBranchesByUserName
+    @RequestMapping(value = "/getCompanyAndBranchesByUserName", method = RequestMethod.GET)
+    @ResponseBody
+    public Company CompanyAndBranchesByUserName(
 
 
+            @RequestParam("id") String id
+
+    ) {
+
+
+        return DbCompany.getCompanyAndBranchesByUserName(id);
+    }
 
     @RequestMapping(value = "/getCompanyById", method = RequestMethod.GET)
     @ResponseBody
@@ -49,34 +58,39 @@ public class CompanyController {
     ) {
 
 
-        return  DbCompany.getCompanyById( id);
+        return DbCompany.getCompanyById(id);
     }
 
     @PostMapping("/saveCompany")
 
-    public Company newCompany(@RequestBody Map<String,Object> body) {
+    public Object newCompany(@RequestBody Map<String, Object> body) {
 
         String ownerName = body.get("ownerName").toString();
         String companyName = body.get("companyName").toString();
         String branchName = body.get("branchName").toString();
         String plan = body.get("plan").toString();
-        int planPrice = (int) body.get("EstablishPrice");
+        String comImg = body.get("comImg").toString();
+        String currency = body.get("currency").toString();
+        int planPrice = Integer.valueOf(body.get("EstablishPrice").toString()) ;
         Company com = null;
         try {
-            DbCompany.AddCompany(companyName,branchName,plan,planPrice,ownerName);
+            String msg = "";
+            msg =  DbCompany.AddCompany(companyName, branchName, plan, planPrice, ownerName,comImg,currency);
+            if (msg.contains("already")) {
+                return msg;
+            }
             com = DbCompany.getCompanyByOwnerId(ownerName);
-        }catch (Exception e )
-        {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             return null;
 
         }
 
 
-
         return com;
 
     }
+
     @GetMapping("/listHeaders")
     public ResponseEntity<String> listAllHeaders(
             @RequestHeader Map<String, String> headers) {

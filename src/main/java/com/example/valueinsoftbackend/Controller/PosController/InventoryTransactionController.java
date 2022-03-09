@@ -38,6 +38,7 @@ public class InventoryTransactionController {
         String time = body.get("time").toString();
         int remainingAmount = (int) body.get("remainingAmount");
         int branchId = (int) body.get("branchId");
+        int companyId = (int) body.get("companyId");
         Timestamp timestamp = null;
         try {
             SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss.SSS"); //"2021-10-02 18:48:05.123"
@@ -52,7 +53,7 @@ public class InventoryTransactionController {
 
         try {
 
-            DbPosInventoryTransaction.AddTransactionToInv(productId,userName,supplierId,transactionType,numItems,transTotal,payType,timestamp,remainingAmount,branchId);
+            DbPosInventoryTransaction.AddTransactionToInv(productId,userName,supplierId,transactionType,numItems,transTotal,payType,timestamp,remainingAmount,branchId,companyId);
         }catch (Exception e )
         {
             System.out.println(e.getMessage());
@@ -68,13 +69,14 @@ public class InventoryTransactionController {
         int branchId = (int) body.get("branchId");
         String startTime = body.get("startTime").toString();
         String endTime = body.get("endTime").toString();
+        int companyId = (int) body.get("companyId");
 
         System.out.println(startTime);
         System.out.println(endTime);
         ArrayList<InventoryTransaction> inventoryTransactions = null;
         try {
 
-            inventoryTransactions = DbPosInventoryTransaction.getInventoryTrans(branchId,startTime,endTime);
+            inventoryTransactions = DbPosInventoryTransaction.getInventoryTrans(companyId,branchId,startTime,endTime);
         }catch (Exception e )
         {
             System.out.println(e.getMessage());

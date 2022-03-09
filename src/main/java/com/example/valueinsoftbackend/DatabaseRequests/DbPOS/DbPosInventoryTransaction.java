@@ -12,14 +12,14 @@ import java.util.ArrayList;
 
 public class DbPosInventoryTransaction {
 
-    public static ArrayList<InventoryTransaction> getInventoryTrans(int branchId ,String startDate, String endDate )
+    public static ArrayList<InventoryTransaction> getInventoryTrans(int companyId ,int branchId ,String startDate, String endDate  )
     {
         ArrayList<InventoryTransaction> inventoryTransactions = new ArrayList<>();
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
             String query = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\"\n" +
-                    "\tFROM public.\"InventoryTransactions_"+branchId+"\" where \"time\" between '"+startDate+"' And '"+endDate+"'";
+                    "\tFROM C_"+companyId+".\"InventoryTransactions_"+branchId+"\" where \"time\" between '"+startDate+"' And '"+endDate+"'";
 
 
             // create the java statement
@@ -50,14 +50,14 @@ public class DbPosInventoryTransaction {
 
     }
 
-    static public String AddTransactionToInv(int productId, String userName, int supplierId, String transactionType , int NumItems, int transTotal , String payType, Timestamp time , int remainingAmount, int branchId )
+    static public String AddTransactionToInv(int productId, String userName, int supplierId, String transactionType , int NumItems, int transTotal , String payType, Timestamp time , int remainingAmount, int branchId ,int companyId)
     {
         try {
 
 
             Connection conn = ConnectionPostgres.getConnection();
 
-            PreparedStatement stmt=conn.prepareStatement("INSERT INTO public.\"InventoryTransactions_"+branchId+"\"(\n" +
+            PreparedStatement stmt=conn.prepareStatement("INSERT INTO C_"+companyId+".\"InventoryTransactions_"+branchId+"\"(\n" +
                     "\t \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
                     "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?);");
 

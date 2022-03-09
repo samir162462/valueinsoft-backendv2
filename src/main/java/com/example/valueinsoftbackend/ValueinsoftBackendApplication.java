@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend;
 
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
+import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.google.gson.Gson;
@@ -25,6 +26,10 @@ public static String DatabaseOwner = "krdszavicoqkpf";
         SpringApplication.run(ValueinsoftBackendApplication.class, args);
 
         //DbBranch.AddBranch("Filfilco1","Sharkia,Egypt",1000);
+       // for (int i = 1014; i <= 1019; i++) {
+       //     DbBranch.deleteBranch(i,"public");
+
+       // }
     }
 
 

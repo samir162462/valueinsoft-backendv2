@@ -3,6 +3,8 @@ package com.example.valueinsoftbackend.DatabaseRequests;
 import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.sql.*;
 
 public class DbUsers {
@@ -46,7 +48,7 @@ public class DbUsers {
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
-            String query = "SELECT id, \"userName\", \"userPassword\", \"userEmail\", \"userRole\", \"userPhone\", \"branchId\", \"firstName\", \"lastName\", gender, \"creationTime\"" +
+            String query = "SELECT id, \"userName\", \"userPassword\", \"userEmail\", \"userRole\", \"userPhone\", \"branchId\", \"firstName\", \"lastName\", gender, \"creationTime\", \"imgFile\"" +
                     "\tFROM public.users where \"userName\" = '"+userName+"';";
 
             String qu1 = "SELECT * FROM public.users\n" +
@@ -81,7 +83,36 @@ public class DbUsers {
 
     }
 
-    static public String AddUser(String username,String password, String email, String role,String fName,String  lName, int gender,String userPhone,int branchId )
+
+    public static String getUserImg(String userName) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            String query = "SELECT \"imgFile\"" +
+                    "\tFROM public.users where \"userName\" = '"+userName+"';";
+
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next())
+            {
+
+                return rs.getString(1);
+
+                // print the results
+            }
+
+
+        }catch (Exception e)
+        {
+            System.out.println("err in get user img : "+e.getMessage());
+
+        }
+        return "";
+    }
+
+    static public String AddUser(String username,String password, String email, String role,String fName,String  lName, int gender,String userPhone,int branchId,String imgFile )
     {
         try {
             if (checkExistUsername(username))
@@ -92,9 +123,8 @@ public class DbUsers {
             Connection conn = ConnectionPostgres.getConnection();
 
             PreparedStatement stmt=conn.prepareStatement("INSERT INTO public.users(\n" +
-                    "\t \"userName\", \"userPassword\", \"userEmail\", \"userRole\", \"userPhone\", \"branchId\", \"firstName\", \"lastName\", gender, \"creationTime\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
-
+                    "\t \"userName\", \"userPassword\", \"userEmail\", \"userRole\", \"userPhone\", \"branchId\", \"firstName\", \"lastName\", gender, \"creationTime\",\"imgFile\")\n" +
+                    "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);");
 
 
             stmt.setString(1,username);
@@ -105,8 +135,9 @@ public class DbUsers {
             stmt.setInt(6,branchId);
             stmt.setString(7,fName);
             stmt.setString(8,lName);
-            stmt.setInt(9,gender);
+            stmt.setInt(9,gender); //0 for female anf 1 for male
             stmt.setTimestamp(10, new Timestamp(System.currentTimeMillis()));
+            stmt.setString(11,imgFile);
 
             int i=stmt.executeUpdate();
             System.out.println(i+" records inserted");
@@ -122,6 +153,35 @@ public class DbUsers {
         }
 
         return "the user added!";
+    }
+    static public String UpdateRole(String schemaName , int userId ,String newRole)
+    {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            PreparedStatement stmt=conn.prepareStatement("UPDATE "+schemaName+".users\n" +
+                    "\tSET  \"userRole\"=?\n" +
+                    "\tWHERE id=?;");
+
+
+
+            stmt.setString(1,newRole);
+            stmt.setInt(2,userId);
+
+            int i=stmt.executeUpdate();
+            System.out.println(i+" records Role Updated");
+
+            stmt.close();
+            conn.close();
+
+        }catch (Exception e )
+        {
+            System.out.println(e.getMessage());
+            return "the user not Updated bs error!";
+
+        }
+
+        return "the user Role Updated!";
     }
 
 

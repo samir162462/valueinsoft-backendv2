@@ -29,7 +29,7 @@ public class DVSalesCompanyController {
 
         ArrayList<Branch> branchArrayList = DbBranch.getBranchByCompanyId(Integer.valueOf(body.get("companyId").toString()));
 
-        return DbDvCompany.getShiftTotalAndIncomeOfAllBranches(branchArrayList,body.get("hours").toString()).toString();
+        return DbDvCompany.getShiftTotalAndIncomeOfAllBranches(Integer.valueOf(body.get("companyId").toString()),branchArrayList,body.get("hours").toString()).toString();
 
     }
 //getShiftTotalAndIncomeOfAllBranchesPerDay
@@ -40,7 +40,7 @@ public class DVSalesCompanyController {
 
         ArrayList<Branch> branchArrayList = DbBranch.getBranchByCompanyId(Integer.valueOf(body.get("companyId").toString()));
 
-        return DbDvCompany.getShiftTotalAndIncomeOfAllBranchesPerDay(branchArrayList,body.get("hours").toString());
+        return DbDvCompany.getShiftTotalAndIncomeOfAllBranchesPerDay(Integer.valueOf(body.get("companyId").toString()),branchArrayList,body.get("hours").toString());
 
     }
 

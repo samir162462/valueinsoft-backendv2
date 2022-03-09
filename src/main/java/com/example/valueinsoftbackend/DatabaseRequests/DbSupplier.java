@@ -17,12 +17,12 @@ public class DbSupplier {
 
 
 //todo Get
-    public static ArrayList<Supplier> getSuppliers(int branchId) {
+    public static ArrayList<Supplier> getSuppliers(int branchId,int companyId) {
         ArrayList<Supplier> supList = new ArrayList<>();
         try {
             Connection conn = ConnectionPostgres.getConnection();
             String query = "SELECT \"supplierId\", \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\" , \"suplierMajor\"\n" +
-                    "\tFROM public.\"supplier_" + branchId + "\";";
+                    "\tFROM C_"+companyId+".\"supplier_" + branchId + "\";";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 
@@ -41,10 +41,10 @@ public class DbSupplier {
     }
 
 
-    static public String AddSupplier(String name, String phone1, String phone2, String loaction, String major, int branchId) {
+    static public String AddSupplier(String name, String phone1, String phone2, String loaction, String major, int branchId,int companyId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO public.supplier_" + branchId + "(\n" +
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_"+companyId+".supplier_" + branchId + "(\n" +
                     "\t \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\",\"suplierMajor\")\n" +
                     "\tVALUES ( ?, ?, ?, ?,?);");
 
@@ -65,19 +65,18 @@ public class DbSupplier {
     }
 
     //todo Update
-    static public String updateSupplier(Supplier supplier, int branchId) {
+    static public String updateSupplier(Supplier supplier, int branchId,int companyId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("UPDATE public.supplier_" + branchId + "\n" +
-                    "\tSET \"supplierId\"=?, \"SupplierName\"=?, \"supplierPhone1\"=?, \"supplierPhone2\"=?, \"SupplierLocation\"=?, \"suplierMajor\"=?\n" +
+            PreparedStatement stmt = conn.prepareStatement("UPDATE C_"+companyId+".supplier_" + branchId + "\n" +
+                    "\tSET  \"SupplierName\"=?, \"supplierPhone1\"=?, \"supplierPhone2\"=?, \"SupplierLocation\"=?, \"suplierMajor\"=?\n" +
                     "\tWHERE \"supplierId\" = " + supplier.getSupplierId() + ";");
 
-            stmt.setInt(1, supplier.getSupplierId());
-            stmt.setString(2, supplier.getSupplierName());
-            stmt.setString(3, supplier.getSupplierPhone1());
-            stmt.setString(4, supplier.getSupplierPhone2());
-            stmt.setString(5, supplier.getSuplierLocation());
-            stmt.setString(6, supplier.getSuplierMajor());
+            stmt.setString(1, supplier.getSupplierName());
+            stmt.setString(2, supplier.getSupplierPhone1());
+            stmt.setString(3, supplier.getSupplierPhone2());
+            stmt.setString(4, supplier.getSuplierLocation());
+            stmt.setString(5, supplier.getSuplierMajor());
             int i = stmt.executeUpdate();
             System.out.println(i + " supplier update record ");
             stmt.close();
@@ -90,12 +89,12 @@ public class DbSupplier {
     }
 
     //todo -- delete
-    public static boolean deleteSupp(int suppId, int branchId) {
+    public static boolean deleteSupp(int suppId, int branchId,int companyId) {
         System.out.println("text -> " + suppId + " " + branchId);
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
-            String query = "DELETE FROM public.supplier_" + branchId + "\n" +
+            String query = "DELETE FROM C_"+companyId+".supplier_" + branchId + "\n" +
                     "\tWHERE \"supplierId\" = " + suppId + ";";
 
             PreparedStatement pstmt = null;
@@ -112,15 +111,15 @@ public class DbSupplier {
     }
 
     //Supplier service -------------
-    public static JsonObject getRemainingSupplierAmountByProductId(int id, int branchId) {
+    public static JsonObject getRemainingSupplierAmountByProductId(int id, int branchId, int companyId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT public.\"PosProduct_" + branchId + "\".\"productId\",public.\"InventoryTransactions_" + branchId + "\".\"time\",public.\"InventoryTransactions_" + branchId + "\".\"payType\" as payType , public.\"InventoryTransactions_" + branchId + "\".\"RemainingAmount\" as remainingAmount\n" +
-                    "FROM public.\"PosProduct_" + branchId + "\" \n" +
+            String query = "SELECT C_"+companyId+".\"PosProduct_" + branchId + "\".\"productId\",C_"+companyId+".\"InventoryTransactions_" + branchId + "\".\"time\",C_"+companyId+".\"InventoryTransactions_" + branchId + "\".\"payType\" as payType , C_"+companyId+".\"InventoryTransactions_" + branchId + "\".\"RemainingAmount\" as remainingAmount\n" +
+                    "FROM C_"+companyId+".\"PosProduct_" + branchId + "\" \n" +
                     "INNER JOIN\n" +
-                    "    public.\"InventoryTransactions_" + branchId + "\" \n" +
+                    "    C_"+companyId+".\"InventoryTransactions_" + branchId + "\" \n" +
                     "ON\n" +
-                    "   public.\"PosProduct_" + branchId + "\".\"productId\" = public.\"InventoryTransactions_" + branchId + "\".\"productId\" where public.\"PosProduct_" + branchId + "\".\"productId\" = " + id + " ORDER BY public.\"InventoryTransactions_" + branchId + "\".\"time\" DESC LIMIT 1 ; ";
+                    "   C_"+companyId+".\"PosProduct_" + branchId + "\".\"productId\" = C_"+companyId+".\"InventoryTransactions_" + branchId + "\".\"productId\" where C_"+companyId+".\"PosProduct_" + branchId + "\".\"productId\" = " + id + " ORDER BY C_"+companyId+".\"InventoryTransactions_" + branchId + "\".\"time\" DESC LIMIT 1 ; ";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             JsonObject json = new JsonObject();
@@ -146,15 +145,16 @@ public class DbSupplier {
     }
 
     //todo get Suppliers sales
-    public static ArrayList<InventoryTransaction> getSupplierSales(int branchId, int supplierId) {
+    public static ArrayList<InventoryTransaction> getSupplierSales(int branchId, int supplierId,int companyId) {
         ArrayList<InventoryTransaction> suppliersSales = new ArrayList<>();
         try {
             Connection conn = ConnectionPostgres.getConnection();
             String query = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\"\n" +
-                    "\tFROM public.\"InventoryTransactions_" + branchId + "\"  where \"supplierId\" =" + supplierId + " ;";
+                    "\tFROM C_"+companyId+".\"InventoryTransactions_" + branchId + "\"  where \"supplierId\" =" + supplierId + " ;";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 
+            System.out.println(query);
             while (rs.next()) {
                 InventoryTransaction inventoryTransaction = new InventoryTransaction(
                         rs.getInt(1),

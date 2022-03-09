@@ -9,13 +9,13 @@ import java.util.ArrayList;
 
 public class DbClient {
 
-    private static String checkExistClientName(String cName, String phone) {
+    private static String checkExistClientName(int comId, String cName, String phone) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
             String query = "SELECT  \"clientName\" , \"clientPhone\"\n" +
-                    "\tFROM public.\"Client\" where  \"clientPhone\" = '" + phone + "' ;";
+                    "\tFROM C_"+comId+".\"Client\" where  \"clientPhone\" = '" + phone + "' ;";
 
             // create the java statement
             Statement st = conn.createStatement();
@@ -42,7 +42,7 @@ public class DbClient {
     }
 
 
-    public static ArrayList<Client> getClientByPhoneNumberOrName(String phone, String name, Timestamp date, String shiftStartTime, int branchId) {
+    public static ArrayList<Client> getClientByPhoneNumberOrName(int comId ,String phone, String name, Timestamp date, String shiftStartTime, int branchId) {
         ArrayList<Client> cList = new ArrayList<>();
 
         try {
@@ -53,10 +53,10 @@ public class DbClient {
 
             if (name == null) {
                 query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
-                        "\tFROM public.\"Client\" where \"branchId\" = " + branchId + " And \"clientPhone\" = '" + phone + "' ;";
+                        "\tFROM C_"+comId+".\"Client\" where \"branchId\" = " + branchId + " And \"clientPhone\" = '" + phone + "' ;";
             } else {
                 query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
-                        "\tFROM public.\"Client\" where \"branchId\" =" + branchId + "  And \"clientName\" LIKE '%" + name + "%' ;";
+                        "\tFROM C_"+comId+".\"Client\" where \"branchId\" =" + branchId + "  And \"clientName\" LIKE '%" + name + "%' ;";
             }
 
 
@@ -91,7 +91,7 @@ public class DbClient {
 
     }
 
-    public static ArrayList<Client> getLatestClients(int max, int branchId) {
+    public static ArrayList<Client> getLatestClients(int comId , int max, int branchId) {
         ArrayList<Client> cList = new ArrayList<>();
 
         try {
@@ -102,7 +102,7 @@ public class DbClient {
 
 
             query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
-                    "\tFROM public.\"Client\" where \"branchId\" =" + branchId + "  ORDER BY c_id DESC LIMIT  " + max + ";";
+                    "\tFROM C_"+comId+".\"Client\" where \"branchId\" =" + branchId + "  ORDER BY c_id DESC LIMIT  " + max + ";";
 
 
             // create the java statement
@@ -137,10 +137,10 @@ public class DbClient {
 
     }
 
-    static public String AddClient(String clientName, String phoneNumber, int branchId, String gender, String desc) {
+    static public String AddClient(int comId,String clientName, String phoneNumber, int branchId, String gender, String desc) {
         try {
 
-            String checkExist = checkExistClientName(clientName, phoneNumber);
+            String checkExist = checkExistClientName(comId ,clientName, phoneNumber);
             if (checkExist != null) {
                 String[] parts = checkExist.split(" ,");
                 System.out.println(parts[1]);
@@ -154,7 +154,7 @@ public class DbClient {
             Connection conn = ConnectionPostgres.getConnection();
 
 
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO public.\"Client\"(\n" +
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_"+comId+".\"Client\"(\n" +
                     "\t \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\")\n" +
                     "\tVALUES ( ?, ?, ?, ?, ?, ?);");
 
@@ -182,10 +182,10 @@ public class DbClient {
     }
 
     //todo Update
-    static public String updateClient(Client client, int branchId) {
+    static public String updateClient(int comId, Client client, int branchId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("UPDATE public.\"Client\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("UPDATE C_"+comId+".\"Client\"\n" +
                     "\tSET  \"clientName\"=?, \"clientPhone\"=?, gender=?, description=?, \"branchId\"=?\n" +
                     "\tWHERE c_id =?;");
 
@@ -208,12 +208,12 @@ public class DbClient {
     }
 
     //todo -- delete
-    public static boolean deleteClient(int clId, int branchId) {
+    public static boolean deleteClient(int comId, int clId, int branchId) {
         System.out.println("text -> " + clId + " " + branchId);
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
-            String query = "DELETE FROM public.\"Client\" \n" +
+            String query = "DELETE FROM C_"+comId+".\"Client\" \n" +
                     "\tWHERE c_id = " + clId + ";";
 
             PreparedStatement pstmt = null;

@@ -15,30 +15,31 @@ import java.util.Map;
 public class ShiftPeriodController {
 
 
-    @PostMapping("/{branchId}/startShift")
-    ShiftPeriod startShift(@PathVariable int branchId) {
-        return DbPosShiftPeriod.startShiftPeriod(branchId);
+    @PostMapping("/{companyId}/{branchId}/startShift")
+    ShiftPeriod startShift(@PathVariable int branchId,@PathVariable int companyId) {
+        System.out.println("in Start Shift");
+        return DbPosShiftPeriod.startShiftPeriod(companyId,branchId);
     }
 
-    @PostMapping("/{spId}/endShift")
-    String endShift( @PathVariable int spId) {
-        DbPosShiftPeriod.endShiftPeriod(spId);
+    @PostMapping("/{companyId}/{spId}/endShift")
+    String endShift( @PathVariable int spId,@PathVariable int companyId) {
+        DbPosShiftPeriod.endShiftPeriod(companyId,spId);
         return "The Shift Ended";
     }
     // dealingWithCurrentShiftData
-    @RequestMapping(value = "/currentShift" , method = RequestMethod.POST)
-    ShiftPeriod currentShift( @RequestBody Map<String,Object> data) {
-        return DbPosShiftPeriod.dealingWithCurrentShiftData((int)data.get("branchId"),(boolean)data.get("getDetails"));
+    @RequestMapping(value = "/{companyId}/currentShift" , method = RequestMethod.POST)
+    ShiftPeriod currentShift( @RequestBody Map<String,Object> data,@PathVariable int companyId) {
+        return DbPosShiftPeriod.dealingWithCurrentShiftData(companyId,(int)data.get("branchId"),(boolean)data.get("getDetails"));
     }
-    @RequestMapping(value = "/ShiftOrdersById" , method = RequestMethod.POST)
-    ArrayList<Order> ShiftOrdersById(@RequestBody Map<String,Object> data) {
-        return DbPosShiftPeriod.ShiftOrdersByPeriod((int)data.get("branchId"),(int) data.get("spId"));
+    @RequestMapping(value = "/{companyId}/ShiftOrdersById" , method = RequestMethod.POST)
+    ArrayList<Order> ShiftOrdersById(@RequestBody Map<String,Object> data ,@PathVariable int companyId) {
+        return DbPosShiftPeriod.ShiftOrdersByPeriod(companyId,(int)data.get("branchId"),(int) data.get("spId"));
     }
 
     //toDO Branch
-    @RequestMapping(value = "/{branchId}/branchShifts" , method = RequestMethod.GET)
-    ArrayList<ShiftPeriod> ShiftsByBranchId(@PathVariable int branchId) {
-        return DbPosShiftPeriod.currentBranchShiftData(branchId);
+    @RequestMapping(value = "/{companyId}/{branchId}/branchShifts" , method = RequestMethod.GET)
+    ArrayList<ShiftPeriod> ShiftsByBranchId(@PathVariable int branchId,@PathVariable int companyId) {
+        return DbPosShiftPeriod.currentBranchShiftData(companyId,branchId);
     }
 
 }
