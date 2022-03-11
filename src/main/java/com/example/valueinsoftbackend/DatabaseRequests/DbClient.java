@@ -136,6 +136,50 @@ public class DbClient {
         return null;
 
     }
+    public static Client getClientById(int companyId, int bid, int clientId) {
+
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "";
+            Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+            System.out.println(timestamp);
+
+
+            query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
+                    "\tFROM C_"+companyId+".\"Client\" where \"branchId\" =" + bid + "  And  c_id = " + clientId + ";";
+
+
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next()) {
+                System.out.println("add  connected to company " + rs.getString(1));
+
+                Client cl = new Client(
+                        rs.getInt(1),
+                        rs.getString(2),
+                        rs.getString(3),
+                        rs.getString(4),
+                        rs.getString(5),
+                        //rs.getTimestamp(6)
+                        null
+                );
+
+                System.out.println(cl);
+                return cl;
+                // print the results
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+
+        }
+        return null;
+    }
 
     static public String AddClient(int comId,String clientName, String phoneNumber, int branchId, String gender, String desc) {
         try {
@@ -228,5 +272,7 @@ public class DbClient {
         }
         return true;
     }
+
+
 
 }

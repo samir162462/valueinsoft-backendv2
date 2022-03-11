@@ -41,7 +41,7 @@ public class ProductFilter {
         stringBuilder.append("\"pState\" = 'Used' And ");
 
         }
-        if (major != null) {
+        if (major != null && major!="") {
             stringBuilder.append("\"major\" = '"+major+"' And ");
 
         }

@@ -54,6 +54,17 @@ public class ClientController {
         return DbClient.getClientByPhoneNumberOrName(companyId,null, name, null, null, bid);
     }
 
+    @RequestMapping(path = "/{companyId}/getClientsById/{cid}/{bid}", method = RequestMethod.GET)
+    @ResponseBody
+    public Client getClientsById(
+            @PathVariable("cid") int clientId,
+            @PathVariable("companyId") int companyId,
+            @PathVariable("bid") int bid
+    ) {
+        //get just the client in the list
+        return DbClient.getClientById(companyId,bid, clientId);
+    }
+
     @PostMapping("/{companyId}/AddClient")
 
     public ResponseEntity<Object> newUser(@RequestBody Map<String, Object> body,
