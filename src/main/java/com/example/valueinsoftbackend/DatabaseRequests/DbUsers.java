@@ -176,7 +176,9 @@ public class DbUsers {
         }catch (Exception e )
         {
             System.out.println(e.getMessage());
+
             return "the user not added bs error!";
+
 
         }
 
