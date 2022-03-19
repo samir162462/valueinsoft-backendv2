@@ -13,10 +13,11 @@ public class Order {
     int branchId;
     int clientId;
     int orderIncome;
+    int totalBouncedBack;
     ArrayList<OrderDetails> orderDetails;
 
 
-    public Order(int orderId, String orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, int clientId, int orderIncome, ArrayList<OrderDetails> orderDetails) {
+    public Order(int orderId, String orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, int clientId, int orderIncome, int totalBouncedBack, ArrayList<OrderDetails> orderDetails) {
         this.orderId = orderId;
         this.orderTime = orderTime;
         this.clientName = clientName;
@@ -27,6 +28,7 @@ public class Order {
         this.branchId = branchId;
         this.clientId = clientId;
         this.orderIncome = orderIncome;
+        this.totalBouncedBack = totalBouncedBack;
         this.orderDetails = orderDetails;
     }
 
@@ -108,6 +110,14 @@ public class Order {
 
     public void setOrderIncome(int orderIncome) {
         this.orderIncome = orderIncome;
+    }
+
+    public int getTotalBouncedBack() {
+        return totalBouncedBack;
+    }
+
+    public void setTotalBouncedBack(int totalBouncedBack) {
+        this.totalBouncedBack = totalBouncedBack;
     }
 
     public ArrayList<OrderDetails> getOrderDetails() {

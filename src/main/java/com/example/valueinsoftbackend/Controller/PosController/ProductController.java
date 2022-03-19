@@ -89,6 +89,14 @@ public class ProductController {
         return null;
     }
 
+
+    //----get----
+
+    @GetMapping("{companyId}/{branchId}/{productId}")
+    Product productById( @PathVariable int branchId, @PathVariable int companyId , @PathVariable int productId) {
+        return DbPosProduct.getProductById(productId, branchId, companyId);
+    }
+
     @PostMapping("{companyId}/{branchId}/saveProduct")
     String newProduct(@RequestBody Product newProProduct, @PathVariable String branchId, @PathVariable int companyId) {
         return DbPosProduct.AddProduct(newProProduct, branchId, companyId).toString();

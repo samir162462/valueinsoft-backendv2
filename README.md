@@ -1,1 +1,1 @@
-# valueinsoft-backendv2 Is the backend od the valueinsoft 
+# valueinsoft-backendv2 Is the backend of the ValueInSoft WebApp 

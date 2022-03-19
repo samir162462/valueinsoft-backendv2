@@ -57,9 +57,14 @@ public class DbPosInventoryTransaction {
 
             Connection conn = ConnectionPostgres.getConnection();
 
-            PreparedStatement stmt=conn.prepareStatement("INSERT INTO C_"+companyId+".\"InventoryTransactions_"+branchId+"\"(\n" +
+            PreparedStatement stmt=conn.prepareStatement("BEGIN;\n" +
+                    "INSERT INTO C_"+companyId+".\"InventoryTransactions_"+branchId+"\"(\n" +
                     "\t \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+                    "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?);" +
+                    "UPDATE C_"+companyId+".supplier_"+branchId+"\n" +
+                    "SET  \"supplierRemainig\" = \"supplierRemainig\" + "+transTotal+", \"supplierTotalSales\" = \"supplierTotalSales\" + "+remainingAmount+" "+
+                    "\tWHERE \"supplierId\"= " +supplierId+";" +
+                    "COMMIT;\n");
 
 
 

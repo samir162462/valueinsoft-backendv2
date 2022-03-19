@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
+import com.example.valueinsoftbackend.DatabaseRequests.DbSQL.DbSqlCloseIdles;
 import com.example.valueinsoftbackend.Model.*;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import org.postgresql.util.PGobject;
@@ -130,17 +131,25 @@ public class DbPosCategory {
             ResultSet rs = st.executeQuery(query);
             String payload = "";
             ArrayList<MainMajor> MainMajors = new ArrayList<>();
-            while (rs.next()) {
-                MainMajor mainMajor = new MainMajor(rs.getInt(1),rs.getString(2),rs.getString(3));
-                MainMajors.add(mainMajor);
-                System.out.println(rs.getString(2));
+            try {
+
+                while (rs.next()) {
+                    MainMajor mainMajor = new MainMajor(rs.getInt(1),rs.getString(2),rs.getString(3));
+                    MainMajors.add(mainMajor);
+                    System.out.println(rs.getString(2));
+                }
+            }catch(Exception e)
+            {
+                System.out.println("Inside operation"+ e.getMessage());
             }
+
             rs.close();
             st.close();
             conn.close();
             return MainMajors;
         } catch (Exception e) {
             System.out.println("err : " + e.getMessage());
+
         }
         return null;
     }

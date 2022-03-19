@@ -220,6 +220,7 @@ public class DbBranch {
                     "    \"salesUser\" character varying COLLATE pg_catalog.\"default\",\n" +
                     "    \"clientId\" integer," +
                     "    \"orderIncome\" integer," +
+                    "    \"orderBouncedBack\" integer," +
                     "    CONSTRAINT \"PosOrder_pkey_"+branchId+"\" PRIMARY KEY (\"orderId\")\n" +
                     ")\n" +
                     "\n" +
@@ -249,6 +250,8 @@ public class DbBranch {
                     "    \"supplierPhone2\" character varying(14) COLLATE pg_catalog.\"default\",\n" +
                     "    \"SupplierLocation\" character varying COLLATE pg_catalog.\"default\",\n" +
                     "    \"suplierMajor\" character varying(20) COLLATE pg_catalog.\"default\",\n" +
+                    "    \"supplierRemainig\" integer DEFAULT 0,\n" +
+                    "    \"supplierTotalSales\" integer DEFAULT 0," +
                     "    CONSTRAINT \"supplier _pkey_"+branchId+"\" PRIMARY KEY (\"supplierId\")\n" +
                     ")" +
                     "\n" +

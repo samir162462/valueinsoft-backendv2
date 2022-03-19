@@ -21,8 +21,8 @@ public class DbPosOrder {
             String query = "" +
                     "with new_order as (\n" +
                     "INSERT INTO C_"+companyId+".\"PosOrder_" + branchId + "\"(\n" +
-                    "\t \"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\" , \"clientId\", \"orderIncome\")\n" +
-                    "\tVALUES ( ? , ?, ?, ?,?, ?,?,?)\n" +
+                    "\t \"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\" , \"clientId\", \"orderIncome\",\"orderBouncedBack\")\n" +
+                    "\tVALUES ( ? , ?, ?, ?,?, ?,?,?,?)\n" +
                     "  returning \"orderId\"\n" +
 
                     ")\n" +
@@ -34,7 +34,7 @@ public class DbPosOrder {
             for (int i = 0; i < orddet.size(); i++) {
                 OrderDetails obj = orddet.get(i);
 
-                sb.append("  ( " + obj.getItemId() + ", '" + obj.getItemName() + "', " + obj.getQuantity() + ", " + obj.getPrice() + ", " + obj.getTotal() + ", (select \"orderId\" from new_order) , " + obj.getProductId() + ", 0 )");
+                sb.append("  ( " + obj.getItemId() + ", '" + obj.getItemName() + "', " + obj.getQuantity() + ", " + obj.getPrice() + ", " + obj.getTotal() + ", (select \"orderId\" from new_order) , " + obj.getProductId() + ", 0)");
                 if (i != orddet.size() - 1) {
                     sb.append(" , ");
                 }
@@ -47,6 +47,7 @@ public class DbPosOrder {
                         "\tSET  quantity= quantity - " + obj.getQuantity() + "\n" +
                         "\tWHERE \"productId\" = " + obj.getProductId() + " ;");
             }
+
             sb.append(" " +
                     "COMMIT ; ");
             System.out.println(sb.toString());
@@ -59,6 +60,7 @@ public class DbPosOrder {
             stmt.setString(6, order.getSalesUser());
             stmt.setInt(7, order.getClientId());
             stmt.setInt(8, order.getOrderIncome());
+            stmt.setInt(9, 0);
 
 
             int i = stmt.executeUpdate();
@@ -97,9 +99,9 @@ public class DbPosOrder {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Order ord = new Order(
                         rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                        rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9), null
+                        rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9),rs.getInt(10), null
                 );
-                String details = rs.getString(10);
+                String details = rs.getString(11);
                 Gson gson = new Gson();
                 Type listType = new TypeToken<ArrayList<OrderDetails>>() {
                 }.getType();
@@ -115,7 +117,7 @@ public class DbPosOrder {
             return ordersArrayList;
 
         } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
+            System.out.println("12--err : " + e.getMessage());
             return null;
 
         }
@@ -144,7 +146,7 @@ public class DbPosOrder {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Order ord = new Order(
                         rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                        rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9), null
+                        rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9),rs.getInt(10), null
                 );
                 String details = rs.getString(10);
                 Gson gson = new Gson();
@@ -178,7 +180,7 @@ public class DbPosOrder {
             System.out.println(timestamp);
             ArrayList<Order> orderArrayList = new ArrayList<>();
 
-            query = "SELECT \"orderId\", \"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\", \"clientId\", \"orderIncome\"\n" +
+            query = "SELECT \"orderId\", \"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\", \"clientId\", \"orderIncome\",\"orderBouncedBack\"\n" +
                     "\tFROM C_"+companyId+".\"PosOrder_"+branchId+"\" where \"clientId\" =  " + clientId + ";";
 
 
@@ -200,6 +202,7 @@ public class DbPosOrder {
                         branchId,
                         rs.getInt(8),
                         rs.getInt(9),
+                        rs.getInt(10),
                         //rs.getTimestamp(6)
                         null
                 );
@@ -267,12 +270,19 @@ public class DbPosOrder {
         //--------------------------------Update-----------------------------------//
     //--------------------------BounceBack Order ---------------------//dispatch
 
-    static public String bounceBackOrderDetailItem(int odId, int branchId ,int companyId) {
+    static public String bounceBackOrderDetailItem(int odId, int branchId ,int companyId) { //Inventory
         try {
             Connection conn = ConnectionPostgres.getConnection();
             PreparedStatement stmt = conn.prepareStatement("Do $$\n" +
                     "Begin\n" +
                     "update C_"+companyId+".\"PosProduct_" + branchId + "\" set \"quantity\" = \"quantity\" + (select \"quantity\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") where \"productId\" = (select \"productId\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") ;\n" +
+                    "update C_"+companyId+".\"PosOrder_" + branchId + "\" set \"orderBouncedBack\" = \"orderBouncedBack\" + (select \"total\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") where \"orderId\" = (select \"orderId\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") ;\n" +
+                    "update C_"+companyId+".\"PosOrder_"+branchId+"\" set \"orderIncome\" = \"orderIncome\" -  \n" +
+                    "((select \"total\"  from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+") -\n" +
+                    "((select \"bPrice\"  from C_"+companyId+".\"PosProduct_"+branchId+"\" where \"productId\" = \n" +
+                    "  (select \"productId\"  from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+"))*\n" +
+                    "  (select \"quantity\"  from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+")))\n" +
+                    " where \"orderId\" = (select \"orderId\" from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+") ;" +
                     "update C_"+companyId+".\"PosOrderDetail_" + branchId + "\"\n" +
                     "\tset \"bouncedBack\" = 1" +
                     "\tWHERE \"orderDetailsId\" = " + odId + ";\n" +
@@ -281,7 +291,7 @@ public class DbPosOrder {
 
             Statement st = conn.createStatement();
             int i = stmt.executeUpdate();
-            System.out.println(i + " records inserted num " + odId);
+            System.out.println(i + " records inserted num " + stmt.toString());
             stmt.close();
             conn.close();
 
@@ -294,24 +304,6 @@ public class DbPosOrder {
 
     //--------------------------------Update-----------------------------------//
     //-----------------Dispatch Product Order To Inventory---------------------//
-    static public String dispatchProductOrderQuantity(int productId, int quantity, int branchId ,int companyId) {
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(" UPDATE C_"+companyId+".\"PosProduct_" + branchId + "\"\n" +
-                    "\tSET  quantity= quantity - " + quantity + "\n" +
-                    "\tWHERE \"productId\" = " + productId + ";");
 
-            Statement st = conn.createStatement();
-            int i = stmt.executeUpdate();
-            System.out.println(productId + ": dispatchProductOrderQuantity inserted num " + quantity);
-            stmt.close();
-            conn.close();
-
-            return "The Shift Ended ";
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return null;
-        }
-    }
 
 }

@@ -13,6 +13,7 @@ public class DbUsers {
     public static boolean checkExistUsername(String userName)
     {
 
+
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
@@ -130,6 +131,8 @@ public class DbUsers {
 
                 // print the results
             }
+            rs.close();
+            st.close();
 
 
         }catch (Exception e)

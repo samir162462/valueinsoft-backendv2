@@ -4,6 +4,8 @@
 
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
+import com.example.valueinsoftbackend.Model.Category;
+import com.example.valueinsoftbackend.Model.MainMajor;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
@@ -82,7 +84,54 @@ public class DbPosProduct {
         }
 
     }
+    public static Product getProductById(int supplierId, int branchId, int companyId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT * FROM C_"+companyId+".\"PosProduct_"+branchId+"\" where  \"productId\" = "+supplierId+";";
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            String payload = "";
+            Product pt = null ;
 
+            try {
+                while (rs.next()) {
+                     pt = new Product(
+                             rs.getInt(1),
+                             rs.getString(2),
+                             rs.getTimestamp(3),
+                             rs.getString(4),
+                             rs.getInt(5),
+                             rs.getInt(6),
+                             rs.getInt(7),
+                             rs.getString(8),
+                             rs.getString(9),
+                             rs.getString(10),
+                             rs.getString(11),
+                             rs.getString(12),
+                             rs.getInt(13),
+                             rs.getString(14),
+                             rs.getString(15),
+                             rs.getInt(16),
+                             rs.getString(17),
+                             rs.getInt(18),
+                             rs.getString(19)
+                     );
+                }
+            }catch(Exception e)
+            {
+                System.out.println("getProductById "+ e.getMessage());
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+            return pt;
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+
+        }
+        return null;
+    }
 
     public static ArrayList<Product>  getProductBySearchCompanyName(String comName, String branchId ,int companyId, ProductFilter productFilter )
     {

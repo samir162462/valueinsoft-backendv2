@@ -21,13 +21,13 @@ public class DbSupplier {
         ArrayList<Supplier> supList = new ArrayList<>();
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT \"supplierId\", \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\" , \"suplierMajor\"\n" +
+            String query = "SELECT \"supplierId\", \"SupplierName\", \"supplierPhone1\", \"supplierPhone2\", \"SupplierLocation\" , \"suplierMajor\" , \"supplierTotalSales\" , \"supplierRemainig\"\n" +
                     "\tFROM C_"+companyId+".\"supplier_" + branchId + "\";";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 
             while (rs.next()) {
-                Supplier sup = new Supplier(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6));
+                Supplier sup = new Supplier(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), rs.getString(6),rs.getInt(7),rs.getInt(8));
                 supList.add(sup);
             }
             rs.close();

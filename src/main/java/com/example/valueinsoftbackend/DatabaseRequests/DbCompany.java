@@ -76,17 +76,23 @@ public class DbCompany {
                 branchId = rs.getInt(2);
                 System.out.println(branchId);
             }
-
-            System.out.println("companyId: "+companyId);
-            bsList = DbBranch.getBranchByCompanyId(companyId);
-            System.out.println(bsList.toString());
-            company.setCompanyId(companyId);
-            ArrayList<Branch> branchArrayList = new ArrayList<>();
-            for (int i = 0; i < bsList.size(); i++) {
-                if (bsList.get(i).getBranchID() == branchId)
-                    branchArrayList.add(bsList.get(i));
+            try {
+                System.out.println("companyId: "+companyId);
+                bsList = DbBranch.getBranchByCompanyId(companyId);
+                System.out.println(bsList.toString());
+                company.setCompanyId(companyId);
+                ArrayList<Branch> branchArrayList = new ArrayList<>();
+                for (int i = 0; i < bsList.size(); i++) {
+                    if (bsList.get(i).getBranchID() == branchId)
+                        branchArrayList.add(bsList.get(i));
+                }
+                company.setBranchList(branchArrayList);
+            }catch(Exception e)
+            {
+                System.out.println(e.getMessage());
+                return null;
             }
-            company.setBranchList(branchArrayList);
+
             rs.close();
             st.close();
             conn.close();
@@ -150,16 +156,28 @@ public class DbCompany {
             while (rs.next()) {
                 System.out.println("add  connected to company " + rs.getString(1));
 
+                try {
+                    company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6),rs.getString(7) , rs.getString(8) ,null );
+                    System.out.println(company.toString());
+                }catch (Exception e)
+                {
+                    System.out.println(e.getMessage());
+                }
 
-                company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6),rs.getString(7) , rs.getString(8) ,null );
-                System.out.println(company.toString());
                 // print the results
             }
 
 
 
-            bsList = DbBranch.getBranchByCompanyId(company.getCompanyId());
-            company.setBranchList(bsList);
+
+            try {
+                bsList = DbBranch.getBranchByCompanyId(company.getCompanyId());
+                company.setBranchList(bsList);
+            }catch (Exception e)
+            {
+                System.out.println(e.getMessage());
+            }
+
             rs.close();
             st.close();
             conn.close();
@@ -398,6 +416,7 @@ public class DbCompany {
 
     static public boolean CreateCompanySchema(int companyId) {
         try {
+
             Connection conn = ConnectionPostgres.getConnection();
             PreparedStatement stmt = conn.prepareStatement("" +
                     "CREATE SCHEMA IF NOT EXISTS C_"+companyId+" ; " +

@@ -4,13 +4,17 @@ package com.example.valueinsoftbackend;
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
+import com.example.valueinsoftbackend.DatabaseRequests.DbSQL.DbSqlCloseIdles;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.Scheduled;
+
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 
@@ -31,6 +35,15 @@ public static String DatabaseOwner = "krdszavicoqkpf";
 
        // }
         //DbCompany.CreateCompanySchema(1080);
+       // DbSqlCloseIdles.terminate();
+    }
+
+    @Scheduled(initialDelay = 1*60*1000,fixedDelayString ="${terminate.delay}" )
+    void terminateDatabaseIdleProcess()
+    {
+        System.out.println("Now is :"+ new Date());
+         DbSqlCloseIdles.terminate();
+
     }
 
 

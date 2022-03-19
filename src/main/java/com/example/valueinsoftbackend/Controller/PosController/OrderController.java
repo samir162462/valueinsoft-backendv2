@@ -32,7 +32,7 @@ public class OrderController {
 
     @RequestMapping(path = "/getOrders", method = RequestMethod.GET)
     public ArrayList<Order> getProducts(@RequestBody Map<String,Object> data ,@PathVariable int companyId) {
-
+        System.out.println("getOrders--------");
         ArrayList<Order>orderArrayList = DbPosOrder.getOrdersByPeriod(
                 (int) data.get("branchId"),
                 ConvertStringToTimeStamp.convertString(data.get("startTime").toString()),

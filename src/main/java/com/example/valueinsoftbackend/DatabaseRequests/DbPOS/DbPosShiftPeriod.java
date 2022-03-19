@@ -94,6 +94,7 @@ public class DbPosShiftPeriod {
 
     public static ShiftPeriod dealingWithCurrentShiftData(int comId,int branchId ,boolean withDetails)
     {
+        System.out.println("dealing with currebt shift orders");
         try {
             Connection conn = ConnectionPostgres.getConnection();
             String query = "SELECT \"PosSOID\", \"ShiftStartTime\", \"ShiftEndTime\", \"branchId\"\n" +

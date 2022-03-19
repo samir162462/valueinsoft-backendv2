@@ -47,9 +47,17 @@ public class UserController {
 
     public ResponseEntity<Object> saveNewUser(@RequestBody Map<String, String> requestBody) {
 
-        String inputString = requestBody.get("imgFile");
-        String answer = DbUsers.AddUser(requestBody.get("userName"), requestBody.get("userPassword"), requestBody.get("email"), requestBody.get("userRole"), requestBody.get("firstName")
-                , requestBody.get("lastName"), Integer.valueOf(requestBody.get("gender")), requestBody.get("userPhone"), Integer.valueOf(requestBody.get("branchId")), inputString);
+        String answer ="Cant Add New User";
+        try {
+            String inputString = requestBody.get("imgFile");
+             answer = DbUsers.AddUser(requestBody.get("userName"), requestBody.get("userPassword"), requestBody.get("email"), requestBody.get("userRole"), requestBody.get("firstName")
+                    , requestBody.get("lastName"), Integer.valueOf(requestBody.get("gender")), requestBody.get("userPhone"), Integer.valueOf(requestBody.get("branchId")), inputString);
+        }catch(Exception e)
+        {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(answer);
+
+        }
+
 
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);

@@ -12,14 +12,34 @@ public class Supplier {
     String supplierPhone2;
     String suplierLocation;
     String suplierMajor;
+    int supplierSales;
+    int supplierRemaining;
 
-    public Supplier(int supplierId, String supplierName, String supplierPhone1, String supplierPhone2, String suplierLocation, String suplierMajor) {
+    public Supplier(int supplierId, String supplierName, String supplierPhone1, String supplierPhone2, String suplierLocation, String suplierMajor, int supplierSales, int supplierRemaining) {
         this.supplierId = supplierId;
         this.supplierName = supplierName;
         this.supplierPhone1 = supplierPhone1;
         this.supplierPhone2 = supplierPhone2;
         this.suplierLocation = suplierLocation;
         this.suplierMajor = suplierMajor;
+        this.supplierSales = supplierSales;
+        this.supplierRemaining = supplierRemaining;
+    }
+
+    public int getSupplierSales() {
+        return supplierSales;
+    }
+
+    public void setSupplierSales(int supplierSales) {
+        this.supplierSales = supplierSales;
+    }
+
+    public int getSupplierRemaining() {
+        return supplierRemaining;
+    }
+
+    public void setSupplierRemaining(int supplierRemaining) {
+        this.supplierRemaining = supplierRemaining;
     }
 
     public String getSuplierMajor() {

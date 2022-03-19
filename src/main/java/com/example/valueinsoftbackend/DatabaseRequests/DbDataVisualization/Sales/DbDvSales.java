@@ -25,7 +25,7 @@ public class DbDvSales {
                     "\tcast(date_trunc('month', '"+currentMonth+"'::date) as date)as firstDay,\n" +
                     "\t(date_trunc('month', '"+currentMonth+"'::date) + interval '1 month' - interval '1 day')::date AS lastDay,\n" +
                     "\n" +
-                    "\tSUM(\"orderTotal\") sum\n" +
+                    "\t(SUM(\"orderTotal\") - SUM(\"orderBouncedBack\")) sum   \n" +
                     "FROM C_"+companyId+".\"PosOrder_"+branchId+"\"\n" +
                     "where  \"orderTime\" <= now()::date+1 And \"orderTime\" >= cast(date_trunc('month', current_date) as date)\n" +
                     "GROUP BY\n" +
