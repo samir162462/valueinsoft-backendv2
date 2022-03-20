@@ -82,7 +82,8 @@ public class ProductController {
                 break;
             case "allData":
                 System.out.println("allData");
-                break;
+                return DbPosProduct.getProductsAllRange(branchId, companyId,productFilter);
+
         }
 
 

@@ -17,24 +17,22 @@ import java.util.ArrayList;
 public class DbPosProduct {
 
 
-    public static ArrayList<Product>  getProductBySearchText(String[] text, String branchId , int companyId , ProductFilter productFilter)
-    {
+    public static ArrayList<Product> getProductBySearchText(String[] text, String branchId, int companyId, ProductFilter productFilter) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            ArrayList<Product>productArrayList = new ArrayList<>();
-            String sqlQuery ="";
+            ArrayList<Product> productArrayList = new ArrayList<>();
+            String sqlQuery = "";
             if (productFilter != null) {
-                sqlQuery =  productFilter.sqlString();
-            }else
-            {
+                sqlQuery = productFilter.sqlString();
+            } else {
                 System.out.println("No Filter");
             }
 
             String query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                     "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
                     "\"pState\", \"supplierId\",\"major\"" +
-                    "\tFROM C_"+companyId+".\"PosProduct_"+branchId+"\" where "+sqlQuery+"  ";
+                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "  ";
 
 
             // create the java statement
@@ -45,11 +43,11 @@ public class DbPosProduct {
                     if (i == 0) {
                         String capital = text[i].substring(0, 1).toUpperCase() + text[i].substring(1);
                         String small = text[i].substring(0, 1).toLowerCase() + text[i].substring(1);
-                        String s1 = "(\"productName\" LIKE '%"+capital+"%' or \"productName\" LIKE '%"+small+"%')";
+                        String s1 = "(\"productName\" LIKE '%" + capital + "%' or \"productName\" LIKE '%" + small + "%')";
                         qy.append(s1);
                         continue;
                     }
-                    String s2 = " And \"productName\" LIKE '%"+text[i]+"%'";
+                    String s2 = " And \"productName\" LIKE '%" + text[i] + "%'";
                     qy.append(s2);
                 }
                 qy.append(";");
@@ -60,12 +58,11 @@ public class DbPosProduct {
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(qy.toString());
 
-            while (rs.next())
-            {
-                System.out.println("add user connected to user "+rs.getString(1));
+            while (rs.next()) {
+                System.out.println("add user connected to user " + rs.getString(1));
 
-                Product prod = new Product(rs.getInt(1) ,rs.getString(2),rs.getTimestamp(3),rs.getString(4),rs.getInt(5),rs.getInt(6),rs.getInt(7),rs.getString(8),rs.getString(9),rs.getString(10),rs.getString(11),rs.getString(12),
-                rs.getInt(13),rs.getString(14),rs.getString(15),rs.getInt(16),rs.getString(17),rs.getInt(18),rs.getString(19));
+                Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
+                        rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
                 productArrayList.add(prod);
 
                 // print the results
@@ -74,52 +71,92 @@ public class DbPosProduct {
             rs.close();
             st.close();
             conn.close();
-            return  productArrayList;
+            return productArrayList;
 
-        }catch (Exception e)
-        {
-            System.out.println("err : "+e.getMessage());
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
             return null;
 
         }
 
     }
+
+    public static ArrayList<Product> getProductsAllRange(String branchId, int companyId, ProductFilter productFilter) {
+
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            ArrayList<Product> productArrayList = new ArrayList<>();
+            String sqlQuery = "";
+            if (productFilter != null) {
+                sqlQuery = productFilter.sqlString();
+            } else {
+                System.out.println("No Filter");
+            }
+
+            String query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
+                    "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
+                    "\"pState\", \"supplierId\",\"major\"" +
+                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "   \"productId\" > 0 ;";
+            // create the java statement
+            StringBuilder qy = new StringBuilder(query);
+            System.out.println(qy.toString());
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(qy.toString());
+
+            while (rs.next()) {
+                System.out.println("add user connected to user " + rs.getString(1));
+                Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
+                        rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
+                productArrayList.add(prod);
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return productArrayList;
+
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return null;
+
+        }
+
+    }
+
     public static Product getProductById(int supplierId, int branchId, int companyId) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT * FROM C_"+companyId+".\"PosProduct_"+branchId+"\" where  \"productId\" = "+supplierId+";";
+            String query = "SELECT * FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  \"productId\" = " + supplierId + ";";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             String payload = "";
-            Product pt = null ;
+            Product pt = null;
 
             try {
                 while (rs.next()) {
-                     pt = new Product(
-                             rs.getInt(1),
-                             rs.getString(2),
-                             rs.getTimestamp(3),
-                             rs.getString(4),
-                             rs.getInt(5),
-                             rs.getInt(6),
-                             rs.getInt(7),
-                             rs.getString(8),
-                             rs.getString(9),
-                             rs.getString(10),
-                             rs.getString(11),
-                             rs.getString(12),
-                             rs.getInt(13),
-                             rs.getString(14),
-                             rs.getString(15),
-                             rs.getInt(16),
-                             rs.getString(17),
-                             rs.getInt(18),
-                             rs.getString(19)
-                     );
+                    pt = new Product(
+                            rs.getInt(1),
+                            rs.getString(2),
+                            rs.getTimestamp(3),
+                            rs.getString(4),
+                            rs.getInt(5),
+                            rs.getInt(6),
+                            rs.getInt(7),
+                            rs.getString(8),
+                            rs.getString(9),
+                            rs.getString(10),
+                            rs.getString(11),
+                            rs.getString(12),
+                            rs.getInt(13),
+                            rs.getString(14),
+                            rs.getString(15),
+                            rs.getInt(16),
+                            rs.getString(17),
+                            rs.getInt(18),
+                            rs.getString(19)
+                    );
                 }
-            }catch(Exception e)
-            {
-                System.out.println("getProductById "+ e.getMessage());
+            } catch (Exception e) {
+                System.out.println("getProductById " + e.getMessage());
             }
 
             rs.close();
@@ -133,80 +170,73 @@ public class DbPosProduct {
         return null;
     }
 
-    public static ArrayList<Product>  getProductBySearchCompanyName(String comName, String branchId ,int companyId, ProductFilter productFilter )
-    {
+    public static ArrayList<Product> getProductBySearchCompanyName(String comName, String branchId, int companyId, ProductFilter productFilter) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            ArrayList<Product>productArrayList = new ArrayList<>();
-            String query= "";
+            ArrayList<Product> productArrayList = new ArrayList<>();
+            String query = "";
 
-            String sqlQuery ="";
+            String sqlQuery = "";
             if (productFilter != null) {
-                sqlQuery =  productFilter.sqlString();
-            }else
-            {
+                sqlQuery = productFilter.sqlString();
+            } else {
                 System.out.println("No Filter");
             }
-            System.out.println("com: "+comName);
-            if (comName.contains("All") ) {
-                 query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
+            System.out.println("com: " + comName);
+            if (comName.contains("All")) {
+                query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                         "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
                         "\"pState\", \"supplierId\",\"major\"" +
-                        "\tFROM C_"+companyId+".\"PosProduct_"+branchId+"\" where  "+sqlQuery+" \"type\" = '"+comName.split(" ")[1]+"' ";
-            }else
-            {
-                 query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
+                        "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  " + sqlQuery + " \"type\" = '" + comName.split(" ")[1] + "' ";
+            } else {
+                query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                         "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
                         "\"pState\", \"supplierId\",\"major\"" +
-                        "\tFROM C_"+companyId+".\"PosProduct_"+branchId+"\" where  "+sqlQuery+" \"companyName\" = '"+comName+"' ";
+                        "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  " + sqlQuery + " \"companyName\" = '" + comName + "' ";
             }
-
 
 
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
-            while (rs.next())
-            {
-                System.out.println("add user connected to user "+rs.getString(1));
-                Product prod = new Product(rs.getInt(1) ,rs.getString(2),rs.getTimestamp(3),rs.getString(4),rs.getInt(5),rs.getInt(6),rs.getInt(7),rs.getString(8),rs.getString(9),rs.getString(10),rs.getString(11),rs.getString(12),
-                        rs.getInt(13),rs.getString(14),rs.getString(15),rs.getInt(16),rs.getString(17),rs.getInt(18),rs.getString(19));
+            while (rs.next()) {
+                System.out.println("add user connected to user " + rs.getString(1));
+                Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
+                        rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
                 productArrayList.add(prod);
                 // print the results
             }
             rs.close();
             st.close();
             conn.close();
-            return  productArrayList;
+            return productArrayList;
 
-        }catch (Exception e)
-        {
-            System.out.println("err : "+e.getMessage());
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
             return null;
 
         }
     }
 
-    static public JsonObject AddProduct(Product prod, String branchId ,int companyId) {
+    static public JsonObject AddProduct(Product prod, String branchId, int companyId) {
         try {
-
 
 
             Connection conn = ConnectionPostgres.getConnection();
 
 
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_"+companyId+".\"PosProduct_"+branchId+"\"(\n" +
-                     "\"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\",\n" +
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_" + companyId + ".\"PosProduct_" + branchId + "\"(\n" +
+                    "\"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\",\n" +
                     "\t\"lPrice\", \"bPrice\", \"companyName\", type, \"ownerName\", serial, \"desc\",\n" +
                     "\t\"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\" ,\"major\")\n" +
-                    "\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?);",Statement.RETURN_GENERATED_KEYS);
+                    "\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?);", Statement.RETURN_GENERATED_KEYS);
 
             stmt.setString(1, prod.getProductName());
             stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
-            stmt.setInt(3,Integer.valueOf(prod.getActivationPeriod()) );
-            stmt.setInt(4,prod.getrPrice());
-            stmt.setInt(5,prod.getlPrice());
-            stmt.setInt(6,prod.getbPrice());
+            stmt.setInt(3, Integer.valueOf(prod.getActivationPeriod()));
+            stmt.setInt(4, prod.getrPrice());
+            stmt.setInt(5, prod.getlPrice());
+            stmt.setInt(6, prod.getbPrice());
             stmt.setString(7, prod.getCompanyName());
             stmt.setString(8, prod.getType());
             stmt.setString(9, prod.getOwnerName());
@@ -227,9 +257,8 @@ public class DbPosProduct {
             long id = 0;
             try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
-                    id = generatedKeys.getLong(1) ;
-                }
-                else {
+                    id = generatedKeys.getLong(1);
+                } else {
                     throw new SQLException("Creating user failed, no ID obtained.");
                 }
             }
@@ -237,13 +266,13 @@ public class DbPosProduct {
             stmt.close();
             conn.close();
             JsonObject json = new JsonObject();
-            json.addProperty("title","The Product Saved");
-            json.addProperty("id",id);
-            json.addProperty("numItems",prod.getQuantity());
-            json.addProperty("transTotal",prod.getbPrice()*prod.getQuantity());
-            json.addProperty("transactionType","Add");
+            json.addProperty("title", "The Product Saved");
+            json.addProperty("id", id);
+            json.addProperty("numItems", prod.getQuantity());
+            json.addProperty("transTotal", prod.getbPrice() * prod.getQuantity());
+            json.addProperty("transactionType", "Add");
             System.out.println(json.toString());
-            return  json;
+            return json;
 
             // Crate Branch table for new branch in DB
 
@@ -259,34 +288,30 @@ public class DbPosProduct {
     public static ArrayList<Product> getProductBySearchBarcode(String trim, String branchId, int companyId, Object o) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            ArrayList<Product>productArrayList = new ArrayList<>();
-            String query= "";
-                query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
-                        "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
-                        "\"pState\", \"supplierId\",\"major\"" +
-                        "\tFROM C_"+companyId+".\"PosProduct_"+branchId+"\" where  serial = '"+trim+"' ";
-
-
+            ArrayList<Product> productArrayList = new ArrayList<>();
+            String query = "";
+            query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
+                    "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
+                    "\"pState\", \"supplierId\",\"major\"" +
+                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  serial = '" + trim + "' ";
 
 
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
-            while (rs.next())
-            {
-                System.out.println("add user connected to user "+rs.getString(1));
-                Product prod = new Product(rs.getInt(1) ,rs.getString(2),rs.getTimestamp(3),rs.getString(4),rs.getInt(5),rs.getInt(6),rs.getInt(7),rs.getString(8),rs.getString(9),rs.getString(10),rs.getString(11),rs.getString(12),
-                        rs.getInt(13),rs.getString(14),rs.getString(15),rs.getInt(16),rs.getString(17),rs.getInt(18),rs.getString(19));
+            while (rs.next()) {
+                System.out.println("add user connected to user " + rs.getString(1));
+                Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
+                        rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
                 productArrayList.add(prod);
                 // print the results
             }
             rs.close();
             st.close();
             conn.close();
-            return  productArrayList;
+            return productArrayList;
 
-        }catch (Exception e)
-        {
-            System.out.println("err : "+e.getMessage());
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
             return null;
 
         }
@@ -295,24 +320,23 @@ public class DbPosProduct {
     //-------------------------------------------------------------
     //---------------------------Put-------------------------------
     //-------------------------------------------------------------
-    static public JsonObject EditProduct(Product prod, String branchId ,int companyId) {
+    static public JsonObject EditProduct(Product prod, String branchId, int companyId) {
         try {
-
 
 
             Connection conn = ConnectionPostgres.getConnection();
 
 
-            PreparedStatement stmt = conn.prepareStatement("UPDATE C_"+companyId+".\"PosProduct_"+branchId+"\"\n" +
+            PreparedStatement stmt = conn.prepareStatement("UPDATE C_" + companyId + ".\"PosProduct_" + branchId + "\"\n" +
                     "\tSET  \"productName\"=?, \"buyingDay\"=?, \"activationPeriod\"=?, \"rPrice\"=?, \"lPrice\"=?, \"bPrice\"=?, \"companyName\"=?, type=?, \"ownerName\"=?, serial=?, \"desc\"=?, \"batteryLife\"=?, \"ownerPhone\"=?, \"ownerNI\"=?, quantity=?, \"pState\"=?, \"supplierId\"=?, major=?\n" +
                     "\tWHERE \"productId\"=?;");
 
             stmt.setString(1, prod.getProductName());
             stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
-            stmt.setInt(3,Integer.valueOf(prod.getActivationPeriod()) );
-            stmt.setInt(4,prod.getrPrice());
-            stmt.setInt(5,prod.getlPrice());
-            stmt.setInt(6,prod.getbPrice());
+            stmt.setInt(3, Integer.valueOf(prod.getActivationPeriod()));
+            stmt.setInt(4, prod.getrPrice());
+            stmt.setInt(5, prod.getlPrice());
+            stmt.setInt(6, prod.getbPrice());
             stmt.setString(7, prod.getCompanyName());
             stmt.setString(8, prod.getType());
             stmt.setString(9, prod.getOwnerName());
@@ -337,13 +361,13 @@ public class DbPosProduct {
             stmt.close();
             conn.close();
             JsonObject json = new JsonObject();
-            json.addProperty("title","The Product Edit Saved");
-            json.addProperty("id",prod.getProductId());
-            json.addProperty("numItems",prod.getQuantity());
-            json.addProperty("transTotal",prod.getbPrice()*prod.getQuantity());
-            json.addProperty("transactionType","Update");
+            json.addProperty("title", "The Product Edit Saved");
+            json.addProperty("id", prod.getProductId());
+            json.addProperty("numItems", prod.getQuantity());
+            json.addProperty("transTotal", prod.getbPrice() * prod.getQuantity());
+            json.addProperty("transactionType", "Update");
             System.out.println(json.toString());
-            return  json;
+            return json;
 
             // Crate Branch table for new branch in DB
 
@@ -354,7 +378,6 @@ public class DbPosProduct {
         }
 
     }
-
 
 
 }

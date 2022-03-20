@@ -33,6 +33,7 @@ public class ShiftPeriodController {
     }
     @RequestMapping(value = "/{companyId}/ShiftOrdersById" , method = RequestMethod.POST)
     ArrayList<Order> ShiftOrdersById(@RequestBody Map<String,Object> data ,@PathVariable int companyId) {
+        System.out.println();
         return DbPosShiftPeriod.ShiftOrdersByPeriod(companyId,(int)data.get("branchId"),(int) data.get("spId"));
     }
 

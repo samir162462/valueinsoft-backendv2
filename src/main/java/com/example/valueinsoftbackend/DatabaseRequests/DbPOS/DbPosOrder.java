@@ -137,7 +137,7 @@ public class DbPosOrder {
                     "            FROM C_"+comId+".\"PosOrderDetail_"+branchId+"\" AS orderDetail \n" +
                     "            GROUP BY orderDetail.\"orderId\") orderDetails \n" +
                     "ON order_id = C_"+comId+".\"PosOrder_"+branchId+"\".\"orderId\"    \n" +
-                    "WHERE C_"+comId+".\"PosOrder_"+branchId+"\".\"orderTime\" between (SELECT \"ShiftStartTime\" FROM sales) and (SELECT \"ShiftEndTime\" FROM sales) order by \"orderId\" DESC";
+                    "WHERE C_"+comId+".\"PosOrder_"+branchId+"\".\"orderTime\" between (SELECT \"ShiftStartTime\" FROM sales) and (SELECT \"ShiftEndTime\" FROM sales) order by \"orderId\" DESC ; ";
 
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
@@ -148,7 +148,7 @@ public class DbPosOrder {
                         rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
                         rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9),rs.getInt(10), null
                 );
-                String details = rs.getString(10);
+                String details = rs.getString(11);
                 Gson gson = new Gson();
                 Type listType = new TypeToken<ArrayList<OrderDetails>>() {
                 }.getType();

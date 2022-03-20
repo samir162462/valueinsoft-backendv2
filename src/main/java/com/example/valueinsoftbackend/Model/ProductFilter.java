@@ -12,9 +12,10 @@ public class ProductFilter {
     int rangeMin;
     int rangeMax;
     String major;
+    String dates;
 
 
-    public ProductFilter(boolean outOfStock, boolean bouncedBack, boolean used, boolean toSell, int rangeMin, int rangeMax, String major) {
+    public ProductFilter(boolean outOfStock, boolean bouncedBack, boolean used, boolean toSell, int rangeMin, int rangeMax, String major, String dates) {
         this.outOfStock = outOfStock;
         this.bouncedBack = bouncedBack;
         this.used = used;
@@ -22,17 +23,23 @@ public class ProductFilter {
         this.rangeMin = rangeMin;
         this.rangeMax = rangeMax;
         this.major = major;
+        this.dates = dates;
     }
 
     public String  sqlString()
     {
         String text  = "";
         StringBuilder stringBuilder = new StringBuilder(text);
-        if (outOfStock == true) {
+        if (outOfStock == true &&toSell ==true) {
+            stringBuilder.append("quantity >= 0 And ");
+        }else if(outOfStock == false &&toSell ==true){
+            stringBuilder.append("quantity > 0 And ");
+
+        }else if(outOfStock == true && !toSell){
             stringBuilder.append("quantity = 0 And ");
-        }else{
-            stringBuilder.append("quantity <> 0 And ");
+
         }
+
         if (rangeMin > 0 || rangeMax<100000) {
             stringBuilder.append("\"rPrice\" between "+rangeMin+" And "+rangeMax+" And ");
 
@@ -43,6 +50,10 @@ public class ProductFilter {
         }
         if (major != null && major!="") {
             stringBuilder.append("\"major\" = '"+major+"' And ");
+
+        }
+        if (dates != null && dates!="") {
+            stringBuilder.append("\"buyingDay\" between "+dates+" And ");
 
         }
 
@@ -66,7 +77,13 @@ public class ProductFilter {
         this.toSell = toSell;
     }
 
+    public String getDates() {
+        return dates;
+    }
 
+    public void setDates(String dates) {
+        dates = dates;
+    }
 
     public boolean isUsed() {
         return used;
@@ -118,6 +135,7 @@ public class ProductFilter {
                 ", rangeMin=" + rangeMin +
                 ", rangeMax=" + rangeMax +
                 ", major='" + major + '\'' +
+                ", dates='" + dates + '\'' +
                 '}';
     }
 }
