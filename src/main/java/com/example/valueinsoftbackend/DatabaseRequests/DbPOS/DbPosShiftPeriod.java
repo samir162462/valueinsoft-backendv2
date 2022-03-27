@@ -108,8 +108,9 @@ public class DbPosShiftPeriod {
                 System.out.println("add user connected to user "+rs.getString(1));
                  sf = new ShiftPeriod(
                         rs.getInt(1),rs.getTimestamp(2),rs.getTimestamp(3),null
-                );
 
+                );
+                System.out.println("rs.getTimestamp(2): "+rs.getTimestamp(2));
 
                 // print the results
             }

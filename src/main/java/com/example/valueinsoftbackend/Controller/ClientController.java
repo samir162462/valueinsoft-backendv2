@@ -40,6 +40,7 @@ public class ClientController {
 
     ) {
         //get just the client in the list
+
         return DbClient.getLatestClients(companyId,max, bid);
     }
 

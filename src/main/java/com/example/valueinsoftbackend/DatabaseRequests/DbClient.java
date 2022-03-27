@@ -51,12 +51,21 @@ public class DbClient {
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             System.out.println(timestamp);
 
+            StringBuilder stringBuilder = new StringBuilder("");
+
+            if (branchId == 0) {
+                stringBuilder.append("");
+            }else
+            {
+                stringBuilder.append(" \"branchId\" =" + branchId + " And ");
+            }
+
             if (name == null) {
                 query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
-                        "\tFROM C_"+comId+".\"Client\" where \"branchId\" = " + branchId + " And \"clientPhone\" = '" + phone + "' ;";
+                        "\tFROM C_"+comId+".\"Client\" where "+stringBuilder+" \"clientPhone\" = '" + phone + "' ;";
             } else {
                 query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
-                        "\tFROM C_"+comId+".\"Client\" where \"branchId\" =" + branchId + "  And \"clientName\" LIKE '%" + name + "%' ;";
+                        "\tFROM C_"+comId+".\"Client\" where "+stringBuilder+" \"clientName\" LIKE '%" + name + "%' ;";
             }
 
 
@@ -100,9 +109,16 @@ public class DbClient {
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             System.out.println(timestamp);
 
+            StringBuilder stringBuilder = new StringBuilder("");
 
+            if (branchId == 0) {
+                stringBuilder.append("");
+            }else
+            {
+                stringBuilder.append(" where \"branchId\" =" + branchId + "");
+            }
             query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
-                    "\tFROM C_"+comId+".\"Client\" where \"branchId\" =" + branchId + "  ORDER BY c_id DESC LIMIT  " + max + ";";
+                    "\tFROM C_"+comId+".\"Client\" "+stringBuilder.toString()+" ORDER BY c_id DESC LIMIT  " + max + ";";
 
 
             // create the java statement
@@ -144,9 +160,17 @@ public class DbClient {
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             System.out.println(timestamp);
 
+            StringBuilder stringBuilder = new StringBuilder("");
+
+            if (bid == 0) {
+                stringBuilder.append("");
+            }else
+            {
+                stringBuilder.append(" \"branchId\" =" + bid + " And ");
+            }
 
             query = "SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\"\n" +
-                    "\tFROM C_"+companyId+".\"Client\" where \"branchId\" =" + bid + "  And  c_id = " + clientId + ";";
+                    "\tFROM C_"+companyId+".\"Client\" where  "+stringBuilder+"  c_id = " + clientId + ";";
 
 
             // create the java statement

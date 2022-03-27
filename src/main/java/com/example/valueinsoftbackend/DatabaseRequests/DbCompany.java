@@ -411,6 +411,28 @@ public class DbCompany {
 
         return query;
     }
+    //Todo SQL clientReceipts
+    static String SQLClientReceipts (String  SchemaName , String DBOwner)
+    {
+        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"ClientReceipts\"\n" +
+                "(\n" +
+                "    \"crId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 11 START 10000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    type character varying(20) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
+                "    amount money NOT NULL,\n" +
+                "    \"time\" timestamp without time zone NOT NULL,\n" +
+                "    \"userName\" character varying(25) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
+                "    \"clientId\" integer NOT NULL,\n" +
+                "    \"branchId\" integer NOT NULL,\n" +
+                "    CONSTRAINT \"ClientRecipts_pkey\" PRIMARY KEY (\"crId\")\n" +
+                ")" +
+                "\n" +
+                "TABLESPACE pg_default;\n" +
+                "\n" +
+                "ALTER TABLE "+SchemaName+".\"ClientReceipts\"\n" +
+                "    OWNER to "+DBOwner+";";
+
+        return query;
+    }
 
     //Schema Builder For All
 
@@ -420,14 +442,15 @@ public class DbCompany {
             Connection conn = ConnectionPostgres.getConnection();
             PreparedStatement stmt = conn.prepareStatement("" +
                     "CREATE SCHEMA IF NOT EXISTS C_"+companyId+" ; " +
-                    ""+SQLCompanyUsers("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    ""+SQLPosShiftPeriod("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    ""+SQLSupplier("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    ""+SQLBranch("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    ""+SQLDamagedList("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    ""+SQLPosCateJson("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    ""+SQLMainMajor("c_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    ""+SQLClient("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" ;");
+                    " "+SQLCompanyUsers("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLPosShiftPeriod("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLSupplier("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLBranch("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLDamagedList("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLPosCateJson("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLMainMajor("c_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLClientReceipts("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
+                    " "+SQLClient("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" ;");
 
             int i = stmt.executeUpdate();
             System.out.println(i + " CreateCompanySchema Established For Company"+companyId);

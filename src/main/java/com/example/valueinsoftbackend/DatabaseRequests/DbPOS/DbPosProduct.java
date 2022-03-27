@@ -4,8 +4,7 @@
 
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
-import com.example.valueinsoftbackend.Model.Category;
-import com.example.valueinsoftbackend.Model.MainMajor;
+
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
@@ -183,7 +182,6 @@ public class DbPosProduct {
             } else {
                 System.out.println("No Filter");
             }
-            System.out.println("com: " + comName);
             if (comName.contains("All")) {
                 query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                         "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
@@ -271,7 +269,6 @@ public class DbPosProduct {
             json.addProperty("numItems", prod.getQuantity());
             json.addProperty("transTotal", prod.getbPrice() * prod.getQuantity());
             json.addProperty("transactionType", "Add");
-            System.out.println(json.toString());
             return json;
 
             // Crate Branch table for new branch in DB
@@ -299,7 +296,6 @@ public class DbPosProduct {
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             while (rs.next()) {
-                System.out.println("add user connected to user " + rs.getString(1));
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
                         rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
                 productArrayList.add(prod);
@@ -366,7 +362,6 @@ public class DbPosProduct {
             json.addProperty("numItems", prod.getQuantity());
             json.addProperty("transTotal", prod.getbPrice() * prod.getQuantity());
             json.addProperty("transactionType", "Update");
-            System.out.println(json.toString());
             return json;
 
             // Crate Branch table for new branch in DB
