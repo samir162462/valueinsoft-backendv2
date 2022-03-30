@@ -6,6 +6,7 @@ package com.example.valueinsoftbackend.DatabaseRequests;
 
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Supplier;
+import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.google.gson.JsonObject;
 
@@ -185,4 +186,67 @@ public class DbSupplier {
 
     }
 
+    //todo  Suppliers BProduct
+    public static ArrayList<SupplierBProduct> getSupplierBProduct(int branchId, int supplierId,int companyId) {
+        ArrayList<SupplierBProduct> supplierBProducts = new ArrayList<>();
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT \"sBPId\", \"productId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\"\n" +
+                    "\tFROM c_"+companyId+".\"SupplierBProduct\" where  \"branchId\" = "+branchId+" AND \"supplierId\" = "+supplierId+" ;";
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            System.out.println(query);
+            while (rs.next()) {
+                SupplierBProduct supplierBProduct = new SupplierBProduct(
+                        rs.getInt(1),
+                        rs.getInt(2),
+                        rs.getInt(3),
+                        rs.getInt(4),
+                        rs.getString(5),
+                        rs.getInt(6),
+                        rs.getTimestamp(7),
+                        rs.getString(8)
+                );
+                // print the results
+                supplierBProducts.add(supplierBProduct);
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return supplierBProducts;
+
+        } catch (Exception e) {
+            System.out.println("err  supplierBProducts : " + e.getMessage());
+            return null;
+
+        }
+    }
+
+    static public String AddSupplierBProduct(SupplierBProduct supplierBProduct, int productId, int branchId, int companyId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO c_"+companyId+".\"SupplierBProduct\"(\n" +
+                    " \"productId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\", \"supplierId\", \"branchId\")\n" +
+                    " VALUES (?, ?, ?, ?, ?, ?, ?,  ( SELECT \"supplierId\" FROM c_"+companyId+".\"PosProduct_"+branchId+"\" where \"productId\" = "+productId+") , "+branchId+");");
+
+            stmt.setInt(1, productId);
+            stmt.setInt(2, supplierBProduct.getQuantity());
+            stmt.setInt(3, supplierBProduct.getCost());
+            stmt.setString(4, supplierBProduct.getUserName());
+            stmt.setInt(5, supplierBProduct.getsPaid());
+            stmt.setTimestamp(6, supplierBProduct.getTime());
+            stmt.setString(7, supplierBProduct.getDesc());
+            System.out.println(stmt.toString());
+            int i = stmt.executeUpdate();
+            System.out.println(i + " supplier added records inserted");
+            stmt.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return "the supplier BProduct not added by error!";
+        }
+        return "the supplier BProduct added! ok 200";
+    }
 }

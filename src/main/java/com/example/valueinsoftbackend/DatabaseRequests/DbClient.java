@@ -6,6 +6,7 @@ import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class DbClient {
 
@@ -295,6 +296,54 @@ public class DbClient {
             return false;
         }
         return true;
+    }
+
+    //todo Features
+    public static HashMap<String, ArrayList<String>> getClientsByYear(int companyId, int bid) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "";
+            Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+            System.out.println(timestamp);
+
+            StringBuilder stringBuilder = new StringBuilder("");
+
+            if (bid == 0) {
+                stringBuilder.append("");
+            }else
+            {
+                stringBuilder.append(" \"branchId\" =" + bid + " And ");
+            }
+
+            query = "SELECT count(c_id) as numClients, TO_CHAR(date_trunc('month', \"registeredTime\"), 'Mon') AS \"mon\"\n" +
+                    "\tFROM c_"+companyId+".\"Client\" where "+stringBuilder+" date_trunc('year', \"registeredTime\") = date_trunc('year', now()::timestamp) \n" +
+                    "GROUP BY\n" +
+                    "\t mon ;";
+
+
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            HashMap<String, ArrayList<String>> integerStringHashMap = new HashMap<>();
+            ArrayList<String>integers = new ArrayList<>();
+            ArrayList<String> strings = new ArrayList<>();
+            while (rs.next()) {
+                integers.add(rs.getInt(1)+"");
+                strings.add((rs.getString(2)));
+            }
+            integerStringHashMap.put("labels",strings);
+            integerStringHashMap.put("data",integers);
+
+            rs.close();
+            st.close();
+            conn.close();
+            return integerStringHashMap;
+
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+
+        }
+        return null;
     }
 
 

@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -66,8 +67,18 @@ public class ClientController {
         return DbClient.getClientById(companyId,bid, clientId);
     }
 
-    @PostMapping("/{companyId}/AddClient")
+    @RequestMapping(path = "/{companyId}/{bid}/getCurrentYearClients", method = RequestMethod.GET)
+    @ResponseBody
+    public HashMap<String, ArrayList<String>> getClientsByYear(
+            @PathVariable("companyId") int companyId,
+            @PathVariable("bid") int bid
+    ) {
+        //get just the client in the list
+        return DbClient.getClientsByYear(companyId,bid);
+    }
 
+
+    @PostMapping("/{companyId}/AddClient")
     public ResponseEntity<Object> newUser(@RequestBody Map<String, Object> body,
                                           @PathVariable("companyId") int companyId) {
         int branchId = -1;

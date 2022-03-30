@@ -60,7 +60,7 @@ public class OrderController {
 
     @RequestMapping(value = "/{companyId}/bounceBackProduct" , method = RequestMethod.POST)
     String bounceBackProduct(@RequestBody Map<String,Integer> data ,@PathVariable int companyId) {
-        return DbPosOrder.bounceBackOrderDetailItem(data.get("odId"),data.get("branchId"),companyId);
+        return DbPosOrder.bounceBackOrderDetailItem(data.get("odId"),data.get("branchId"),companyId,data.get("toWho"));//1 to inv 2-> to supp
     }
 
 

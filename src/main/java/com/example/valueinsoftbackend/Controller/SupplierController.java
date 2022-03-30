@@ -8,11 +8,13 @@ package com.example.valueinsoftbackend.Controller;
 import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Supplier;
+import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.google.gson.JsonObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,7 +33,7 @@ public class SupplierController {
     ) {
 
 
-        return DbSupplier.getSuppliers(branchId,companyId);
+        return DbSupplier.getSuppliers(branchId, companyId);
     }
 
 
@@ -44,7 +46,7 @@ public class SupplierController {
             @PathVariable int branchId
     ) {
 
-        return DbSupplier.getRemainingSupplierAmountByProductId(productId, branchId,companyId).toString() ;
+        return DbSupplier.getRemainingSupplierAmountByProductId(productId, branchId, companyId).toString();
     }
 
     @PostMapping("/saveSupplier")
@@ -70,7 +72,7 @@ public class SupplierController {
 
         //todo --update method
         Map<String, String> response = new HashMap<>();
-        response.put("Response", DbSupplier.updateSupplier(supplier, branchId,companyId));
+        response.put("Response", DbSupplier.updateSupplier(supplier, branchId, companyId));
         return response;
     }
 
@@ -83,7 +85,7 @@ public class SupplierController {
 
     ) throws Exception {
         Map<String, Boolean> response = new HashMap<>();
-        boolean bol = DbSupplier.deleteSupp(supplierId, branchId,companyId);
+        boolean bol = DbSupplier.deleteSupp(supplierId, branchId, companyId);
         response.put("deleted", bol);
         return response;
     }
@@ -97,7 +99,36 @@ public class SupplierController {
             @PathVariable int branchId
     ) {
 
-        return DbSupplier.getSupplierSales(branchId, supplierId,companyId);
+        return DbSupplier.getSupplierSales(branchId, supplierId, companyId);
     }
 
+    @RequestMapping(value = "{companyId}/{branchId}/SupplierBProduct/{supplierId}", method = RequestMethod.GET)
+    @ResponseBody
+    public ArrayList<SupplierBProduct> getSupplierBProduct(
+
+            @PathVariable int supplierId,
+            @PathVariable int companyId,
+            @PathVariable int branchId
+    ) {
+
+        return DbSupplier.getSupplierBProduct(branchId, supplierId, companyId);
+    }
+
+
+    @PostMapping("{companyId}/{branchId}/saveSupplierBProduct/{productId}")
+    public ResponseEntity<Object> newSupplierBProduct(
+            @PathVariable int productId,
+            @PathVariable int companyId,
+            @PathVariable int branchId,
+            @RequestBody SupplierBProduct requestBody
+    ) {
+        try {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(DbSupplier.AddSupplierBProduct(requestBody,productId,branchId,companyId ));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("error");
+
+        }
+
+    }
 }

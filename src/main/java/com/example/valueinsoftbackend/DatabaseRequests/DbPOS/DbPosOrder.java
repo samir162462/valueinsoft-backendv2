@@ -270,7 +270,7 @@ public class DbPosOrder {
         //--------------------------------Update-----------------------------------//
     //--------------------------BounceBack Order ---------------------//dispatch
 
-    static public String bounceBackOrderDetailItem(int odId, int branchId ,int companyId) { //Inventory
+    static public String bounceBackOrderDetailItem(int odId, int branchId ,int companyId ,int toWho) { //Inventory
         try {
             Connection conn = ConnectionPostgres.getConnection();
             PreparedStatement stmt = conn.prepareStatement("Do $$\n" +
@@ -284,7 +284,7 @@ public class DbPosOrder {
                     "  (select \"quantity\"  from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+")))\n" +
                     " where \"orderId\" = (select \"orderId\" from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+") ;" +
                     "update C_"+companyId+".\"PosOrderDetail_" + branchId + "\"\n" +
-                    "\tset \"bouncedBack\" = 1" +
+                    "\tset \"bouncedBack\" = "+toWho+"  " +
                     "\tWHERE \"orderDetailsId\" = " + odId + ";\n" +
                     "Exception When Others then Rollback;\n" +
                     "end $$;");
@@ -301,6 +301,7 @@ public class DbPosOrder {
             return null;
         }
     }
+
 
     //--------------------------------Update-----------------------------------//
     //-----------------Dispatch Product Order To Inventory---------------------//
