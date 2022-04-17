@@ -22,7 +22,7 @@ public class DbPosDamagedList {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             String query = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\",  \"quantity\"\n" +
-                    "\tFROM "+companyName+".\"DamagedList\" where \"branchId\"  ="+branchId+" ;";
+                    "\tFROM c_"+companyName+".\"DamagedList\" where \"branchId\"  ="+branchId+" ;";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 
@@ -44,7 +44,7 @@ public class DbPosDamagedList {
     static public String AddDamagedItem(int branchId,String companyName,DamagedItem damagedItem) {
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO "+companyName+".\"DamagedList\"(\n" +
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO c_"+companyName+".\"DamagedList\"(\n" +
                     " \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\" ,  \"quantity\")\n" +
                     "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?,?);");
 
@@ -58,6 +58,7 @@ public class DbPosDamagedList {
             stmt.setBoolean(8, damagedItem.isPaid());
             stmt.setInt(9, damagedItem.getBranchId());
             stmt.setInt(10, damagedItem.getQuantity());
+            System.out.println(stmt.toString());
             int i = stmt.executeUpdate();
             System.out.println(i + " AddDamagedItem added records inserted");
             stmt.close();

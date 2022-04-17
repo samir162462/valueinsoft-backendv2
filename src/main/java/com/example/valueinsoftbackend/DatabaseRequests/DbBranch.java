@@ -45,6 +45,39 @@ public class DbBranch {
         return null;
 
     }
+    public static ArrayList<Branch> getAllBranches() {
+        ArrayList<Branch> bsList = new ArrayList<>();
+
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            String query = "SELECT \"branchId\", \"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\"\n" +
+                    "\tFROM public.\"Branch\" ;";
+
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next()) {
+                System.out.println("Connected to branch " + rs.getString(1));
+
+
+                Branch branch = new Branch(rs.getInt(1), rs.getInt(4), rs.getString(2), rs.getString(3), rs.getTimestamp(5));
+                bsList.add(branch);
+                // print the results
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+            return bsList;
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+
+        }
+        return null;
+
+    }
 
     public static int getBranchIdByCompanyNameAndBranchName(int companyId, String branchName) {
         ArrayList<Branch> bsList = new ArrayList<>();

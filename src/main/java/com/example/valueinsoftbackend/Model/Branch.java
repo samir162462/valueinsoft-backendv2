@@ -58,4 +58,15 @@ public class Branch {
     public void setBranchEstTime(Timestamp branchEstTime) {
         this.branchEstTime = branchEstTime;
     }
+
+    @Override
+    public String toString() {
+        return "Branch{" +
+                "branchID=" + branchID +
+                ", branchOfCompanyId=" + branchOfCompanyId +
+                ", branchName='" + branchName + '\'' +
+                ", branchLocation='" + branchLocation + '\'' +
+                ", branchEstTime=" + branchEstTime +
+                '}';
+    }
 }

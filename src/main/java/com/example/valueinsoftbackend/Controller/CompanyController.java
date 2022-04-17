@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 
+import java.util.ArrayList;
 import java.util.Map;
 
 
@@ -33,6 +34,17 @@ public class CompanyController {
 
         return DbCompany.getCompanyByOwnerId(u1.getUserId() + "");
     }
+
+
+    @RequestMapping(value = "/getAllCompanies", method = RequestMethod.GET)
+    @ResponseBody
+    public ArrayList<Company> getAllCompanies(
+    ) {
+
+        return DbCompany.getAllCompanies();
+    }
+
+
 
     //getCompanyAndBranchesByUserName
     @RequestMapping(value = "/getCompanyAndBranchesByUserName", method = RequestMethod.GET)

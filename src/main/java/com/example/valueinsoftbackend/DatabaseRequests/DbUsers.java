@@ -6,6 +6,7 @@ import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import java.io.File;
 import java.io.FileInputStream;
 import java.sql.*;
+import java.util.ArrayList;
 
 public class DbUsers {
 
@@ -102,6 +103,47 @@ public class DbUsers {
                 // print the results
             }
 
+
+        }catch (Exception e)
+        {
+            System.out.println("err in get user : "+e.getMessage());
+
+        }
+        return null;
+
+    }
+
+    public static ArrayList<User>  getAllUsers(int branchId, int companyId)
+    {
+        String condition = "";
+        StringBuilder stringBuilder = new StringBuilder("");
+        if (branchId == 0) {
+            condition = "";
+        }else
+        {
+            condition = " where  \"branchId\" = "+branchId;
+        }
+
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            String query = "SELECT id, \"userName\", \"userPassword\", \"userEmail\", \"userRole\", \"userPhone\", \"branchId\", \"firstName\", \"lastName\", gender, \"creationTime\"\n" +
+                    "\tFROM public.users "+condition+" ORDER BY id ASC ;  ";
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            ArrayList<User> users = new ArrayList<>();
+            System.out.println(query);
+            while (rs.next())
+            {
+                User user = new User(rs.getInt(1), rs.getString(2),rs.getString(3),rs.getString(4),rs.getString(8),rs.getString(9),rs.getString(6),rs.getString(5),rs.getInt(10),rs.getInt(7),rs.getTimestamp(11) );
+                users.add(user);
+                // print the results
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return users;
 
         }catch (Exception e)
         {

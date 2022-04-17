@@ -4,7 +4,6 @@
 
 package com.example.valueinsoftbackend.Controller.MoneyController;
 
-import com.example.valueinsoftbackend.DatabaseRequests.DbDataVisualization.Sales.DbDvSales;
 import com.example.valueinsoftbackend.DatabaseRequests.DbMoney.DBMClientReceipt;
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.DvSales;
 import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;

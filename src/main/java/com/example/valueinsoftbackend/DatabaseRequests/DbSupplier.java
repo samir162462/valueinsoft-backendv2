@@ -191,7 +191,7 @@ public class DbSupplier {
         ArrayList<SupplierBProduct> supplierBProducts = new ArrayList<>();
         try {
             Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT \"sBPId\", \"productId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\"\n" +
+            String query = "SELECT \"sBPId\", \"productId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\", \"orderDetailsId\"\n" +
                     "\tFROM c_"+companyId+".\"SupplierBProduct\" where  \"branchId\" = "+branchId+" AND \"supplierId\" = "+supplierId+" ;";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
@@ -206,7 +206,8 @@ public class DbSupplier {
                         rs.getString(5),
                         rs.getInt(6),
                         rs.getTimestamp(7),
-                        rs.getString(8)
+                        rs.getString(8),
+                        rs.getInt(9)
                 );
                 // print the results
                 supplierBProducts.add(supplierBProduct);
@@ -228,8 +229,8 @@ public class DbSupplier {
             Connection conn = ConnectionPostgres.getConnection();
 
             PreparedStatement stmt = conn.prepareStatement("INSERT INTO c_"+companyId+".\"SupplierBProduct\"(\n" +
-                    " \"productId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\", \"supplierId\", \"branchId\")\n" +
-                    " VALUES (?, ?, ?, ?, ?, ?, ?,  ( SELECT \"supplierId\" FROM c_"+companyId+".\"PosProduct_"+branchId+"\" where \"productId\" = "+productId+") , "+branchId+");");
+                    " \"productId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\", \"orderDetailsId\", \"supplierId\", \"branchId\"  )\n" +
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ( SELECT \"supplierId\" FROM c_"+companyId+".\"PosProduct_"+branchId+"\" where \"productId\" = "+productId+") , "+branchId+");");
 
             stmt.setInt(1, productId);
             stmt.setInt(2, supplierBProduct.getQuantity());
@@ -238,6 +239,7 @@ public class DbSupplier {
             stmt.setInt(5, supplierBProduct.getsPaid());
             stmt.setTimestamp(6, supplierBProduct.getTime());
             stmt.setString(7, supplierBProduct.getDesc());
+            stmt.setInt(8, supplierBProduct.getOrderDetailsId());
             System.out.println(stmt.toString());
             int i = stmt.executeUpdate();
             System.out.println(i + " supplier added records inserted");

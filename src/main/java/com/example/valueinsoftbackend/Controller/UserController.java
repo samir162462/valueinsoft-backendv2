@@ -24,6 +24,13 @@ public class UserController {
     public User getPersonsByNames(@RequestParam("id") String id) {
         return DbUsers.getUser(id);
     }
+
+
+    @RequestMapping(value = "/{companyId}/{branchId}/getAllUsers", method = RequestMethod.GET)
+    @ResponseBody
+    public ArrayList<User> getAllUsers(@PathVariable("branchId") int branchId ,@PathVariable("companyId") int companyId ) {
+        return DbUsers.getAllUsers(branchId,companyId);
+    }
     @RequestMapping(value = "/checkUserEmail/{Email}", method = RequestMethod.GET)
     @ResponseBody
     public boolean checkUserEmail(@PathVariable("Email") String Email) {

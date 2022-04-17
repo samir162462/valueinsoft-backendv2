@@ -190,6 +190,40 @@ public class DbCompany {
         return null;
 
     }
+    public static ArrayList<Company> getAllCompanies() {
+
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            String query = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\"\n" +
+                    "\tFROM public.\"Company\";";
+
+            // create the java statement
+            Statement st = conn.createStatement();
+
+            ResultSet rs = st.executeQuery(query);
+            ArrayList<Company> companies = new ArrayList<>();
+            while (rs.next())
+            {
+                Company company = new Company(rs.getInt(1),rs.getString(2),rs.getTimestamp(3),rs.getString(5),rs.getInt(6),null,null,null);
+                company.setOwnerId(rs.getInt(4));
+                companies.add(company);
+
+                // print the results
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+            return companies;
+
+        }catch (Exception e)
+        {
+            System.out.println(" no user exist"+e.getMessage());
+            return null;
+
+        }
+    }
 
     static public String AddCompany(String companyName, String branchName, String plan, int price, String username ,String comImg, String currency) {
         try {
@@ -448,6 +482,7 @@ public class DbCompany {
                 "\t\"desc\" character varying(40) COLLATE pg_catalog.\"default\",\n" +
                 "\t\"supplierId\" integer NOT NULL,\n" +
                 "\t\"branchId\" integer NOT NULL," +
+                "\"orderDetailsId\" integer," +
                 ")" +
                 "\n" +
                 "TABLESPACE pg_default;\n" +
@@ -486,7 +521,6 @@ public class DbCompany {
         }
         return true;
     }
-
 
 
 

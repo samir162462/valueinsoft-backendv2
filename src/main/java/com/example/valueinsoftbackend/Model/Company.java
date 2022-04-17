@@ -5,10 +5,10 @@ import java.util.ArrayList;
 
 public class Company {
     int companyId ;
-    String CompanyName;
-    Timestamp EstablishedTime;
-    String Plan;
-    int EstablishPrice;
+    String companyName;
+    Timestamp establishedTime;
+    String plan;
+    int establishPrice;
     int ownerId;
     String currency;
     String comImg;
@@ -16,10 +16,10 @@ public class Company {
 
     public Company(int companyId, String companyName, Timestamp establishedTime, String plan, int establishPrice, String currency, String comImg, ArrayList<Branch> branchList) {
         this.companyId = companyId;
-        CompanyName = companyName;
-        EstablishedTime = establishedTime;
-        Plan = plan;
-        EstablishPrice = establishPrice;
+        this.companyName = companyName;
+        this.establishedTime = establishedTime;
+        this.plan = plan;
+        this.establishPrice = establishPrice;
         this.currency = currency;
         this.comImg = comImg;
         this.branchList = branchList;
@@ -50,35 +50,43 @@ public class Company {
     }
 
     public String getCompanyName() {
-        return CompanyName;
+        return companyName;
     }
 
     public void setCompanyName(String companyName) {
-        CompanyName = companyName;
+        this.companyName = companyName;
     }
 
     public Timestamp getEstablishedTime() {
-        return EstablishedTime;
+        return establishedTime;
     }
 
     public void setEstablishedTime(Timestamp establishedTime) {
-        EstablishedTime = establishedTime;
+        this.establishedTime = establishedTime;
     }
 
     public String getPlan() {
-        return Plan;
+        return plan;
     }
 
     public void setPlan(String plan) {
-        Plan = plan;
+        plan = plan;
     }
 
     public int getEstablishPrice() {
-        return EstablishPrice;
+        return establishPrice;
     }
 
     public void setEstablishPrice(int establishPrice) {
-        EstablishPrice = establishPrice;
+        this.establishPrice = establishPrice;
+    }
+
+    public int getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(int ownerId) {
+        this.ownerId = ownerId;
     }
 
     public ArrayList<Branch> getBranchList() {
@@ -93,10 +101,10 @@ public class Company {
     public String toString() {
         return "Company{" +
                 "companyId=" + companyId +
-                ", CompanyName='" + CompanyName + '\'' +
-                ", EstablishedTime=" + EstablishedTime +
-                ", Plan='" + Plan + '\'' +
-                ", EstablishPrice=" + EstablishPrice +
+                ", CompanyName='" + companyName + '\'' +
+                ", EstablishedTime=" + establishedTime +
+                ", Plan='" + plan + '\'' +
+                ", EstablishPrice=" + establishPrice +
                 ", ownerId=" + ownerId +
                 ", currency='" + currency + '\'' +
                 ", comImg='" + comImg + '\'' +

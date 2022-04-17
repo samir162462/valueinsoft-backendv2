@@ -16,9 +16,10 @@ public class SupplierBProduct {
     int sPaid;
     Timestamp time;
     String desc;
+    int orderDetailsId;
 
 
-    public SupplierBProduct(int sBPId, int productId, int quantity, int cost, String userName, int sPaid, Timestamp time, String desc) {
+    public SupplierBProduct(int sBPId, int productId, int quantity, int cost, String userName, int sPaid, Timestamp time, String desc, int orderDetailsId) {
         this.sBPId = sBPId;
         this.productId = productId;
         this.quantity = quantity;
@@ -27,6 +28,7 @@ public class SupplierBProduct {
         this.sPaid = sPaid;
         this.time = time;
         this.desc = desc;
+        this.orderDetailsId = orderDetailsId;
     }
 
     public int getsBPId() {
@@ -59,6 +61,14 @@ public class SupplierBProduct {
 
     public void setCost(int cost) {
         this.cost = cost;
+    }
+
+    public int getOrderDetailsId() {
+        return orderDetailsId;
+    }
+
+    public void setOrderDetailsId(int orderDetailsId) {
+        this.orderDetailsId = orderDetailsId;
     }
 
     public String getUserName() {
@@ -104,6 +114,7 @@ public class SupplierBProduct {
                 ", sPaid=" + sPaid +
                 ", time=" + time +
                 ", desc='" + desc + '\'' +
+                ", orderDetailsId=" + orderDetailsId +
                 '}';
     }
 }
