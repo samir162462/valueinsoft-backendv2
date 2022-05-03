@@ -25,6 +25,11 @@ public class UserController {
         return DbUsers.getUser(id);
     }
 
+    @RequestMapping(value = "/getUserDetails/{userName}", method = RequestMethod.GET)
+    @ResponseBody
+    public User getUserByName(@PathVariable("userName") String userName ) {
+        return DbUsers.getUserDetails(userName);
+    }
 
     @RequestMapping(value = "/{companyId}/{branchId}/getAllUsers", method = RequestMethod.GET)
     @ResponseBody
@@ -59,32 +64,45 @@ public class UserController {
             String inputString = requestBody.get("imgFile");
              answer = DbUsers.AddUser(requestBody.get("userName"), requestBody.get("userPassword"), requestBody.get("email"), requestBody.get("userRole"), requestBody.get("firstName")
                     , requestBody.get("lastName"), Integer.valueOf(requestBody.get("gender")), requestBody.get("userPhone"), Integer.valueOf(requestBody.get("branchId")), inputString);
+            if (answer.contains( "user exist")) {//email exist
+                return ResponseEntity.status(HttpStatus.ALREADY_REPORTED).body(answer);
+
+            }
+            if (answer.contains( "email exist")) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(answer);
+
+            }
         }catch(Exception e)
         {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(answer);
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(answer);
 
         }
 
 
 
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
+        return ResponseEntity.status(HttpStatus.CREATED).body(answer);
 
     }
 
     @PostMapping("/saveUser")
-
     public ResponseEntity<Object> newUser(@RequestBody Map<String, String> requestBody) {
-
         String inputString = requestBody.get("imgFile");
-
         String answer = DbUsers.AddUser(requestBody.get("userName"), requestBody.get("userPassword"), requestBody.get("email"), requestBody.get("role"), requestBody.get("firstName")
                 , requestBody.get("lastName"), Integer.valueOf(requestBody.get("gender")), requestBody.get("userPhone")
                 , Integer.valueOf(requestBody.get("branchId"))
                 , inputString);
-
-
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
+    }
 
+    @PutMapping("/resetPassword/{userName}")
+    public ResponseEntity<String> resetPassword(@PathVariable String userName, @RequestBody Map<String, String> requestBody) {
+
+        return DbUsers.UpdateUserPassword(userName,requestBody.get("oldPassword"),requestBody.get("password"));
+    }
+    @PutMapping("/updateImg/{userName}")
+    public ResponseEntity<String> updateImg(@PathVariable String userName, @RequestBody Map<String, String> requestBody) {
+
+        return DbUsers.UpdateUserImg(userName,requestBody.get("imgFile"));
     }
 }
 

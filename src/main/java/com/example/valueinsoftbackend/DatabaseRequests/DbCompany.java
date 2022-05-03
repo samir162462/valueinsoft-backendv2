@@ -5,6 +5,8 @@ import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -17,7 +19,7 @@ public class DbCompany {
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
-            ArrayList<Branch> bsList ;
+            ArrayList<Branch> bsList;
             Company company = null;
             String query = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\" ,\"currency\", \"comImg\"\n" +
                     "\tFROM public.\"Company\" where \"ownerId\" = " + id + ";";
@@ -31,7 +33,7 @@ public class DbCompany {
                 System.out.println("add  connected to company " + rs.getString(1));
 
 
-                company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), rs.getString(7),rs.getString(8) , null);
+                company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), rs.getString(7), rs.getString(8), null);
 
                 // print the results
 
@@ -52,32 +54,33 @@ public class DbCompany {
         return null;
 
     }
+
     public static Company getCompanyAndBranchesByUserName(String id) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
             ArrayList<Branch> bsList = new ArrayList<>();
-            Company company = new Company(0,null,null,null,0,null,null,null);
+            Company company = new Company(0, null, null, null, 0, null, null, null);
             String query = "SELECT  \"companyId\" ,public.users.\"branchId\" \n" +
                     "FROM public.users  \n" +
                     " JOIN public.\"Branch\"\n" +
-                    "ON public.users.\"branchId\" = public.\"Branch\".\"branchId\" where public.\"users\".\"userName\" = '"+id+"';";
+                    "ON public.users.\"branchId\" = public.\"Branch\".\"branchId\" where public.\"users\".\"userName\" = '" + id + "';";
 
             String qu1 = "SELECT * FROM public.users\n" +
                     "ORDER BY id ASC ";
             // create the java statement
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
-            int companyId = 0 ;
-            int branchId = 0 ;
+            int companyId = 0;
+            int branchId = 0;
             while (rs.next()) {
                 companyId = rs.getInt(1);
                 branchId = rs.getInt(2);
                 System.out.println(branchId);
             }
             try {
-                System.out.println("companyId: "+companyId);
+                System.out.println("companyId: " + companyId);
                 bsList = DbBranch.getBranchByCompanyId(companyId);
                 System.out.println(bsList.toString());
                 company.setCompanyId(companyId);
@@ -87,8 +90,7 @@ public class DbCompany {
                         branchArrayList.add(bsList.get(i));
                 }
                 company.setBranchList(branchArrayList);
-            }catch(Exception e)
-            {
+            } catch (Exception e) {
                 System.out.println(e.getMessage());
                 return null;
             }
@@ -105,22 +107,21 @@ public class DbCompany {
         return null;
 
     }
-    private static boolean checkExistOwnerId(int oId)
-    {
+
+    private static boolean checkExistOwnerId(int oId) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
 
             String query = "SELECT  \"ownerId\"\n" +
-                    "\tFROM public.\"Company\" where \"ownerId\" = '"+oId+"';";
+                    "\tFROM public.\"Company\" where \"ownerId\" = '" + oId + "';";
 
             // create the java statement
             Statement st = conn.createStatement();
 
             ResultSet rs = st.executeQuery(query);
 
-            while (rs.next())
-            {
+            while (rs.next()) {
                 return true;
 
 
@@ -130,8 +131,7 @@ public class DbCompany {
             rs.close();
             st.close();
             conn.close();
-        }catch (Exception e)
-        {
+        } catch (Exception e) {
             System.out.println(" no user exist");
             return true;
 
@@ -139,6 +139,7 @@ public class DbCompany {
         return false;
 
     }
+
     public static Company getCompanyById(String id) {
 
         try {
@@ -157,10 +158,9 @@ public class DbCompany {
                 System.out.println("add  connected to company " + rs.getString(1));
 
                 try {
-                    company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6),rs.getString(7) , rs.getString(8) ,null );
+                    company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), rs.getString(7), rs.getString(8), null);
                     System.out.println(company.toString());
-                }catch (Exception e)
-                {
+                } catch (Exception e) {
                     System.out.println(e.getMessage());
                 }
 
@@ -168,13 +168,10 @@ public class DbCompany {
             }
 
 
-
-
             try {
                 bsList = DbBranch.getBranchByCompanyId(company.getCompanyId());
                 company.setBranchList(bsList);
-            }catch (Exception e)
-            {
+            } catch (Exception e) {
                 System.out.println(e.getMessage());
             }
 
@@ -190,6 +187,7 @@ public class DbCompany {
         return null;
 
     }
+
     public static ArrayList<Company> getAllCompanies() {
 
         try {
@@ -203,9 +201,8 @@ public class DbCompany {
 
             ResultSet rs = st.executeQuery(query);
             ArrayList<Company> companies = new ArrayList<>();
-            while (rs.next())
-            {
-                Company company = new Company(rs.getInt(1),rs.getString(2),rs.getTimestamp(3),rs.getString(5),rs.getInt(6),null,null,null);
+            while (rs.next()) {
+                Company company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), null, null, null);
                 company.setOwnerId(rs.getInt(4));
                 companies.add(company);
 
@@ -217,21 +214,20 @@ public class DbCompany {
             conn.close();
             return companies;
 
-        }catch (Exception e)
-        {
-            System.out.println(" no user exist"+e.getMessage());
+        } catch (Exception e) {
+            System.out.println(" no user exist" + e.getMessage());
             return null;
 
         }
     }
 
-    static public String AddCompany(String companyName, String branchName, String plan, int price, String username ,String comImg, String currency) {
+    static public String AddCompany(String companyName, String branchName, String plan, int price, String username, String comImg, String currency) {
         try {
 
             int ownerId = 0;
             User u1 = DbUsers.getUser(username);
             ownerId = u1.getUserId();
-            if (checkExistOwnerId(ownerId) ) {
+            if (checkExistOwnerId(ownerId)) {
                 return "The Owner already has Company!";
             }
 
@@ -240,7 +236,7 @@ public class DbCompany {
 
             PreparedStatement stmt = conn.prepareStatement("INSERT INTO public.\"Company\"(\n" +
                     " \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\" , \"comImg\", \"currency\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?,?,?);",Statement.RETURN_GENERATED_KEYS);
+                    "\tVALUES ( ?, ?, ?, ?, ?,?,?);", Statement.RETURN_GENERATED_KEYS);
 
             stmt.setString(1, companyName);
             stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
@@ -257,15 +253,14 @@ public class DbCompany {
             int id = 0;
             try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
-                    id = generatedKeys.getInt(1) ;
+                    id = generatedKeys.getInt(1);
                     CreateCompanySchema(id);
-                    DbUsers.UpdateRole("public",ownerId,"Owner");
-                    if (branchName.length()>2) {
-                        DbBranch.AddBranch(branchName,"Egypt",id);
+                    DbUsers.UpdateRole("public", ownerId, "Owner");
+                    if (branchName.length() > 2) {
+                        DbBranch.AddBranch(branchName, "Egypt", id);
 
                     }
-                }
-                else {
+                } else {
                     throw new SQLException("Creating user failed, no ID obtained.");
                 }
             }
@@ -280,12 +275,41 @@ public class DbCompany {
         return "the user added!";
     }
 
+    static public ResponseEntity<String> UpdateCompanyImg(int companyId, String img) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            PreparedStatement stmt = conn.prepareStatement("UPDATE public.\"Company\"\n" +
+                    "\tSET \"comImg\"= '" + img + "'\n" +
+                    "\tWHERE id = " + companyId + ";");
+
+
+            int i = stmt.executeUpdate();
+            stmt.close();
+            conn.close();
+            System.out.println(stmt);
+
+            if (i == 1) {
+                System.out.println(i + "  UpdateCompanyImg Updated");
+
+                return ResponseEntity.status(HttpStatus.ACCEPTED).body("Image Changed!");
+
+            } else {
+                System.out.println(i + " Not  UpdateCompanyImg Updated");
+
+                return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("Can't Update Company Img ");
+
+            }
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("Server Error! ");
+        }
+    }
+
     //Statics SQL Queries
 
     //Todo SQL Company users
-    static String SQLCompanyUsers (String  SchemaName , String DBOwner)
-    {
-        String query = " CREATE TABLE IF NOT EXISTS "+SchemaName+".\"users\"\n" +
+    static String SQLCompanyUsers(String SchemaName, String DBOwner) {
+        String query = " CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"users\"\n" +
                 "(\n" +
                 "    id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 21 START 10000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"userName\" character varying(30) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
@@ -298,19 +322,20 @@ public class DbCompany {
                 "    \"lastName\" character varying COLLATE pg_catalog.\"default\",\n" +
                 "    gender smallint,\n" +
                 "    \"creationTime\" timestamp without time zone,\n" +
+                "\"salaryPHour\" money," +
                 "    CONSTRAINT users_pkey PRIMARY KEY (id)\n" +
                 ")\n" +
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"users\"\n" +
-                "    OWNER to "+DBOwner+"; ";
+                "ALTER TABLE " + SchemaName + ".\"users\"\n" +
+                "    OWNER to " + DBOwner + "; ";
 
         return query;
     }
-    static  String SQLMainMajor (String  SchemaName , String DBOwner)
-    {
-        String query = " CREATE TABLE IF NOT EXISTS "+SchemaName+".\"MainMajor\"\n" +
+
+    static String SQLMainMajor(String SchemaName, String DBOwner) {
+        String query = " CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"MainMajor\"\n" +
                 " AS \n" +
                 "SELECT\n" +
                 "*\n" +
@@ -319,10 +344,10 @@ public class DbCompany {
 
         return query;
     }
+
     //Todo SQL PosShiftPeriod
-    static String SQLPosShiftPeriod (String  SchemaName , String DBOwner)
-    {
-        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"PosShiftPeriod\"\n" +
+    static String SQLPosShiftPeriod(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"PosShiftPeriod\"\n" +
                 "(\n" +
                 "    \"PosSOID\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"ShiftStartTime\" timestamp without time zone,\n" +
@@ -333,15 +358,15 @@ public class DbCompany {
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"PosShiftPeriod\"\n" +
-                "    OWNER to "+DBOwner+"; ";
+                "ALTER TABLE " + SchemaName + ".\"PosShiftPeriod\"\n" +
+                "    OWNER to " + DBOwner + "; ";
 
         return query;
     }
+
     //Todo SQL supplier
-    static String SQLSupplier (String  SchemaName , String DBOwner)
-    {
-        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"supplier \"\n" +
+    static String SQLSupplier(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"supplier \"\n" +
                 "(\n" +
                 "    \"supplierId\" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY ( INCREMENT 1 START 1000 MINVALUE 1000 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"SupplierName\" character varying COLLATE pg_catalog.\"default\" NOT NULL,\n" +
@@ -354,15 +379,15 @@ public class DbCompany {
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"supplier \"\n" +
-                "    OWNER to "+DBOwner+";";
+                "ALTER TABLE " + SchemaName + ".\"supplier \"\n" +
+                "    OWNER to " + DBOwner + ";";
 
         return query;
     }
+
     //Todo SQL Branch
-    static String SQLBranch (String  SchemaName , String DBOwner)
-    {
-        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"Branch\"\n" +
+    static String SQLBranch(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"Branch\"\n" +
                 "(\n" +
                 "    \"branchId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 123 START 10000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"branchName\" character varying(25) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
@@ -374,15 +399,15 @@ public class DbCompany {
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"Branch\"\n" +
-                "    OWNER to "+DBOwner+";";
+                "ALTER TABLE " + SchemaName + ".\"Branch\"\n" +
+                "    OWNER to " + DBOwner + ";";
 
         return query;
     }
+
     //Todo SQL DamagedList
-    static String SQLDamagedList (String  SchemaName , String DBOwner)
-    {
-        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"DamagedList\"\n" +
+    static String SQLDamagedList(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"DamagedList\"\n" +
                 "(\n" +
                 "    \"DId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"ProductId\" integer NOT NULL,\n" +
@@ -400,15 +425,15 @@ public class DbCompany {
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"DamagedList\"\n" +
-                "    OWNER to "+DBOwner+";";
+                "ALTER TABLE " + SchemaName + ".\"DamagedList\"\n" +
+                "    OWNER to " + DBOwner + ";";
 
         return query;
     }
+
     //Todo SQL Client
-    static String SQLClient (String  SchemaName , String DBOwner)
-    {
-        String query = " CREATE TABLE IF NOT EXISTS "+SchemaName+".\"Client\"\n" +
+    static String SQLClient(String SchemaName, String DBOwner) {
+        String query = " CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"Client\"\n" +
                 "(\n" +
                 "    c_id integer NOT NULL GENERATED BY DEFAULT AS IDENTITY ( INCREMENT 11 START 10000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"clientName\" character varying COLLATE pg_catalog.\"default\",\n" +
@@ -422,15 +447,15 @@ public class DbCompany {
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"Client\"\n" +
-                "    OWNER to "+DBOwner+";";
+                "ALTER TABLE " + SchemaName + ".\"Client\"\n" +
+                "    OWNER to " + DBOwner + ";";
 
         return query;
     }
+
     //Todo SQL PosCateJson
-    static String SQLPosCateJson (String  SchemaName , String DBOwner)
-    {
-        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"PosCateJson\"\n" +
+    static String SQLPosCateJson(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"PosCateJson\"\n" +
                 "(\n" +
                 "    \"CategoryJID\" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY ( INCREMENT 1 START 1000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"CategoryData\" json,\n" +
@@ -440,15 +465,15 @@ public class DbCompany {
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"PosCateJson\"\n" +
-                "    OWNER to "+DBOwner+";";
+                "ALTER TABLE " + SchemaName + ".\"PosCateJson\"\n" +
+                "    OWNER to " + DBOwner + ";";
 
         return query;
     }
+
     //Todo SQL clientReceipts
-    static String SQLClientReceipts (String  SchemaName , String DBOwner)
-    {
-        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"ClientReceipts\"\n" +
+    static String SQLClientReceipts(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"ClientReceipts\"\n" +
                 "(\n" +
                 "    \"crId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 11 START 10000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    type character varying(20) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
@@ -457,38 +482,87 @@ public class DbCompany {
                 "    \"userName\" character varying(25) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
                 "    \"clientId\" integer NOT NULL,\n" +
                 "    \"branchId\" integer NOT NULL,\n" +
-                "    CONSTRAINT \"ClientRecipts_pkey\" PRIMARY KEY (\"crId\")\n" +
+                "    CONSTRAINT \"ClientRecipts_pkey\" PRIMARY KEY (\"crId\")\n " +
                 ")" +
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"ClientReceipts\"\n" +
-                "    OWNER to "+DBOwner+";";
+                " ";
 
         return query;
     }
+
     //Todo SQL SupplierBProduct
-    static String SQLSupplierBProduct (String  SchemaName , String DBOwner)
-    {
-        String query = "CREATE TABLE IF NOT EXISTS "+SchemaName+".\"SupplierBProduct\"\n" +
+    static String SQLSupplierBProduct(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"SupplierBProduct\"\n" +
                 "(\n" +
-                "  \"sBPId\" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    \"sBPId\" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"productId\" integer NOT NULL,\n" +
-                "\t quantity integer NOT NULL,\n" +
-                "   cost integer NOT NULL,\n" +
+                "    quantity integer NOT NULL,\n" +
+                "    cost integer NOT NULL,\n" +
                 "    \"userName\" character varying(25) COLLATE pg_catalog.\"default\",\n" +
                 "    \"sPaid\" integer,\n" +
                 "    \"time\" timestamp without time zone NOT NULL,\n" +
-                "\t\"desc\" character varying(40) COLLATE pg_catalog.\"default\",\n" +
-                "\t\"supplierId\" integer NOT NULL,\n" +
-                "\t\"branchId\" integer NOT NULL," +
-                "\"orderDetailsId\" integer," +
-                ")" +
+                "    \"desc\" character varying(40) COLLATE pg_catalog.\"default\",\n" +
+                "    \"supplierId\" integer NOT NULL,\n" +
+                "    \"branchId\" integer NOT NULL,\n" +
+                "    \"orderDetailsId\" integer,\n" +
+                "    CONSTRAINT \"SupplierBProduct_pkey\" PRIMARY KEY (\"sBPId\")\n" +
+                ")\n" +
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
-                "ALTER TABLE "+SchemaName+".\"SupplierBProduct\"\n" +
-                "    OWNER to "+DBOwner+";";
+                "ALTER TABLE " + SchemaName + ".\"SupplierBProduct\"\n" +
+                "    OWNER to " + DBOwner + ";";
+
+        return query;
+    }
+
+    //Todo SQL CompanyAnalysis
+    static String SQLCompanyAnalysis(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"CompanyAnalysis\"\n" +
+                "(\n" +
+                "    \"cAID\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    sales integer DEFAULT 0,\n" +
+                "    \"Income\" integer DEFAULT 0,\n" +
+                "    \"clientsIn\" integer DEFAULT 0,\n" +
+                "    \"invShortage\" integer DEFAULT 0,\n" +
+                "    \"discountByUsers\" integer DEFAULT 0,\n" +
+                "    \"damagedProducts\" integer DEFAULT 0,\n" +
+                "    \"returnPurchases\" integer DEFAULT 0,\n" +
+                "    \"shiftEndsEarly\" integer DEFAULT 0,\n" +
+                "    date date NOT NULL,\n" +
+                "    \"branchId\" integer NOT NULL,\n" +
+                "    CONSTRAINT \"CompanyAnalysis_pkey\" PRIMARY KEY (\"cAID\")\n" +
+                ")" +
+                "\n" +
+                "TABLESPACE pg_default;\n" +
+                "\n";
+
+        return query;
+    }
+
+    //Todo SQL FixArea
+    static String SQLFixArea(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"FixArea\"\n" +
+                "(\n" +
+                "    \"faId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    \"fixSlot\" integer,\n" +
+                "    \"clientId\" integer,\n" +
+                "    \"dateIn\" date,\n" +
+                "    \"dateFinished\" date,\n" +
+                "    \"phoneName\" character varying COLLATE pg_catalog.\"default\",\n" +
+                "    problem character varying COLLATE pg_catalog.\"default\",\n" +
+                "    show boolean,\n" +
+                "    \"userName_Recived\" character varying COLLATE pg_catalog.\"default\",\n" +
+                "    status character varying COLLATE pg_catalog.\"default\",\n" +
+                "    \"desc\" character varying COLLATE pg_catalog.\"default\"," +
+                "    \"branchId\" integer,\n" +
+                "    CONSTRAINT \"FixArea_pkey\" PRIMARY KEY (\"faId\")\n" +
+                ")" +
+                "\n" +
+                "TABLESPACE pg_default;\n" +
+                "\n";
 
         return query;
     }
@@ -499,29 +573,31 @@ public class DbCompany {
 
             Connection conn = ConnectionPostgres.getConnection();
             PreparedStatement stmt = conn.prepareStatement("" +
-                    "CREATE SCHEMA IF NOT EXISTS C_"+companyId+" ; " +
-                    " "+SQLCompanyUsers("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLPosShiftPeriod("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLSupplier("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLBranch("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLDamagedList("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLPosCateJson("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLMainMajor("c_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLClientReceipts("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLSupplierBProduct("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" " +
-                    " "+SQLClient("C_"+companyId,ValueinsoftBackendApplication.DatabaseOwner)+" ;");
+                    "CREATE SCHEMA IF NOT EXISTS C_" + companyId + " ; " +
+                    " " + SQLCompanyUsers("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLPosShiftPeriod("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLSupplier("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLBranch("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLDamagedList("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLPosCateJson("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLMainMajor("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLClientReceipts("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLSupplierBProduct("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLCompanyAnalysis("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLClient("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " "
+            );
 
+            System.out.println(stmt);
             int i = stmt.executeUpdate();
-            System.out.println(i + " CreateCompanySchema Established For Company"+companyId);
+            System.out.println(i + " CreateCompanySchema Established For Company" + companyId);
             stmt.close();
             conn.close();
         } catch (Exception e) {
-            System.out.println("Schema Build Error"+e.getMessage());
+            System.out.println("Schema Build Error" + e.getMessage());
             return false;
         }
         return true;
     }
-
 
 
 }

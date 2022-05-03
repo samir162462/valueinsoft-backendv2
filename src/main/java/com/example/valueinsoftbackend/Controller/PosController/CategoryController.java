@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.postgresql.util.PGobject;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.sql.Array;
@@ -24,12 +26,11 @@ public class CategoryController {
 
 
     @PostMapping("/{companyId}/{branchId}/saveCategory")
-    String newCategory(@RequestBody String payload, @PathVariable int branchId, @PathVariable int companyId) {
+    ResponseEntity<String> newCategory(@RequestBody String payload, @PathVariable int branchId, @PathVariable int companyId) {
 
-        DbPosCategory.AddCategoryJson(branchId, payload, companyId);//getCategoryJson
+        return DbPosCategory.AddCategoryJson(branchId, payload, companyId);//getCategoryJson
 
 
-        return payload;
     }
 
     @RequestMapping(path = "/getCategoryJson/{companyId}/{branchId}", method = RequestMethod.GET)

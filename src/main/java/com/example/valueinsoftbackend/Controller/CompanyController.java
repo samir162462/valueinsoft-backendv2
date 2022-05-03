@@ -103,6 +103,13 @@ public class CompanyController {
 
     }
 
+    @PutMapping("/updateImg/{companyId}")
+    public ResponseEntity<String> updateImg(@PathVariable int  companyId, @RequestBody Map<String, String> requestBody) {
+
+        return DbCompany.UpdateCompanyImg(companyId,requestBody.get("imgFile"));
+    }
+
+
     @GetMapping("/listHeaders")
     public ResponseEntity<String> listAllHeaders(
             @RequestHeader Map<String, String> headers) {

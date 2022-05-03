@@ -4,6 +4,8 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbSQL.DbSqlCloseIdles;
 import com.example.valueinsoftbackend.Model.*;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import org.postgresql.util.PGobject;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -65,7 +67,7 @@ public class DbPosCategory {
 
     //json--------
 
-    public static String AddCategoryJson(int branchId, String s ,int companyId) {
+    public static ResponseEntity<String> AddCategoryJson(int branchId, String s , int companyId) {
         try {
 
 
@@ -82,7 +84,7 @@ public class DbPosCategory {
             stmt.setObject(1, jsonObject);
 
             stmt.setInt(2, branchId);
-
+            System.out.println(stmt);
             int i = stmt.executeUpdate();
             System.out.println(i + " records inserted in cteg");
             stmt.close();
@@ -91,11 +93,10 @@ public class DbPosCategory {
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            return "the user not added bs error!";
-
+            return  ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("the Category not added by error!");
         }
+        return  ResponseEntity.status(HttpStatus.CREATED).body("the Category added ");
 
-        return "the Branch added!";
     }
 
     static public String getCategoryJson(int branchId,int companyId) {
@@ -103,7 +104,10 @@ public class DbPosCategory {
             Connection conn = ConnectionPostgres.getConnection();
             ArrayList<Category> categoryArrayList = new ArrayList<>();
             String query = "SELECT \"CategoryJID\", \"CategoryData\", \"BranchId\"\n" +
-                    "\tFROM C_"+companyId+".\"PosCateJson\" where \"BranchId\" = " + branchId + " ;";
+                    "\tFROM C_"+companyId+".\"PosCateJson\" where \"BranchId\" = " + branchId + " " +
+                    "ORDER BY  \"CategoryJID\" DESC \n" +
+                    "\tLIMIT 1" +
+                    ";";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             String payload = "";
@@ -113,6 +117,7 @@ public class DbPosCategory {
             rs.close();
             st.close();
             conn.close();
+            System.out.println(query);
             return payload;
         } catch (Exception e) {
             System.out.println("err : " + e.getMessage());
