@@ -95,4 +95,5 @@ public class DbPosInventoryTransaction {
         return "the supplier added! ok 200";
     }
 
+
 }

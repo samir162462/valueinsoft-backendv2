@@ -4,6 +4,10 @@
 
 package com.example.valueinsoftbackend.Model.Slots;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.gson.JsonObject;
+
+import java.math.BigDecimal;
 import java.sql.Date;
 
 public class SlotsFixArea {
@@ -19,9 +23,10 @@ public class SlotsFixArea {
     String status;
     String desc;
      int branchId;
+     BigDecimal fees;
+    JsonNode clientData;
 
-
-    public SlotsFixArea(int faId, int fixSlot, int clientId, Date dateIn, Date dateFinished, String phoneName, String problem, boolean show, String userName_Recived, String status, String desc, int branchId) {
+    public SlotsFixArea(int faId, int fixSlot, int clientId, Date dateIn, Date dateFinished, String phoneName, String problem, boolean show, String userName_Recived, String status, String desc, int branchId, BigDecimal fees) {
         this.faId = faId;
         this.fixSlot = fixSlot;
         this.clientId = clientId;
@@ -34,6 +39,17 @@ public class SlotsFixArea {
         this.status = status;
         this.desc = desc;
         this.branchId = branchId;
+        this.fees = fees;
+    }
+
+
+
+    public BigDecimal getFees() {
+        return fees;
+    }
+
+    public void setFees(BigDecimal fees) {
+        this.fees = fees;
     }
 
     public int getBranchId() {
@@ -86,6 +102,14 @@ public class SlotsFixArea {
 
     public String getPhoneName() {
         return phoneName;
+    }
+
+    public JsonNode getClientData() {
+        return clientData;
+    }
+
+    public void setClientData(JsonNode clientData) {
+        this.clientData = clientData;
     }
 
     public void setPhoneName(String phoneName) {

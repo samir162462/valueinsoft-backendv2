@@ -9,6 +9,7 @@ import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.google.gson.JsonObject;
+import org.springframework.http.ResponseEntity;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -216,7 +217,7 @@ public class DbPosProduct {
         }
     }
 
-    static public JsonObject AddProduct(Product prod, String branchId, int companyId) {
+    static public ResponseEntity<Object> AddProduct(Product prod, String branchId, int companyId) {
         try {
 
 
@@ -269,7 +270,7 @@ public class DbPosProduct {
             json.addProperty("numItems", prod.getQuantity());
             json.addProperty("transTotal", prod.getbPrice() * prod.getQuantity());
             json.addProperty("transactionType", "Add");
-            return json;
+            return ResponseEntity.status(201).body(json.toString());
 
             // Crate Branch table for new branch in DB
 

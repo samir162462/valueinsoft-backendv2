@@ -558,7 +558,29 @@ public class DbCompany {
                 "    status character varying COLLATE pg_catalog.\"default\",\n" +
                 "    \"desc\" character varying COLLATE pg_catalog.\"default\"," +
                 "    \"branchId\" integer,\n" +
+                "    fees money DEFAULT 0,\n" +
                 "    CONSTRAINT \"FixArea_pkey\" PRIMARY KEY (\"faId\")\n" +
+                ")" +
+                "\n" +
+                "TABLESPACE pg_default;\n" +
+                "\n";
+
+        return query;
+    }
+    //Todo SQL FixArea
+    static String SQLSupplierReciepts(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"supplierReciepts\"\n" +
+                "(\n" +
+                "    \"srId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 111 START 10897236 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    \"transId\" integer NOT NULL,\n" +
+                "    \"amountPaid\" money NOT NULL,\n" +
+                "    \"remainingAmount\" money NOT NULL,\n" +
+                "    \"receiptTime\" timestamp without time zone NOT NULL,\n" +
+                "    \"userRecived\" character varying COLLATE pg_catalog.\"default\" NOT NULL,\n" +
+                "    \"supplierId\" integer NOT NULL,\n" +
+                "    type character varying(15) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
+                "    \"branchId\" integer NOT NULL,\n" +
+                "    CONSTRAINT \"supplierReciepts_pkey\" PRIMARY KEY (\"srId\")\n" +
                 ")" +
                 "\n" +
                 "TABLESPACE pg_default;\n" +
@@ -584,6 +606,7 @@ public class DbCompany {
                     " " + SQLClientReceipts("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
                     " " + SQLSupplierBProduct("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
                     " " + SQLCompanyAnalysis("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLSupplierReciepts("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
                     " " + SQLClient("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " "
             );
 

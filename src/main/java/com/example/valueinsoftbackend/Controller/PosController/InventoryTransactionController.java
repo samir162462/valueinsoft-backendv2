@@ -58,7 +58,7 @@ public class InventoryTransactionController {
         {
             System.out.println(e.getMessage());
         }
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body("{\"title\" : \"the newTransaction added \", \"branchId\" : "+branchId+"}" );
+        return ResponseEntity.status(HttpStatus.CREATED).body("{\"title\" : \"the newTransaction added \", \"branchId\" : "+branchId+"}" );
 
     }
 

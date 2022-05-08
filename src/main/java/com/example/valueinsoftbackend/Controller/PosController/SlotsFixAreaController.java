@@ -14,14 +14,15 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/fixArea")
 @CrossOrigin("*")
 public class SlotsFixAreaController {
-    @RequestMapping(value = "{companyName}/{branchId}/allFixSlots", method = RequestMethod.GET)
+    @RequestMapping(value = "{companyName}/{branchId}/allFixSlots/{month}", method = RequestMethod.GET)
     @ResponseBody
     public ResponseEntity<Object> getBranchFixSlots(
 
             @PathVariable int branchId,
+            @PathVariable int month,
             @PathVariable String companyName
     ) {
-        return DbSlotsFixArea.getFixAreaSlot(branchId, companyName);
+        return DbSlotsFixArea.getFixAreaSlot(branchId, companyName,month);
     }
 
     @PostMapping("{companyName}/{branchId}/addSlot")

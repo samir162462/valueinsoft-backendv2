@@ -6,6 +6,7 @@ import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
 import com.google.gson.JsonObject;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.lang.reflect.Type;
@@ -99,8 +100,8 @@ public class ProductController {
     }
 
     @PostMapping("{companyId}/{branchId}/saveProduct")
-    String newProduct(@RequestBody Product newProProduct, @PathVariable String branchId, @PathVariable int companyId) {
-        return DbPosProduct.AddProduct(newProProduct, branchId, companyId).toString();
+    ResponseEntity<Object> newProduct(@RequestBody Product newProProduct, @PathVariable String branchId, @PathVariable int companyId) {
+        return DbPosProduct.AddProduct(newProProduct, branchId, companyId);
     }
 
     //--------------editProduct------------------
