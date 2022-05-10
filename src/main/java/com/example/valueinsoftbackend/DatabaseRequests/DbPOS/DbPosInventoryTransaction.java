@@ -23,6 +23,7 @@ public class DbPosInventoryTransaction {
 
 
             // create the java statement
+            System.out.println(query);
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
 

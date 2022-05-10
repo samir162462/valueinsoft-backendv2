@@ -4,9 +4,12 @@
 
 package com.example.valueinsoftbackend.DatabaseRequests.DbDataVisualization.Sales;
 
+import com.example.valueinsoftbackend.Model.DataVisualizationModels.DVSalesYearly;
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.DvSales;
 import com.example.valueinsoftbackend.Model.Sales.SalesProduct;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -33,6 +36,7 @@ public class DbDvSales {
                     "ORDER BY DATE(\"orderTime\") ASC \n" +
                     "\t;";
             // create the java statement
+            System.out.println(query);
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             ArrayList<DvSales> dvSalesArrayList = new ArrayList<>();
@@ -50,6 +54,40 @@ public class DbDvSales {
         {
             System.out.println(" no user exist");
             return null;
+
+        }
+
+    }
+    static public  ResponseEntity<Object> getYearlySales(int companyId,String currentYear , int branchId)
+    {
+
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT (SUM(\"orderTotal\") - SUM(\"orderBouncedBack\")) sum  ,to_char(date_trunc('month', \"orderTime\"), 'Mon ') AS Month\n" +
+                    " , EXTRACT(MONTH FROM date_trunc('month', \"orderTime\"))::integer as num, SUM(\"orderIncome\")as income " +
+                    "FROM  C_"+companyId+".\"PosOrder_"+branchId+"\" \n" +
+                    "WHERE extract(year from \"orderTime\")="+currentYear+"\n" +
+                    "GROUP BY Month ,num ; ";
+            // create the java statement
+            System.out.println(query);
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+            ArrayList<DVSalesYearly> dvSalesArrayList = new ArrayList<>();
+            while (rs.next())
+            {
+                DVSalesYearly sales = new DVSalesYearly(rs.getString(2),rs.getInt(1),rs.getInt(3),rs.getInt(4));
+                dvSalesArrayList.add(sales);
+            }
+            rs.close();
+            st.close();
+            conn.close();
+            return  ResponseEntity.status(HttpStatus.OK).body(dvSalesArrayList) ;
+
+        }catch (Exception e)
+        {
+            System.out.println("ERRRRROR "+ e.getMessage());
+            return  ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null) ;
+
 
         }
 
