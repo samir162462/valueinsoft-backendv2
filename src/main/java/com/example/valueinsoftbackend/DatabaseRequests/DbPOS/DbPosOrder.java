@@ -98,7 +98,7 @@ public class DbPosOrder {
             while (rs.next()) {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Order ord = new Order(
-                        rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getInt(1), rs.getTimestamp(2), rs.getString(3), rs.getString(4),
                         rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9),rs.getInt(10), null
                 );
                 String details = rs.getString(11);
@@ -145,7 +145,7 @@ public class DbPosOrder {
             while (rs.next()) {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Order ord = new Order(
-                        rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getInt(1), rs.getTimestamp(2), rs.getString(3), rs.getString(4),
                         rs.getInt(5), rs.getInt(6), rs.getString(7), branchId, rs.getInt(8),rs.getInt(9),rs.getInt(10), null
                 );
                 String details = rs.getString(11);
@@ -193,7 +193,7 @@ public class DbPosOrder {
 
                 Order cl = new Order(
                         rs.getInt(1),
-                        rs.getString(2),
+                        rs.getTimestamp(2),
                         rs.getString(3),
                         rs.getString(4),
                         rs.getInt(5),

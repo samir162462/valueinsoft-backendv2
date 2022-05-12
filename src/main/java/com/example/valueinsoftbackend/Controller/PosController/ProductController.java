@@ -106,7 +106,7 @@ public class ProductController {
 
     //--------------editProduct------------------
     @PutMapping("{companyId}/{branchId}/editProduct")
-    String EditProduct(@RequestBody Product editProduct, @PathVariable String branchId, @PathVariable int companyId) {
-        return DbPosProduct.EditProduct(editProduct, branchId, companyId).toString();
+    ResponseEntity<Object> EditProduct(@RequestBody Product editProduct, @PathVariable String branchId, @PathVariable int companyId) {
+        return DbPosProduct.EditProduct(editProduct, branchId, companyId);
     }
 }

@@ -1,10 +1,11 @@
 package com.example.valueinsoftbackend.Model;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 
 public class Order {
     int orderId ;
-    String orderTime;
+    Timestamp orderTime;
     String clientName;
     String orderType ;
     int orderDiscount;
@@ -17,7 +18,9 @@ public class Order {
     ArrayList<OrderDetails> orderDetails;
 
 
-    public Order(int orderId, String orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, int clientId, int orderIncome, int totalBouncedBack, ArrayList<OrderDetails> orderDetails) {
+
+
+    public Order(int orderId, Timestamp orderTime, String clientName, String orderType, int orderDiscount, int orderTotal, String salesUser, int branchId, int clientId, int orderIncome, int totalBouncedBack, ArrayList<OrderDetails> orderDetails) {
         this.orderId = orderId;
         this.orderTime = orderTime;
         this.clientName = clientName;
@@ -40,11 +43,11 @@ public class Order {
         this.orderId = orderId;
     }
 
-    public String getOrderTime() {
+    public Timestamp getOrderTime() {
         return orderTime;
     }
 
-    public void setOrderTime(String orderTime) {
+    public void setOrderTime(Timestamp orderTime) {
         this.orderTime = orderTime;
     }
 
