@@ -23,6 +23,7 @@ public class Product {
     String pState;
     int supplierId;
     String major;
+    String image;
 
     public Product(int productId, String productName, Timestamp buyingDay, String activationPeriod, int rPrice, int lPrice, int bPrice, String companyName, String type, String ownerName, String serial, String desc, int batteryLife, String ownerPhone, String ownerNI, int quantity, String pState, int supplierId, String major) {
         this.productId = productId;
@@ -197,6 +198,14 @@ public class Product {
 
     public void setpState(String pState) {
         this.pState = pState;
+    }
+
+    public String getImage() {
+        return image;
+    }
+
+    public void setImage(String image) {
+        this.image = image;
     }
 
     @Override

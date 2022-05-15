@@ -216,6 +216,7 @@ public class DbBranch {
                     "    \"pState\" character varying(10) COLLATE pg_catalog.\"default\",\n" +
                     "    \"supplierId\" integer,\n" +
                     "    \"major\" character varying(30) COLLATE pg_catalog.\"default\",\n" +
+                    "    \"imgFile\" text COLLATE pg_catalog.\"default\"," +
                     "    CONSTRAINT \"PosProduct_pkey-"+branchId+"\" PRIMARY KEY (\"productId\")\n" +
                     ")\n" +
                     "WITH (\n" +

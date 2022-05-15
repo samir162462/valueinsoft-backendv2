@@ -567,7 +567,7 @@ public class DbCompany {
 
         return query;
     }
-    //Todo SQL FixArea
+    //Todo SQL SQLSupplierReciepts
     static String SQLSupplierReciepts(String SchemaName, String DBOwner) {
         String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"supplierReciepts\"\n" +
                 "(\n" +
@@ -607,6 +607,7 @@ public class DbCompany {
                     " " + SQLSupplierBProduct("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
                     " " + SQLCompanyAnalysis("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
                     " " + SQLSupplierReciepts("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
+                    " " + SQLFixArea("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
                     " " + SQLClient("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " "
             );
 

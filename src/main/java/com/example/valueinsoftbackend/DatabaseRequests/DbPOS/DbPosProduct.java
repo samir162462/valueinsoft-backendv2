@@ -7,6 +7,7 @@ package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
+import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.google.gson.JsonObject;
 import org.springframework.http.HttpStatus;
@@ -32,7 +33,7 @@ public class DbPosProduct {
 
             String query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                     "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
-                    "\"pState\", \"supplierId\",\"major\"" +
+                    "\"pState\", \"supplierId\",\"major\" , \"imgFile\"" +
                     "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "  ";
 
 
@@ -64,6 +65,7 @@ public class DbPosProduct {
 
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
                         rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
+                prod.setImage(rs.getString(20));
                 productArrayList.add(prod);
 
                 // print the results
@@ -96,7 +98,7 @@ public class DbPosProduct {
 
             String query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                     "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
-                    "\"pState\", \"supplierId\",\"major\"" +
+                    "\"pState\", \"supplierId\",\"major\", \"imgFile\" " +
                     "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "   \"productId\" > 0 ;";
             // create the java statement
             StringBuilder qy = new StringBuilder(query);
@@ -108,6 +110,7 @@ public class DbPosProduct {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
                         rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
+                prod.setImage(rs.getString(20));
                 productArrayList.add(prod);
             }
             rs.close();
@@ -155,6 +158,7 @@ public class DbPosProduct {
                             rs.getInt(18),
                             rs.getString(19)
                     );
+                    pt.setImage(rs.getString(20));
                 }
             } catch (Exception e) {
                 System.out.println("getProductById " + e.getMessage());
@@ -163,12 +167,53 @@ public class DbPosProduct {
             rs.close();
             st.close();
             conn.close();
+
             return pt;
         } catch (Exception e) {
             System.out.println("err : " + e.getMessage());
 
         }
         return null;
+    }
+
+    public static ResponseEntity<Object> getProductNames(String text, int branchId, int companyId) {
+
+        try {
+
+            String capital = text.substring(0, 1).toUpperCase() + text.substring(1);
+            String small = text.substring(0, 1).toLowerCase() + text.substring(1);
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "SELECT  DISTINCT ON (\"productName\") \"productName\" ,\"companyName\" , type ,major \n" +
+                    "\tFROM c_"+companyId+".\"PosProduct_"+branchId+"\" where \"productName\" LIKE '"+capital+"%' or \"productName\" Like '"+small+"%' ORDER BY \n" +
+                    "        \"productName\";";
+            System.out.println(query);
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            ArrayList<ProductUtilNames> productNames = new ArrayList<>();
+
+            try {
+                while (rs.next()) {
+                    ProductUtilNames productUtilNames = new ProductUtilNames(rs.getString(1),rs.getString(2),rs.getString(3),rs.getString(4));
+                    productNames.add(productUtilNames);
+                }
+
+            } catch (Exception e) {
+                System.out.println("getProductById " + e.getMessage());
+                return   ResponseEntity.status(406).body("errorIn getProductNames To array" + e.getMessage());
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+            return ResponseEntity.status(200).body(productNames);
+
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return  ResponseEntity.status(406).body("errorIn getProductNames To array" + e.getMessage());
+
+        }
+
     }
 
     public static ArrayList<Product> getProductBySearchCompanyName(String comName, String branchId, int companyId, ProductFilter productFilter) {
@@ -187,12 +232,12 @@ public class DbPosProduct {
             if (comName.contains("All")) {
                 query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                         "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
-                        "\"pState\", \"supplierId\",\"major\"" +
+                        "\"pState\", \"supplierId\",\"major\" , \"imgFile\" " +
                         "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  " + sqlQuery + " \"type\" = '" + comName.split(" ")[1] + "' ";
             } else {
                 query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                         "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
-                        "\"pState\", \"supplierId\",\"major\"" +
+                        "\"pState\", \"supplierId\",\"major\" , \"imgFile\" " +
                         "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  " + sqlQuery + " \"companyName\" = '" + comName + "' ";
             }
 
@@ -203,6 +248,7 @@ public class DbPosProduct {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
                         rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
+                prod.setImage(rs.getString(20));
                 productArrayList.add(prod);
                 // print the results
             }
@@ -228,8 +274,8 @@ public class DbPosProduct {
             PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_" + companyId + ".\"PosProduct_" + branchId + "\"(\n" +
                     "\"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\",\n" +
                     "\t\"lPrice\", \"bPrice\", \"companyName\", type, \"ownerName\", serial, \"desc\",\n" +
-                    "\t\"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\" ,\"major\")\n" +
-                    "\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?);", Statement.RETURN_GENERATED_KEYS);
+                    "\t\"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\" ,\"major\", \"imgFile\" )\n" +
+                    "\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?);", Statement.RETURN_GENERATED_KEYS);
 
             stmt.setString(1, prod.getProductName());
             stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
@@ -249,6 +295,7 @@ public class DbPosProduct {
             stmt.setString(16, prod.getpState());
             stmt.setInt(17, prod.getSupplierId());
             stmt.setString(18, prod.getMajor());
+            stmt.setString(19, prod.getImage());
 
             int affectedRows = stmt.executeUpdate();
             if (affectedRows == 0) {
@@ -291,7 +338,7 @@ public class DbPosProduct {
             String query = "";
             query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                     "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
-                    "\"pState\", \"supplierId\",\"major\"" +
+                    "\"pState\", \"supplierId\",\"major\" , \"imgFile\" " +
                     "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  serial = '" + trim + "' ";
 
 
@@ -300,6 +347,7 @@ public class DbPosProduct {
             while (rs.next()) {
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
                         rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
+                prod.setImage(rs.getString(20));
                 productArrayList.add(prod);
                 // print the results
             }
@@ -318,7 +366,7 @@ public class DbPosProduct {
     //-------------------------------------------------------------
     //---------------------------Put-------------------------------
     //-------------------------------------------------------------
-    static public ResponseEntity<Object>  EditProduct(Product prod, String branchId, int companyId) {
+    static public ResponseEntity<Object> EditProduct(Product prod, String branchId, int companyId) {
         try {
 
 

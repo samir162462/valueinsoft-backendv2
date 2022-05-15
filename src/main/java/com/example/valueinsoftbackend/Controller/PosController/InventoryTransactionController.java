@@ -57,6 +57,8 @@ public class InventoryTransactionController {
         }catch (Exception e )
         {
             System.out.println(e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("{\"title\" : \"the timestamp error\", \"branchId\" : "+branchId+"}" );
+
         }
         return ResponseEntity.status(HttpStatus.CREATED).body("{\"title\" : \"the newTransaction added \", \"branchId\" : "+branchId+"}" );
 

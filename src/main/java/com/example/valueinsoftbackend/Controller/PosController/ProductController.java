@@ -109,4 +109,11 @@ public class ProductController {
     ResponseEntity<Object> EditProduct(@RequestBody Product editProduct, @PathVariable String branchId, @PathVariable int companyId) {
         return DbPosProduct.EditProduct(editProduct, branchId, companyId);
     }
+    //--Search ProdsNames
+    @GetMapping("/PN/{companyId}/{branchId}/{text}")
+    ResponseEntity<Object> productNames( @PathVariable int branchId, @PathVariable int companyId , @PathVariable String text) {
+        return DbPosProduct.getProductNames(text, branchId, companyId);
+    }
+
+
 }
