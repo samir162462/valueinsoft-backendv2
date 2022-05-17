@@ -9,7 +9,8 @@ import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -184,7 +185,7 @@ public class DbPosProduct {
             String small = text.substring(0, 1).toLowerCase() + text.substring(1);
             Connection conn = ConnectionPostgres.getConnection();
             String query = "SELECT  DISTINCT ON (\"productName\") \"productName\" ,\"companyName\" , type ,major \n" +
-                    "\tFROM c_"+companyId+".\"PosProduct_"+branchId+"\" where \"productName\" LIKE '"+capital+"%' or \"productName\" Like '"+small+"%' ORDER BY \n" +
+                    "\tFROM c_"+companyId+".\"PosProduct_"+branchId+"\" where \"productName\" LIKE '%"+capital+"%' or \"productName\" Like '%"+small+"%' ORDER BY \n" +
                     "        \"productName\";";
             System.out.println(query);
             Statement st = conn.createStatement();
@@ -247,8 +248,9 @@ public class DbPosProduct {
             while (rs.next()) {
                 System.out.println("add user connected to user " + rs.getString(1));
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
-                        rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
+                        rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18),rs.getString(19));
                 prod.setImage(rs.getString(20));
+
                 productArrayList.add(prod);
                 // print the results
             }
@@ -274,7 +276,7 @@ public class DbPosProduct {
             PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_" + companyId + ".\"PosProduct_" + branchId + "\"(\n" +
                     "\"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\",\n" +
                     "\t\"lPrice\", \"bPrice\", \"companyName\", type, \"ownerName\", serial, \"desc\",\n" +
-                    "\t\"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\" ,\"major\", \"imgFile\" )\n" +
+                    "\t\"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\" ,\"major\" , \"imgFile\" )\n" +
                     "\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?);", Statement.RETURN_GENERATED_KEYS);
 
             stmt.setString(1, prod.getProductName());
@@ -312,12 +314,13 @@ public class DbPosProduct {
 
             stmt.close();
             conn.close();
-            JsonObject json = new JsonObject();
-            json.addProperty("title", "The Product Saved");
-            json.addProperty("id", id);
-            json.addProperty("numItems", prod.getQuantity());
-            json.addProperty("transTotal", prod.getbPrice() * prod.getQuantity());
-            json.addProperty("transactionType", "Add");
+            ObjectMapper mapper = new ObjectMapper();
+            ObjectNode json = mapper.createObjectNode();
+            json.put("title", "The Product  Saved");
+            json.put("id", id);
+            json.put("numItems", prod.getQuantity());
+            json.put("transTotal", prod.getbPrice() * prod.getQuantity());
+            json.put("transactionType", "Add");
             return ResponseEntity.status(201).body(json.toString());
 
             // Crate Branch table for new branch in DB
@@ -346,7 +349,9 @@ public class DbPosProduct {
             ResultSet rs = st.executeQuery(query);
             while (rs.next()) {
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
-                        rs.getInt(13), rs.getString(14), rs.getString(15), rs.getInt(16), rs.getString(17), rs.getInt(18), rs.getString(19));
+                        rs.getInt(13), rs.getString(14), rs.getString(15),
+                        rs.getInt(16), rs.getString(17), rs.getInt(18),
+                        rs.getString(19));
                 prod.setImage(rs.getString(20));
                 productArrayList.add(prod);
                 // print the results
@@ -374,11 +379,11 @@ public class DbPosProduct {
 
 
             PreparedStatement stmt = conn.prepareStatement("UPDATE C_" + companyId + ".\"PosProduct_" + branchId + "\"\n" +
-                    "\tSET  \"productName\"=?, \"buyingDay\"=?, \"activationPeriod\"=?, \"rPrice\"=?, \"lPrice\"=?, \"bPrice\"=?, \"companyName\"=?, type=?, \"ownerName\"=?, serial=?, \"desc\"=?, \"batteryLife\"=?, \"ownerPhone\"=?, \"ownerNI\"=?, quantity=?, \"pState\"=?, \"supplierId\"=?, major=?\n" +
+                    "\tSET  \"productName\"=?, \"buyingDay\"=?, \"activationPeriod\"=?, \"rPrice\"=?, \"lPrice\"=?, \"bPrice\"=?, \"companyName\"=?, type=?, \"ownerName\"=?, serial=?, \"desc\"=?, \"batteryLife\"=?, \"ownerPhone\"=?, \"ownerNI\"=?, quantity=?, \"pState\"=?, \"supplierId\"=?, major=?, \"imgFile\"=? \n" +
                     "\tWHERE \"productId\"=?;");
 
             stmt.setString(1, prod.getProductName());
-            stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+            stmt.setTimestamp(2,prod.getBuyingDay());
             stmt.setInt(3, Integer.valueOf(prod.getActivationPeriod()));
             stmt.setInt(4, prod.getrPrice());
             stmt.setInt(5, prod.getlPrice());
@@ -395,9 +400,10 @@ public class DbPosProduct {
             stmt.setString(16, prod.getpState());
             stmt.setInt(17, prod.getSupplierId());
             stmt.setString(18, prod.getMajor());
+            stmt.setString(19, prod.getImage());
             //Id
-            stmt.setInt(19, prod.getProductId());
-
+            stmt.setInt(20, prod.getProductId());
+            System.out.println(stmt);
             int affectedRows = stmt.executeUpdate();
             if (affectedRows == 0) {
                 throw new SQLException("Creating user failed, no rows affected.");
@@ -406,18 +412,32 @@ public class DbPosProduct {
 
             stmt.close();
             conn.close();
-            JsonObject json = new JsonObject();
-            json.addProperty("title", "The Product Edit Saved");
-            json.addProperty("id", prod.getProductId());
-            json.addProperty("numItems", prod.getQuantity());
-            json.addProperty("transTotal", prod.getbPrice() * prod.getQuantity());
-            json.addProperty("transactionType", "Update");
-            return ResponseEntity.status(HttpStatus.OK).body(json);
+            System.out.println("Conniction closed");
+            // create `ObjectMapper` instance
+            ObjectMapper mapper = new ObjectMapper();
 
+            // create a JSON object
+            ObjectNode json = mapper.createObjectNode();
+            json.put("title", "The Product Edit Saved");
+            json.put("id", prod.getProductId());
+            json.put("numItems", prod.getQuantity());
+            json.put("transTotal", prod.getbPrice() * prod.getQuantity());
+            json.put("transactionType", "Update");
+
+            // convert `ObjectNode` to pretty-print JSON
+            // without pretty-print, use `user.toString()` method
+            String jsonS = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json);
+
+            // print json
+            System.out.println(jsonS);
+
+            return ResponseEntity.status(HttpStatus.OK).body(json.toString());
             // Crate Branch table for new branch in DB
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
+            System.out.println("Nothing");
+
             return ResponseEntity.status(HttpStatus.NO_CONTENT).body(null);
 
         }
