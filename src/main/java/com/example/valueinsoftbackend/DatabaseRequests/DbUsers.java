@@ -10,10 +10,10 @@ import java.io.FileInputStream;
 import java.sql.*;
 import java.util.ArrayList;
 
-public class DbUsers {
+public class DbUsers  {
 
 
-    public static boolean checkExistUsername(String userName) {
+    public static boolean checkExistUsername(String userName)   {
 
 
         try {

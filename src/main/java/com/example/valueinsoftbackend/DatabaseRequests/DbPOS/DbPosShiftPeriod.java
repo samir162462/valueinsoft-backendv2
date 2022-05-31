@@ -1,25 +1,54 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.Order;
-import com.example.valueinsoftbackend.Model.OrderDetails;
-import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ShiftPeriod;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
-import java.lang.reflect.Type;
 import java.sql.*;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+
 import java.util.ArrayList;
 
 public class DbPosShiftPeriod {
 
 
-    static public ShiftPeriod startShiftPeriod(int comId, int branchId) {
+    private static boolean checkShiftStart(int companyId , int branchId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+
+            String query = "select EXISTS (SELECT * FROM c_"+companyId+".\"PosShiftPeriod\"\n" +
+                    "where \"branchId\" = "+branchId+" and \"ShiftEndTime\" IS NULL)";
+
+            // create the java statement
+            Statement st = conn.createStatement();
+
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next()) {
+                return rs.getBoolean(1);
+
+
+                // print the results
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+        } catch (Exception e) {
+            System.out.println(" no user exist");
+            return true;
+
+        }
+        return false;
+    }
+
+    static public ResponseEntity<Object>  startShiftPeriod(int comId, int branchId) {
         try {
 
+            if (checkShiftStart(comId,branchId)) {
+                return ResponseEntity.status(HttpStatus.NO_CONTENT).body("There is Exists Shift opened") ;
+            }
 
 
             Connection conn = ConnectionPostgres.getConnection();
@@ -45,17 +74,18 @@ public class DbPosShiftPeriod {
             rs.close();
             st.close();
             conn.close();
-            return sp;
+            return ResponseEntity.status(HttpStatus.CREATED).body(sp) ;
 
             // Crate Branch table for new branch in DB
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            return null;
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body("There is Error In Shift Start ") ;
 
         }
 
     }
+
 
     static public String endShiftPeriod(int comId, int shiftPeriodId ) {
         try {

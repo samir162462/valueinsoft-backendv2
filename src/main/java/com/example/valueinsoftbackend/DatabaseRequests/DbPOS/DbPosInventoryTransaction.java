@@ -19,7 +19,9 @@ public class DbPosInventoryTransaction {
             Connection conn = ConnectionPostgres.getConnection();
 
             String query = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\"\n" +
-                    "\tFROM C_"+companyId+".\"InventoryTransactions_"+branchId+"\" where \"time\" between '"+startDate+"' And '"+endDate+"'";
+                    "\tFROM C_"+companyId+".\"InventoryTransactions_"+branchId+"\" " +
+                    "where \"time\" >= date_trunc('month', '"+startDate+"'::timestamp)\n" +
+                    "  \tand \"time\" < date_trunc('month', '"+endDate+"'::timestamp) + interval '1 month'";
 
 
             // create the java statement

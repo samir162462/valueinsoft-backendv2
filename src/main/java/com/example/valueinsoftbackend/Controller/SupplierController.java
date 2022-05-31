@@ -57,7 +57,7 @@ public class SupplierController {
         String answer = DbSupplier.AddSupplier(requestBody.get("supplierName"), requestBody.get("supplierPhone1"), requestBody.get("supplierPhone2"), requestBody.get("suplierLocation"), requestBody.get("suplierMajor"), Integer.valueOf(requestBody.get("branchId")), Integer.valueOf(requestBody.get("companyId")));
 
 
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
+        return ResponseEntity.status(HttpStatus.CREATED).body(answer);
 
     }
 

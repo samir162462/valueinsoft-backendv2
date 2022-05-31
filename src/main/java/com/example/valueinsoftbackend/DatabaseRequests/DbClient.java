@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.DatabaseRequests;
 
 import com.example.valueinsoftbackend.Model.Client;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import org.springframework.http.ResponseEntity;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -43,7 +44,7 @@ public class DbClient {
     }
 
 
-    public static ArrayList<Client> getClientByPhoneNumberOrName(int comId ,String phone, String name, Timestamp date, String shiftStartTime, int branchId) {
+    public static  ResponseEntity<ArrayList<Client>> getClientByPhoneNumberOrName(int comId ,String phone, String name, Timestamp date, String shiftStartTime, int branchId) {
         ArrayList<Client> cList = new ArrayList<>();
 
         try {
@@ -69,7 +70,7 @@ public class DbClient {
                         "\tFROM C_"+comId+".\"Client\" where "+stringBuilder+" \"clientName\" LIKE '%" + name + "%' ;";
             }
 
-
+            System.out.println(query);
             // create the java statement
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
@@ -92,12 +93,12 @@ public class DbClient {
             rs.close();
             st.close();
             conn.close();
-            return cList;
+            return  ResponseEntity.ok().body(cList);
         } catch (Exception e) {
             System.out.println("err : " + e.getMessage());
+            return  ResponseEntity.noContent().build();
 
         }
-        return null;
 
     }
 

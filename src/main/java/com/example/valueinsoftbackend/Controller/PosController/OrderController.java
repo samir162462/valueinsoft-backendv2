@@ -9,6 +9,7 @@ import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ShiftPeriod;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
 import com.example.valueinsoftbackend.util.ConvertStringToTimeStamp;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.sql.Timestamp;
@@ -24,10 +25,10 @@ public class OrderController {
 
 
     @PostMapping("/{companyId}/saveOrder")
-    String newOrder(@RequestBody Order newOrderShiftIn ,@PathVariable int companyId) {
+    ResponseEntity<Integer> newOrder(@RequestBody Order newOrderShiftIn , @PathVariable int companyId) {
 
 
-        return "The orderId is: "+DbPosOrder.AddOrder(newOrderShiftIn,companyId);
+        return DbPosOrder.AddOrder(newOrderShiftIn,companyId);
     }
 
     @RequestMapping(path = "/getOrders", method = RequestMethod.GET)

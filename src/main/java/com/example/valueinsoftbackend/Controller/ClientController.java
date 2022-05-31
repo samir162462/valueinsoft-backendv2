@@ -22,14 +22,14 @@ public class ClientController {
 
     @RequestMapping(path = "/{companyId}/getClientByPhone/{phone}/{bid}", method = RequestMethod.GET)
     @ResponseBody
-    public Client getClientByPhone(
+    public ResponseEntity<ArrayList<Client>> getClientByPhone(
             @PathVariable("phone") String phone,
             @PathVariable("companyId") int companyId,
             @PathVariable("bid") int bid
 
     ) {
         //get just the client in the list
-        return DbClient.getClientByPhoneNumberOrName(companyId,phone, null, null, null, bid).get(0);
+        return DbClient.getClientByPhoneNumberOrName(companyId,phone, null, null, null, bid);
     }
 
     @RequestMapping(path = "/{companyId}/getLatestClients/{max}/{bid}", method = RequestMethod.GET)
@@ -47,7 +47,7 @@ public class ClientController {
 
     @RequestMapping(path = "/{companyId}/getClientsByName/{name}/{bid}", method = RequestMethod.GET)
     @ResponseBody
-    public ArrayList<Client> getClientsByName(
+    public ResponseEntity<ArrayList<Client>> getClientsByName(
             @PathVariable("name") String name,
             @PathVariable("companyId") int companyId,
             @PathVariable("bid") int bid

@@ -98,14 +98,15 @@ public class DbDvSales {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             String query = "WITH salesPeriod AS (\n" +
-                    "((SELECT \"orderId\" from C_"+companyId+".\"PosOrder_"+branchId+"\" where  \"orderTime\"  >= '"+startTime+"' Order BY \"orderId\" asc  LIMIT 1)\n" +
+                    "((SELECT \"orderId\" from C_"+companyId+".\"PosOrder_"+branchId+"\" where  \"orderTime\"::date  >= '"+startTime+"'::date  Order BY \"orderId\" asc  LIMIT 1)\n" +
                     "UNION ALL \n" +
-                    "(SELECT \"orderId\" from  C_"+companyId+".\"PosOrder_"+branchId+"\" where  \"orderTime\"  <= '"+endTime+"' Order BY \"orderId\" DESC  LIMIT 1)  )\n" +
+                    "(SELECT \"orderId\" from  C_"+companyId+".\"PosOrder_"+branchId+"\" where  \"orderTime\"::date  <= '"+endTime+"'::date   Order BY \"orderId\" DESC  LIMIT 1)  )\n" +
                     ")\n" +
                     "SELECT \"itemName\", count(\"itemId\")::integer NumberOfOrders ,  sum(quantity)::integer SumQuantity ,SUM(\"total\") sumTotal " +
-                    "\tFROM C_"+companyId+".\"PosOrderDetail_"+branchId+"\"  where \"bouncedBack\" <> 1 and \"orderId\" between (select  \"orderId\" from salesPeriod limit 1 ) and (select  \"orderId\" from salesPeriod where \"orderId\"> (select  \"orderId\" from salesPeriod limit 1 ) )\n" +
+                    "\tFROM C_"+companyId+".\"PosOrderDetail_"+branchId+"\"  where \"bouncedBack\"  < 1 and \"orderId\" between (select  \"orderId\" from salesPeriod limit 1 ) and (select  \"orderId\" from salesPeriod where \"orderId\"> (select  \"orderId\" from salesPeriod limit 1 ) )\n" +
                     "\tGROUP BY \"itemName\"  Order by SumQuantity DESC,NumberOfOrders ;"
                     ;
+            System.out.println(query);
             // create the java statement
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);

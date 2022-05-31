@@ -1,11 +1,12 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
-import com.example.valueinsoftbackend.Model.Client;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.lang.reflect.Type;
 import java.sql.*;
@@ -13,7 +14,7 @@ import java.util.ArrayList;
 
 public class DbPosOrder {
 
-    static public String AddOrder(Order order , int companyId) {
+    static public ResponseEntity<Integer>  AddOrder(Order order , int companyId) {
         try {
 
             int branchId = order.getBranchId();
@@ -64,19 +65,48 @@ public class DbPosOrder {
 
 
             int i = stmt.executeUpdate();
+
             System.out.println(i + " records inserted");
             stmt.close();
             conn.close();
 
-            return "The Order Saved";
+            return  ResponseEntity.status(201).body(getLastIdOrder(branchId,companyId));
 
             // Crate Branch table for new branch in DB
 
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            return "the Order not added bs error! " + e.getMessage();
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body(0);
 
         }
+    }
+    static public int getLastIdOrder( int branchId ,int companyId) {
+        try {
+            Connection conn = ConnectionPostgres.getConnection();
+            String query = "";
+            int id = 0 ;
+            query = "select max(\"orderId\") from C_"+companyId+".\"PosOrder_"+branchId+"\";";
+
+
+            // create the java statement
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(query);
+
+            while (rs.next()) {
+                System.out.println("add  connected to company " + rs.getString(1));
+                id = rs.getInt(1);
+            }
+
+            rs.close();
+            st.close();
+            conn.close();
+            return id;
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+
+        }
+        return 0;
+
     }
 
     static public ArrayList<Order> getOrdersByPeriod(int branchId, Timestamp startTime, Timestamp endTime , int companyId) {

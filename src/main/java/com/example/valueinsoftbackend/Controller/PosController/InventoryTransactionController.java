@@ -79,11 +79,12 @@ public class InventoryTransactionController {
         try {
 
             inventoryTransactions = DbPosInventoryTransaction.getInventoryTrans(companyId,branchId,startTime,endTime);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(inventoryTransactions);
+
         }catch (Exception e )
         {
-            System.out.println(e.getMessage());
+            return ResponseEntity.status(HttpStatus.NO_CONTENT).body(null);
         }
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(inventoryTransactions);
 
     }
 

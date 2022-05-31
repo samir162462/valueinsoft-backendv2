@@ -4,6 +4,7 @@ package com.example.valueinsoftbackend.Controller.PosController;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.ShiftPeriod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -16,7 +17,7 @@ public class ShiftPeriodController {
 
 
     @PostMapping("/{companyId}/{branchId}/startShift")
-    ShiftPeriod startShift(@PathVariable int branchId,@PathVariable int companyId) {
+    ResponseEntity<Object> startShift(@PathVariable int branchId, @PathVariable int companyId) {
         System.out.println("in Start Shift");
         return DbPosShiftPeriod.startShiftPeriod(companyId,branchId);
     }
