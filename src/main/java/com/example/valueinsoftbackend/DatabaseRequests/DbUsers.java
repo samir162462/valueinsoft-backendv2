@@ -118,7 +118,7 @@ public class DbUsers  {
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);
             while (rs.next()) {
-                User user = new User(rs.getInt(1), rs.getString(2), "", rs.getString(4), rs.getString(8), rs.getString(9), rs.getString(6), rs.getString(5), rs.getInt(10), rs.getInt(7), rs.getTimestamp(11));
+                User user = new User(rs.getInt("id"), rs.getString("userName"), "", rs.getString("userEmail"), rs.getString("firstName"), rs.getString("lastName"), rs.getString("userPhone"), rs.getString("userRole"),rs.getInt("gender"), rs.getInt("branchId"), rs.getTimestamp("creationTime") );
                 rs.close();
                 st.close();
                 conn.close();

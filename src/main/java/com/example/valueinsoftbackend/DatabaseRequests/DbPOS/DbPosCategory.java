@@ -71,6 +71,7 @@ public class DbPosCategory {
         try {
 
 
+
             Connection conn = ConnectionPostgres.getConnection();
 
             String query = "INSERT INTO C_"+companyId+".\"PosCateJson\"(\n" +
@@ -130,7 +131,7 @@ public class DbPosCategory {
         try {
             Connection conn = ConnectionPostgres.getConnection();
             ArrayList<Category> categoryArrayList = new ArrayList<>();
-            String query = "SELECT \"MId\", \"CateName\", \"AppType\"" +
+            String query = "SELECT * " +   //"Mid", "CateName", "AppType"
                     "\tFROM c_"+companyId+".\"MainMajor\" ;";
             Statement st = conn.createStatement();
             ResultSet rs = st.executeQuery(query);

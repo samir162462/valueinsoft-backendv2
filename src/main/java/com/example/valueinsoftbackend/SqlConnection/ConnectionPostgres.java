@@ -9,6 +9,8 @@ public class ConnectionPostgres {
 
     public static Connection getConnection() throws Exception {
 
+        //https://api.elephantsql.com/console/aac0e90f-f846-4358-aac4-2f877184e385/details#   ---- > Elphent Site
+
         try {
             if (!ValueinsoftBackendApplication.goOnline) {
                 //Local Database
@@ -19,11 +21,11 @@ public class ConnectionPostgres {
                 return conn;
             } else {
                 //Online Database Heroku
-                ValueinsoftBackendApplication.DatabaseOwner = "xdbclqyeafclrb";
+                ValueinsoftBackendApplication.DatabaseOwner = "qnnzxbni";
                 Class.forName("org.postgresql.Driver");
-                String url = "jdbc:postgresql://ec2-52-215-22-82.eu-west-1.compute.amazonaws.com:5432/dcp1madep62ah3";
+                String url = "jdbc:postgresql://kandula.db.elephantsql.com:5432/qnnzxbni";
 
-                Connection conn = DriverManager.getConnection(url, "xdbclqyeafclrb", "0961698bab96b15477229c7686b5598da85b35387127bc9c98e3012e5429260f");
+                Connection conn = DriverManager.getConnection(url, "qnnzxbni", "y7H5olBbx2Vbs0BDWC3jCKC23ffjWhHR");
                 return conn;
             }
         }catch (Exception e)
