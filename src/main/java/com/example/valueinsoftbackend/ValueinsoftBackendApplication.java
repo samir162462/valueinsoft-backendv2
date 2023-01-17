@@ -27,7 +27,7 @@ public class ValueinsoftBackendApplication {
     public static String trustedHost = "http://localhost:3000";
     public static String DatabaseOwner = "krdszavicoqkpf";
     public static String PAYMTOKEN = "ZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKSVV6VXhNaUo5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2libUZ0WlNJNkltbHVhWFJwWVd3aUxDSndjbTltYVd4bFgzQnJJam94TmpnME5qZDkuTFVUTktWYVlKbkVkUzM1SDBOVDJyb21iYU1oaFBJZXhxbUg3LWcwOXNVcFJSTGM2ak05Vkh2SFV3Y2V5Q3JxNldpZ3JURGR2VGhlZVpUeHl3UUptZnc=";
-    public static boolean goOnline = true;
+    public static boolean goOnline = false;
 
 
     //init

@@ -16,7 +16,7 @@ public class ConnectionPostgres {
                 //Local Database
                 ValueinsoftBackendApplication.DatabaseOwner = "postgres";
                 Class.forName("org.postgresql.Driver");
-                String url = "jdbc:postgresql://localhost:5432/postgres";
+                String url = "jdbc:postgresql://localhost:5432/localvls";
                 Connection conn = DriverManager.getConnection(url, "postgres", "0000");
                 return conn;
             } else {
