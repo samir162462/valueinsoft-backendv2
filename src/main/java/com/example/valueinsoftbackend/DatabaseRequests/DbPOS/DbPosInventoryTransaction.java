@@ -6,95 +6,88 @@ package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Service;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.List;
 
+@Service
+@Slf4j
 public class DbPosInventoryTransaction {
 
-    public static ArrayList<InventoryTransaction> getInventoryTrans(int companyId ,int branchId ,String startDate, String endDate  )
-    {
-        ArrayList<InventoryTransaction> inventoryTransactions = new ArrayList<>();
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
 
-            String query = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\"\n" +
-                    "\tFROM C_"+companyId+".\"InventoryTransactions_"+branchId+"\" " +
-                    "where \"time\" >= date_trunc('month', '"+startDate+"'::timestamp)\n" +
-                    "  \tand \"time\" < date_trunc('month', '"+endDate+"'::timestamp) + interval '1 month'";
+    JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    public DbPosInventoryTransaction(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
-            // create the java statement
-            System.out.println(query);
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-
-            while (rs.next())
-            {
-                InventoryTransaction inventoryTransaction = new InventoryTransaction(rs.getInt(1),rs.getInt(2),rs.getString(3),rs.getInt(4),rs.getString(5),rs.getInt(6),rs.getInt(7),rs.getString(8),rs.getTimestamp(9),rs.getInt(10));
-                inventoryTransactions.add(inventoryTransaction);
-
-
-
-                // print the results
-            }
-            rs.close();
-            st.close();
-            conn.close();
-            return inventoryTransactions;
-
-
-        }catch (Exception e)
-        {
-            System.out.println("err in get invtrans : "+e.getMessage());
-
+    public class InventoryTransactionMapper implements RowMapper<InventoryTransaction> {
+        @Override
+        public InventoryTransaction mapRow(ResultSet rs, int rowNum) throws SQLException {
+            InventoryTransaction inventoryTransaction = new InventoryTransaction(
+                    rs.getInt("transId"),
+                    rs.getInt("productId"),
+                    rs.getString("userName"),
+                    rs.getInt("supplierId"),
+                    rs.getString("transactionType"),
+                    rs.getInt("NumItems"),
+                    rs.getInt("transTotal"),
+                    rs.getString("payType"),
+                    rs.getTimestamp("time"),
+                    rs.getInt("RemainingAmount"));
+            return inventoryTransaction;
         }
-        return null;
+    }
+
+    public ArrayList<InventoryTransaction> getInventoryTrans(int companyId , int branchId , String startDate, String endDate  )
+    {
+        List<InventoryTransaction> inventoryTransactionList ;
+        String query = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\"\n" +
+                "\tFROM C_"+companyId+".\"InventoryTransactions_"+branchId+"\" " +
+                "where \"time\" >= date_trunc('month', '"+startDate+"'::timestamp)\n" +
+                "  \tand \"time\" < date_trunc('month', '"+endDate+"'::timestamp) + interval '1 month'";
+        inventoryTransactionList = jdbcTemplate.query(query, new Object[] {}, new InventoryTransactionMapper());
+        log.info("Inside Get inventoryTransactionList");
+        return (ArrayList<InventoryTransaction>) inventoryTransactionList;
 
     }
 
-    static public String AddTransactionToInv(int productId, String userName, int supplierId, String transactionType , int NumItems, int transTotal , String payType, Timestamp time , int remainingAmount, int branchId ,int companyId)
+
+     public String AddTransactionToInv(int productId, String userName, int supplierId, String transactionType , int NumItems, int transTotal , String payType, Timestamp time , int remainingAmount, int branchId ,int companyId)
     {
+        String sql  ="BEGIN;\n" +
+                "INSERT INTO C_"+companyId+".\"InventoryTransactions_"+branchId+"\"(\n" +
+                "\t \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
+                "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?);" +
+                "UPDATE C_"+companyId+".supplier_"+branchId+"\n" +
+                "SET  \"supplierRemainig\" = \"supplierRemainig\" + "+transTotal+", \"supplierTotalSales\" = \"supplierTotalSales\" + "+remainingAmount+" "+
+                "\tWHERE \"supplierId\"= " +supplierId+";" +
+                "COMMIT;\n";
+        log.info("Inside Add TransactionToInv");
         try {
-
-
-            Connection conn = ConnectionPostgres.getConnection();
-
-            PreparedStatement stmt=conn.prepareStatement("BEGIN;\n" +
-                    "INSERT INTO C_"+companyId+".\"InventoryTransactions_"+branchId+"\"(\n" +
-                    "\t \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?);" +
-                    "UPDATE C_"+companyId+".supplier_"+branchId+"\n" +
-                    "SET  \"supplierRemainig\" = \"supplierRemainig\" + "+transTotal+", \"supplierTotalSales\" = \"supplierTotalSales\" + "+remainingAmount+" "+
-                    "\tWHERE \"supplierId\"= " +supplierId+";" +
-                    "COMMIT;\n");
-
-
-
-            stmt.setInt(1,productId);
-            stmt.setString(2,userName);
-            stmt.setInt(3,supplierId);
-            stmt.setString(4,transactionType);
-            stmt.setInt(5,NumItems);
-            stmt.setInt(6,transTotal);
-            stmt.setString(7,payType);
-            stmt.setTimestamp(8,time);
-            stmt.setInt(9,remainingAmount);
-
-
-            int i=stmt.executeUpdate();
-            System.out.println(i+" supplier added records inserted");
-
-            stmt.close();
-            conn.close();
+            jdbcTemplate.update(sql,
+                    productId,
+                    userName,
+                    supplierId,
+                    transactionType,
+                    NumItems,
+                    transTotal,
+                    payType,
+                    time,
+                    remainingAmount);
 
         }catch (Exception e )
         {
             System.out.println(e.getMessage());
             return "the supplier not added bs error!";
-
         }
-
         return "the supplier added! ok 200";
     }
 

@@ -1,7 +1,6 @@
 package com.example.valueinsoftbackend.Model;
 
 import java.sql.Timestamp;
-import java.util.Random;
 
 public class Product {
     int productId;
@@ -25,7 +24,7 @@ public class Product {
     String major;
     String image;
 
-    public Product(int productId, String productName, Timestamp buyingDay, String activationPeriod, int rPrice, int lPrice, int bPrice, String companyName, String type, String ownerName, String serial, String desc, int batteryLife, String ownerPhone, String ownerNI, int quantity, String pState, int supplierId, String major) {
+    public Product(int productId, String productName, Timestamp buyingDay, String activationPeriod, int rPrice, int lPrice, int bPrice, String companyName, String type, String ownerName, String serial, String desc, int batteryLife, String ownerPhone, String ownerNI, int quantity, String pState, int supplierId, String major, String imgFile) {
         this.productId = productId;
         this.productName = productName;
         this.buyingDay = buyingDay;

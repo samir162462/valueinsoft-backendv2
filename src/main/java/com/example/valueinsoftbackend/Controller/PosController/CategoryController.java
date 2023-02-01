@@ -35,27 +35,71 @@ public class CategoryController {
 
     @RequestMapping(path = "/getCategoryJson/{companyId}/{branchId}", method = RequestMethod.GET)
     public ArrayList<CustomPair> getCategoriesJson(@PathVariable int branchId, @PathVariable int companyId) {
+        ArrayList<CustomPair> customPairs = new ArrayList<>();
 
-        try {
+        try { //For New Code
+            String resCate = DbPosCategory.getCategoryJson(branchId, companyId) ;
 
-            ArrayList<CustomPair> customPairs = new ArrayList<>();
+            if (resCate.startsWith('['+"")) {
+                String replaceAllOut = resCate.substring(1, resCate.length() - 2).
+                        //     trim().replace("[", "").replace("]", "").
+                                replace("}", "").
+                        replace("{", "");
+                System.out.println("--> "+"inCategories   " +
+                        "{"+ replaceAllOut+"}");
+
+                // CustomPair customPair= new CustomPair()
+                Map<String, Object> response = new ObjectMapper().readValue("{"+ replaceAllOut+"}"
+
+                        , HashMap.class);
+                System.out.println("R--> "+response);
+
+                for (int i = 0; i < response.size(); i++) {
+                    ArrayList<String> list1 = new ArrayList<String>();
+                    String[] Data = response.values().toArray()[i].toString().trim().replace("[", "").replace("]", "").split(",");
+                    for (int j = 0; j < Data.length; j++) {
+                        list1.add(Data[j]);
+                    }
+                    CustomPair customPair = new CustomPair(response.keySet().toArray()[i].toString(), list1);
+                    customPairs.add(customPair);
+                    System.out.println(response.keySet().toArray()[i]);
+                    System.out.println(Data);
+                }
+
+            }else{ //For Old Code
+                Map<String, Object> response = new ObjectMapper().readValue(DbPosCategory.getCategoryJson(branchId, companyId), HashMap.class);
+                for (int i = 0; i < response.size(); i++) {
+                    ArrayList<String> list1 = new ArrayList<String>();
+                    String[] Data = response.values().toArray()[i].toString().trim().replace("[", "").replace("]", "").split(",");
+                    for (int j = 0; j < Data.length; j++) {
+                        list1.add(Data[j]);
+                    }
+                    CustomPair customPair = new CustomPair(response.keySet().toArray()[i].toString(), list1);
+                    customPairs.add(customPair);
+                    System.out.println(response.keySet().toArray()[i]);
+                    System.out.println(Data);
+                }
+            }
 
             // CustomPair customPair= new CustomPair()
-            Map<String, Object> response = new ObjectMapper().readValue(DbPosCategory.getCategoryJson(branchId, companyId), HashMap.class);
-            for (int i = 0; i < response.size(); i++) {
-                ArrayList<String> list1 = new ArrayList<String>();
-                String[] Data = response.values().toArray()[i].toString().trim().replace("[", "").replace("]", "").split(",");
-                for (int j = 0; j < Data.length; j++) {
-                    list1.add(Data[j]);
-                }
-                CustomPair customPair = new CustomPair(response.keySet().toArray()[i].toString(), list1);
-                customPairs.add(customPair);
-                System.out.println(response.keySet().toArray()[i]);
-                System.out.println(Data);
-            }
+
 
             return customPairs;
 
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+
+        return null;
+
+    }
+
+
+    @RequestMapping(path = "/getCategoryJsonFlat/{companyId}/{branchId}", method = RequestMethod.GET)
+    public String getCategoriesJsonObjectsString(@PathVariable int branchId, @PathVariable int companyId) {
+        try {
+           return DbPosCategory.getCategoryJson(branchId, companyId);
         } catch (Exception e) {
             System.out.println(e);
         }

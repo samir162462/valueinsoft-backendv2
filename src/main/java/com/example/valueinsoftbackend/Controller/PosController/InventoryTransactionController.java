@@ -9,6 +9,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosInventoryTransaction;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +25,12 @@ import java.util.Map;
 public class InventoryTransactionController {
 
 
+    DbPosInventoryTransaction dbPosInventoryTransaction;
+
+    @Autowired
+    public InventoryTransactionController(DbPosInventoryTransaction dbPosInventoryTransaction) {
+        this.dbPosInventoryTransaction = dbPosInventoryTransaction;
+    }
 
     @PostMapping("/AddTransaction")
 
@@ -53,7 +60,7 @@ public class InventoryTransactionController {
 
         try {
 
-            DbPosInventoryTransaction.AddTransactionToInv(productId,userName,supplierId,transactionType,numItems,transTotal,payType,timestamp,remainingAmount,branchId,companyId);
+            dbPosInventoryTransaction.AddTransactionToInv(productId,userName,supplierId,transactionType,numItems,transTotal,payType,timestamp,remainingAmount,branchId,companyId);
         }catch (Exception e )
         {
             System.out.println(e.getMessage());
@@ -78,7 +85,7 @@ public class InventoryTransactionController {
         ArrayList<InventoryTransaction> inventoryTransactions = null;
         try {
 
-            inventoryTransactions = DbPosInventoryTransaction.getInventoryTrans(companyId,branchId,startTime,endTime);
+            inventoryTransactions = dbPosInventoryTransaction.getInventoryTrans(companyId,branchId,startTime,endTime);
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(inventoryTransactions);
 
         }catch (Exception e )

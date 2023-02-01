@@ -4,116 +4,110 @@ package com.example.valueinsoftbackend.Controller.PosController;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
-import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
-import com.google.gson.JsonObject;
+import com.example.valueinsoftbackend.util.PageHandler;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-
+@Slf4j
 @RestController
 @RequestMapping("/products")
 @CrossOrigin("*")
 public class ProductController {
 
+    DbPosProduct dbPosProduct;
 
-    @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}", method = RequestMethod.GET)
-    public ArrayList<Product> getProducts(@PathVariable int companyId,
-                                          @PathVariable String branchId,
-                                          @PathVariable String searchType,
-                                          @PathVariable String text) {
-        // code here
-        switch (searchType) {
-            case "dir":
-                System.out.println("dir -> " + companyId);
-                System.out.println("text prams : " + text);
-                String[] words = text.split("\\s+");
-                for (int i = 0; i < words.length; i++) {
-                    // You may want to check for a non-word character before blindly
-                    // performing a replacement
-                    // It may also be necessary to adjust the character class
-                    // words[i] = words[i].replaceAll("[^\\w]", "");
-                }
-
-                return DbPosProduct.getProductBySearchText(words, branchId, companyId,null);
-            case "comName":
-                System.out.println("comName");
-                return DbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId ,null);
-            case "Barcode":
-                return DbPosProduct.getProductBySearchBarcode(text.trim(), branchId, companyId ,null);
-            case "allData":
-                System.out.println("allData");
-                break;
-        }
-
-
-        return null;
+    @Autowired
+    public ProductController(DbPosProduct dbPosProduct) {
+        this.dbPosProduct = dbPosProduct;
     }
-    //todo -------- filter Search POST DAta
-    @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/filter", method = RequestMethod.POST)
-    public ArrayList<Product> getProductsBySearchFilter(@PathVariable int companyId,
-                                          @PathVariable String branchId,
-                                          @PathVariable String searchType,
-                                          @PathVariable String text,
-                                            @RequestBody ProductFilter productFilter)
-        {
+
+    @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/{selectedPageNumber}", method = RequestMethod.GET)
+    public Object getProducts(@PathVariable int companyId,
+                              @PathVariable String branchId,
+                              @PathVariable String searchType,
+                              @PathVariable String text,
+                                @PathVariable int selectedPageNumber
+    ) {
+        PageHandler pageHandler = new PageHandler("productId", selectedPageNumber, 10);
         // code here
-            System.out.println(productFilter.toString());
         switch (searchType) {
             case "dir":
-                System.out.println("dir -> " + companyId);
-                System.out.println("text prams : " + text);
-                String[] words = text.split("\\s+");
-                for (int i = 0; i < words.length; i++) {
-                    // You may want to check for a non-word character before blindly
-                    // performing a replacement
-                    // It may also be necessary to adjust the character class
-                    // words[i] = words[i].replaceAll("[^\\w]", "");
-                }
+                log.info("getProducts: Search Type -> dir");
 
-                return DbPosProduct.getProductBySearchText(words, branchId, companyId,productFilter);
+                String[] words = text.split("\\s+");
+
+                return dbPosProduct.getProductBySearchText(words, branchId, companyId, null, pageHandler);
             case "comName":
-                System.out.println("comName");
-                return DbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId,productFilter);
+                log.info("getProducts: Search Type -> ComName");
+                return dbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId, null ,pageHandler);
+            case "Barcode":
+                log.info("getProducts: Search Type -> Barcode");
+
+                return DbPosProduct.getProductBySearchBarcode(text.trim(), branchId, companyId, null);
+            case "allData":
+                log.info("getProducts: Search Type -> AllData");
+                break;
+        }
+        throw new RuntimeException("Search Type is not Correct");
+    }
+
+    //todo -------- filter Search POST DAta
+    @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/filter/{pageNumber}", method = RequestMethod.POST)
+    public Object getProductsBySearchFilter(@PathVariable int companyId,
+                                            @PathVariable String branchId,
+                                            @PathVariable String searchType,
+                                            @PathVariable String text,
+                                            @PathVariable int pageNumber,
+                                            @RequestBody ProductFilter productFilter) {
+        // code here
+        System.out.println(productFilter.toString());
+        PageHandler pageHandler = new PageHandler("productId", pageNumber, 10);
+
+        switch (searchType) {
+            case "dir":
+                log.info("getProductsBySearchFilter: Search Type -> dir");
+                String[] words = text.split("\\s+");
+                return dbPosProduct.getProductBySearchText(words, branchId, companyId, productFilter, pageHandler);
+            case "comName":
+                log.info("getProductsBySearchFilter: Search Type -> ComName");
+                return dbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId, productFilter,pageHandler);
             case "shortCate":
-                System.out.println("shortCate");
+                log.info("getProductsBySearchFilter: Search Type -> shortCate");
+
                 break;
             case "allData":
-                System.out.println("allData");
-                return DbPosProduct.getProductsAllRange(branchId, companyId,productFilter);
-
+                log.info("getProductsBySearchFilter: Search Type -> allData");
+                return dbPosProduct.getProductsAllRange(branchId, companyId, productFilter);
         }
-
-
-        return null;
+        throw new RuntimeException("Search Type is not Correct");
     }
 
 
     //----get----
 
     @GetMapping("{companyId}/{branchId}/{productId}")
-    Product productById( @PathVariable int branchId, @PathVariable int companyId , @PathVariable int productId) {
-        return DbPosProduct.getProductById(productId, branchId, companyId);
+    Product productById(@PathVariable int branchId, @PathVariable int companyId, @PathVariable int productId) {
+        return dbPosProduct.getProductById(productId, branchId, companyId);
     }
 
     @PostMapping("{companyId}/{branchId}/saveProduct")
     ResponseEntity<Object> newProduct(@RequestBody Product newProProduct, @PathVariable String branchId, @PathVariable int companyId) {
-        return DbPosProduct.AddProduct(newProProduct, branchId, companyId);
+        return dbPosProduct.AddProduct(newProProduct, branchId, companyId);
     }
 
     //--------------editProduct------------------
     @PutMapping("{companyId}/{branchId}/editProduct")
     ResponseEntity<Object> EditProduct(@RequestBody Product editProduct, @PathVariable String branchId, @PathVariable int companyId) {
         System.out.println("In Edit Product");
-        return DbPosProduct.EditProduct(editProduct, branchId, companyId);
+        return dbPosProduct.EditProduct(editProduct, branchId, companyId);
     }
+
     //--Search ProdsNames
     @GetMapping("/PN/{companyId}/{branchId}/{text}")
-    ResponseEntity<Object> productNames( @PathVariable int branchId, @PathVariable int companyId , @PathVariable String text) {
-        return DbPosProduct.getProductNames(text, branchId, companyId);
+    ResponseEntity<Object> productNames(@PathVariable int branchId, @PathVariable int companyId, @PathVariable String text) {
+        return dbPosProduct.getProductNames(text, branchId, companyId);
     }
 
 

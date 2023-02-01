@@ -9,6 +9,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.Model.DamagedItem;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +24,12 @@ import java.util.Map;
 @CrossOrigin("*")
 public class DamagedItemController {
 
+    DbPosDamagedList dbPosDamagedList;
+@Autowired
+    public DamagedItemController(DbPosDamagedList dbPosDamagedList) {
+        this.dbPosDamagedList = dbPosDamagedList;
+    }
+
     @RequestMapping(value = "{companyName}/{branchId}/all", method = RequestMethod.GET)
     @ResponseBody
     public ArrayList<DamagedItem> getDamagesItem(
@@ -32,7 +39,7 @@ public class DamagedItemController {
     ) {
 
 
-        return DbPosDamagedList.getDamagedList(branchId, companyName);
+        return dbPosDamagedList.getDamagedList(branchId, companyName);
     }
 
 
@@ -45,7 +52,7 @@ public class DamagedItemController {
     ) {
 
 
-        String answer = DbPosDamagedList.AddDamagedItem(branchId, companyName, damagedItem);
+        String answer = dbPosDamagedList.AddDamagedItem(branchId, companyName, damagedItem);
 
         HashMap<String, String> res = new HashMap<>();
         res.put("Message", answer);

@@ -10,6 +10,9 @@ public class ConnectionPostgres {
     public static Connection getConnection() throws Exception {
 
         //https://api.elephantsql.com/console/aac0e90f-f846-4358-aac4-2f877184e385/details#   ---- > Elphent Site
+        // netlify pricing 19$ month
+        // https://www.pgsclusters.com/ 5$ month
+
 
         try {
             if (!ValueinsoftBackendApplication.goOnline) {
@@ -28,13 +31,10 @@ public class ConnectionPostgres {
                 Connection conn = DriverManager.getConnection(url, "qnnzxbni", "y7H5olBbx2Vbs0BDWC3jCKC23ffjWhHR");
                 return conn;
             }
-        }catch (Exception e)
-        {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             return null;
         }
-
-
 
 
     }

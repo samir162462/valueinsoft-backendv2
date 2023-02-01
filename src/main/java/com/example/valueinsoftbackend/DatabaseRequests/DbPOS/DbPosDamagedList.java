@@ -5,34 +5,53 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.DamagedItem;
+import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Supplier;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Service;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 
+@Service
 public class DbPosDamagedList {
 
-    //todo Get
-    public static ArrayList<DamagedItem> getDamagedList(int branchId,String companyName) {
-        ArrayList<DamagedItem> damagedItems = new ArrayList<>();
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\",  \"quantity\"\n" +
-                    "\tFROM c_"+companyName+".\"DamagedList\" where \"branchId\"  ="+branchId+" ;";
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
+    JdbcTemplate jdbcTemplate;
 
-            while (rs.next()) {
-                DamagedItem damagedItem = new DamagedItem(rs.getInt(1), rs.getInt(2), rs.getString(3), rs.getTimestamp(4), rs.getString(5), rs.getString(6),rs.getString(7),rs.getInt(8),rs.getBoolean(9),rs.getInt(10),rs.getInt(11));
-                damagedItems.add(damagedItem);
-            }
-            rs.close();
-            st.close();
-            conn.close();
+    @Autowired
+    public DbPosDamagedList(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public class DbPosDamagedListMapper implements RowMapper<DamagedItem> {
+        @Override
+        public DamagedItem mapRow(ResultSet rs, int rowNum) throws SQLException {
+            DamagedItem damagedItem = new DamagedItem(
+                    rs.getInt("DId"),
+                    rs.getInt("ProductId"),
+                    rs.getString("ProductName"),
+                    rs.getTimestamp("Time"),
+                    rs.getString("Reason"),
+                    rs.getString("Damaged by"),
+                    rs.getString("Cashier user"),
+                    rs.getInt("AmountTP"),
+                    rs.getBoolean("Paid"),
+                    rs.getInt("branchId"),
+                    rs.getInt("quantity")
+            );
+            return damagedItem;
+        }
+    }
+
+    public  ArrayList<DamagedItem> getDamagedList(int branchId,String companyName) {
+        ArrayList<DamagedItem> damagedItems ;
+        String query = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\",  \"quantity\"\n" +
+                "\tFROM c_"+companyName+".\"DamagedList\" where \"branchId\"  ="+branchId+" ;";
+        try {
+            damagedItems = (ArrayList<DamagedItem>) jdbcTemplate.query(query, new Object[] {}, new DbPosDamagedListMapper());
             return damagedItems;
         } catch (Exception e) {
             System.out.println("err in get DamagedList : " + e.getMessage());
@@ -41,28 +60,23 @@ public class DbPosDamagedList {
     }
 
 
-    static public String AddDamagedItem(int branchId,String companyName,DamagedItem damagedItem) {
+     public String AddDamagedItem(int branchId,String companyName,DamagedItem damagedItem) {
+        String query = "INSERT INTO c_"+companyName+".\"DamagedList\"(\n" +
+                " \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\" ,  \"quantity\")\n" +
+                "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?,?);";
         try {
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO c_"+companyName+".\"DamagedList\"(\n" +
-                    " \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\" ,  \"quantity\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?,?);");
-
-            stmt.setInt(1, damagedItem.getProductId());
-            stmt.setString(2, damagedItem.getProductName());
-            stmt.setTimestamp(3, damagedItem.getTime());
-            stmt.setString(4, damagedItem.getReason());
-            stmt.setString(5, damagedItem.getDamagedBy());
-            stmt.setString(6, damagedItem.getCashierUser());
-            stmt.setInt(7, damagedItem.getAmountTP());
-            stmt.setBoolean(8, damagedItem.isPaid());
-            stmt.setInt(9, damagedItem.getBranchId());
-            stmt.setInt(10, damagedItem.getQuantity());
-            System.out.println(stmt.toString());
-            int i = stmt.executeUpdate();
-            System.out.println(i + " AddDamagedItem added records inserted");
-            stmt.close();
-            conn.close();
+            jdbcTemplate.update(query,
+                    damagedItem.getProductId(),
+                    damagedItem.getProductName(),
+                    damagedItem.getTime(),
+                    damagedItem.getReason(),
+                    damagedItem.getDamagedBy(),
+                    damagedItem.getCashierUser(),
+                    damagedItem.getAmountTP(),
+                    damagedItem.isPaid(),
+                    damagedItem.getBranchId(),
+                    damagedItem.getQuantity()
+            );
         } catch (Exception e) {
             System.out.println(e.getMessage());
             return "the DamagedItem not added by error!";
