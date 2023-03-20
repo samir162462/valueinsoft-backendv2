@@ -21,7 +21,7 @@ public class PageHandler {
 
 
     public String handlePageSqlQuery(){
-        return  " order by \""+orderString+"\" offset (("+pageNumber+"-1)*10) limit "+maxPageSizeNumber+" ";
+        return  " order by \""+orderString+"\" offset (("+(pageNumber==0 ? 1 : pageNumber)+"-1)*10) limit "+maxPageSizeNumber+" ";
 
     }
 }
