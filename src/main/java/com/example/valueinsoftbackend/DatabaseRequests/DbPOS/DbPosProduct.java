@@ -104,6 +104,7 @@ public class DbPosProduct {
                     String s2 = " And \"productName\" LIKE '%" + text[i] + "%'";
                     qy.append(s2);
                 }
+
                 count = countSQL(qy.toString());
                 qy.append(pageHandler.handlePageSqlQuery() + " ;");
             }
