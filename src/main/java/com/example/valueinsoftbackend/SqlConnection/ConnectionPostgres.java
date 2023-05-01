@@ -9,26 +9,25 @@ public class ConnectionPostgres {
 
     public static Connection getConnection() throws Exception {
 
-        //https://api.elephantsql.com/console/aac0e90f-f846-4358-aac4-2f877184e385/details#   ---- > Elphent Site
         // netlify pricing 19$ month
         // https://www.pgsclusters.com/ 5$ month
 
 
         try {
-            if (!ValueinsoftBackendApplication.goOnline) {
+            if (ValueinsoftBackendApplication.goOnline) {
+                //Online Database Heroku
+                ValueinsoftBackendApplication.DatabaseOwner = "postgresAdmin";
+                Class.forName("org.postgresql.Driver");
+                String url = "jdbc:postgresql://postgresql-123969-0.cloudclusters.net:18997/VLS";
+
+                Connection conn = DriverManager.getConnection(url, "postgresAdmin", "Sa123456789");
+                return conn;
+            } else {
                 //Local Database
                 ValueinsoftBackendApplication.DatabaseOwner = "postgres";
                 Class.forName("org.postgresql.Driver");
                 String url = "jdbc:postgresql://localhost:5432/localvls";
                 Connection conn = DriverManager.getConnection(url, "postgres", "0000");
-                return conn;
-            } else {
-                //Online Database Heroku
-                ValueinsoftBackendApplication.DatabaseOwner = "qnnzxbni";
-                Class.forName("org.postgresql.Driver");
-                String url = "jdbc:postgresql://kandula.db.elephantsql.com:5432/qnnzxbni";
-
-                Connection conn = DriverManager.getConnection(url, "qnnzxbni", "y7H5olBbx2Vbs0BDWC3jCKC23ffjWhHR");
                 return conn;
             }
         } catch (Exception e) {
