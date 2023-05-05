@@ -16,11 +16,11 @@ public class ConnectionPostgres {
         try {
             if (ValueinsoftBackendApplication.goOnline) {
                 //Online Database Heroku
-                ValueinsoftBackendApplication.DatabaseOwner = "postgresAdmin";
+                ValueinsoftBackendApplication.DatabaseOwner = "postgres";
                 Class.forName("org.postgresql.Driver");
-                String url = "jdbc:postgresql://postgresql-123969-0.cloudclusters.net:18997/VLS";
+                String url = "jdbc:postgresql://ec2-3-68-75-162.eu-central-1.compute.amazonaws.com:5432/postgres";
 
-                Connection conn = DriverManager.getConnection(url, "postgresAdmin", "Sa123456789");
+                Connection conn = DriverManager.getConnection(url, "postgres", "0000");
                 return conn;
             } else {
                 //Local Database
