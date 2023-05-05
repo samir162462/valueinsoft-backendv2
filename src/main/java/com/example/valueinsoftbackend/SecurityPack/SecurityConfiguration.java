@@ -79,7 +79,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
         configuration.setAllowedHeaders(new ArrayList<>(
                 Arrays.asList("Authorization", "Cache-Control", "Content-Type")));
         final UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        source.registerCorsConfiguration("/*", configuration);
         return source;
     }
 
