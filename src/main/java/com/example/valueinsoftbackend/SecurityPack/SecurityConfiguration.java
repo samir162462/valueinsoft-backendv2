@@ -67,18 +67,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
     public CorsConfigurationSource corsConfigurationSource() {
         final CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(new ArrayList<>(
-                Arrays.asList("ec2-3-68-75-162.eu-central-1.compute.amazonaws.com:8080/"
-                        ,"ec2-3-68-75-162.eu-central-1.compute.amazonaws.com:8080"
-                        ,"ec2-3-68-75-162.eu-central-1.compute.amazonaws.com:8080/"
-                        ,"https://ec2-3-68-75-162.eu-central-1.compute.amazonaws.com:8080"
-                        ,"https://ec2-3-68-75-162.eu-central-1.compute.amazonaws.com:8080/"
-                        ,"https://ec2-3-68-75-162.eu-central-1.compute.amazonaws.com"
-                        ,"https://ec2-3-68-75-162.eu-central-1.compute.amazonaws.com/"
-                        ,"ec2-3-68-75-162.eu-central-1.compute.amazonaws.com"
-                        ,"ec2-3-68-75-162.eu-central-1.compute.amazonaws.com"
-                        ,"http://localhost:3000"
-                      //  , "*"
-                )));
+                Arrays.asList("https://dierlo.com/","https://dierlo.com","valueinsoft-backv2.herokuapp.com/","https://valueinsoft-backv2.herokuapp.com","http://localhost:3000","https://valueinsoft-backv2.herokuapp.com/authenticate","valueinsoft-backv2","*")));
         configuration.setAllowedMethods(new ArrayList<>(
                 Arrays.asList("GET", "POST", "PUT", "DELETE", "PUT","OPTIONS","PATCH", "DELETE")));
         // setAllowCredentials(true) is important, otherwise:
