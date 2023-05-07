@@ -45,9 +45,9 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
     protected void configure(HttpSecurity http) throws Exception{
         http.csrf().disable();
 
-        http.authorizeRequests().antMatchers("/authenticate").permitAll().and().sessionManagement().
+        http.cors().and().authorizeRequests().antMatchers("/authenticate").permitAll().and().sessionManagement().
                 sessionCreationPolicy(SessionCreationPolicy.STATELESS);
-        http.cors().and().authorizeRequests().antMatchers().permitAll().antMatchers("/authenticate").permitAll().antMatchers("/users/saveNewUser").permitAll().antMatchers("/Company/getCompany").permitAll()
+        http.authorizeRequests().antMatchers().permitAll().antMatchers("/authenticate").permitAll().antMatchers("/users/saveNewUser").permitAll().antMatchers("/Company/getCompany").permitAll()
                 .antMatchers("/Company/getCompanyById").permitAll()
                 .antMatchers("/OP/TPC").permitAll()
                 .antMatchers("/users/checkUserEmail/**").permitAll()
