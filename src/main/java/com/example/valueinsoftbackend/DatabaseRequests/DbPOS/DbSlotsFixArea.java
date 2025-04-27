@@ -1,7 +1,171 @@
 /*
  * Copyright (c) Samir Filifl
  */
+/*
+ * Copyright (c) Samir Filifl
+ */
 
+package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
+
+import com.example.valueinsoftbackend.Model.Slots.SlotsFixArea;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+
+@Repository
+public class DbSlotsFixArea {
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private static JsonNode stringToJSONObject(String jsonString) throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.readTree(jsonString);
+    }
+
+    public ResponseEntity<Object> getFixAreaSlot(int branchId, String companyName, int prevMonth) {
+        try {
+            String sql;
+            if (prevMonth > 0) {
+                sql = "SELECT \"faId\", \"fixSlot\", \"clientId\", \"dateIn\", \"dateFinished\", \"phoneName\", " +
+                        "problem, show, \"userName_Recived\", status, \"desc\", fees::money::numeric::float8, " +
+                        "json_build_object('clientName', \"clientName\", 'clientPhone', \"clientPhone\") AS data " +
+                        "FROM c_" + companyName + ".\"FixArea\" " +
+                        "LEFT JOIN c_" + companyName + ".\"Client\" ON \"clientId\" = c_id " +
+                        "WHERE c_" + companyName + ".\"FixArea\".\"branchId\" = ? " +
+                        "AND \"dateIn\" >= date_trunc('month', current_date - interval '" + prevMonth + " month') ;" ;
+                        //+ "AND \"dateIn\" < date_trunc('month', current_date);";
+
+            } else {
+                sql = "SELECT \"faId\", \"fixSlot\", \"clientId\", \"dateIn\", \"dateFinished\", \"phoneName\", " +
+                        "problem, show, \"userName_Recived\", status, \"desc\", fees::money::numeric::float8, " +
+                        "json_build_object('clientName', \"clientName\", 'clientPhone', \"clientPhone\") AS data " +
+                        "FROM c_" + companyName + ".\"FixArea\" " +
+                        "LEFT JOIN c_" + companyName + ".\"Client\" ON \"clientId\" = c_id " +
+                        "WHERE c_" + companyName + ".\"FixArea\".\"branchId\" = ? " +
+                        "AND c_" + companyName + ".\"FixArea\".show = 'true';";
+            }
+
+            System.out.println(sql);
+            List<SlotsFixArea> slotsFixAreas = jdbcTemplate.query(sql, new Object[]{branchId}, new RowMapper<SlotsFixArea>() {
+                @Override
+                public SlotsFixArea mapRow(ResultSet rs, int rowNum) throws SQLException {
+                    try {
+                        SlotsFixArea slot = new SlotsFixArea(
+                                rs.getInt("faId"),
+                                rs.getInt("fixSlot"),
+                                rs.getInt("clientId"),
+                                rs.getDate("dateIn"),
+                                rs.getDate("dateFinished"),
+                                rs.getString("phoneName"),
+                                rs.getString("problem"),
+                                rs.getBoolean("show"),
+                                rs.getString("userName_Recived"),
+                                rs.getString("status"),
+                                rs.getString("desc"),
+                                branchId,
+                                rs.getBigDecimal("fees")
+                        );
+                        try {
+                            JsonNode jsonNode = stringToJSONObject(rs.getString("data"));
+                            System.out.println(jsonNode.toString());
+                            slot.setClientData(jsonNode);
+                        } catch (Exception ignored) {}
+                        return slot;
+                    } catch (Exception ex) {
+                        throw new SQLException("Error mapping row", ex);
+                    }
+                }
+            });
+
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(slotsFixAreas);
+
+        } catch (Exception e) {
+            System.out.println("Error in getFixAreaSlot: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body(null);
+        }
+    }
+
+    public ResponseEntity<Object> addFixAreaSlot(int branchId, String companyName, SlotsFixArea slotsFixArea) {
+        try {
+            String sql = "INSERT INTO c_" + companyName + ".\"FixArea\"(" +
+                    "\"fixSlot\", \"clientId\", \"dateIn\", \"dateFinished\", \"phoneName\", problem, show, \"userName_Recived\", status, \"desc\", \"branchId\") " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+
+            int rows = jdbcTemplate.update(sql,
+                    slotsFixArea.getFixSlot(),
+                    slotsFixArea.getClientId(),
+                    slotsFixArea.getDateIn(),
+                    slotsFixArea.getDateFinished(),
+                    slotsFixArea.getPhoneName(),
+                    slotsFixArea.getProblem(),
+                    slotsFixArea.isShow(),
+                    slotsFixArea.getUserName_Recived(),
+                    slotsFixArea.getStatus(),
+                    slotsFixArea.getDesc(),
+                    slotsFixArea.getBranchId()
+            );
+
+            System.out.println(rows + " records inserted");
+
+            return ResponseEntity.status(HttpStatus.CREATED).body("The Fix Slot Added (success)");
+
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body("The Fix Slot Not Added (Error): " + e.getMessage());
+        }
+    }
+
+    public boolean deleteDamagedItem(int branchId, String companyName, int dId) {
+        try {
+            String sql = "DELETE FROM public.\"DamagedList\" WHERE \"DId\" = ?;";
+            int rows = jdbcTemplate.update(sql, dId);
+            return rows > 0;
+        } catch (Exception e) {
+            System.out.println("Error in deleteDamagedItem: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public ResponseEntity<Object> updateFixAreaSlot(String companyName, SlotsFixArea slotsFixArea) {
+        try {
+            String sql = "UPDATE C_" + companyName + ".\"FixArea\" " +
+                    "SET \"dateFinished\"=?, problem=?, show=?, status=?, \"desc\"=?, fees=? " +
+                    "WHERE \"faId\"=? AND \"branchId\"=?;";
+
+            int rows = jdbcTemplate.update(sql,
+                    slotsFixArea.getDateFinished(),
+                    slotsFixArea.getProblem(),
+                    slotsFixArea.isShow(),
+                    slotsFixArea.getStatus(),
+                    slotsFixArea.getDesc(),
+                    slotsFixArea.getFees(),
+                    slotsFixArea.getFaId(),
+                    slotsFixArea.getBranchId()
+            );
+
+            System.out.println(rows + " Fix Slot updated");
+
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body("The Fix Slot Updated (success)");
+
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return ResponseEntity.status(HttpStatus.CONFLICT).body("The Fix Slot Not Updated (Failed)");
+        }
+    }
+}
+
+
+/*
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.Slots.SlotsFixArea;
@@ -10,6 +174,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Repository;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -17,6 +182,8 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 
+
+@Repository
 public class DbSlotsFixArea {
 
     public static JsonNode stringToJSONObject(String jsonString) throws Exception {
@@ -160,3 +327,4 @@ public class DbSlotsFixArea {
 
     }
 }
+*/

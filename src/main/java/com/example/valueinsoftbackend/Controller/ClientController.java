@@ -1,11 +1,8 @@
-package com.example.valueinsoftbackend.Controller;
+/*package com.example.valueinsoftbackend.Controller;
 
 
-import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.DatabaseRequests.DbClient;
-import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.Model.Client;
-import com.example.valueinsoftbackend.Model.Company;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -100,5 +97,98 @@ public class ClientController {
 
     }
 
+
+}
+*/
+
+package com.example.valueinsoftbackend.Controller;
+
+
+import com.example.valueinsoftbackend.DatabaseRequests.DbClient;
+import com.example.valueinsoftbackend.Model.Client;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/Client")
+@CrossOrigin("*")
+public class ClientController {
+
+    private final DbClient dbClient;
+
+    @Autowired
+    public ClientController(DbClient dbClient) {
+        this.dbClient = dbClient;
+    }
+
+    @GetMapping(path = "/{companyId}/getClientByPhone/{phone}/{bid}")
+    public ResponseEntity<ArrayList<Client>> getClientByPhone(
+            @PathVariable("phone") String phone,
+            @PathVariable("companyId") int companyId,
+            @PathVariable("bid") int bid
+    ) {
+        return dbClient.getClientByPhoneNumberOrName(companyId, phone, null, null, null, bid);
+    }
+
+    @GetMapping(path = "/{companyId}/getLatestClients/{max}/{bid}")
+    public ArrayList<Client> getLastClients(
+            @PathVariable("max") int max,
+            @PathVariable("companyId") int companyId,
+            @PathVariable("bid") int bid
+    ) {
+        return dbClient.getLatestClients(companyId, max, bid);
+    }
+
+    @GetMapping(path = "/{companyId}/getClientsByName/{name}/{bid}")
+    public ResponseEntity<ArrayList<Client>> getClientsByName(
+            @PathVariable("name") String name,
+            @PathVariable("companyId") int companyId,
+            @PathVariable("bid") int bid
+    ) {
+        return dbClient.getClientByPhoneNumberOrName(companyId, null, name, null, null, bid);
+    }
+
+    @GetMapping(path = "/{companyId}/getClientsById/{cid}/{bid}")
+    public Client getClientsById(
+            @PathVariable("cid") int clientId,
+            @PathVariable("companyId") int companyId,
+            @PathVariable("bid") int bid
+    ) {
+        return dbClient.getClientById(companyId, bid, clientId);
+    }
+
+    @GetMapping(path = "/{companyId}/{bid}/getCurrentYearClients")
+    public HashMap<String, ArrayList<String>> getClientsByYear(
+            @PathVariable("companyId") int companyId,
+            @PathVariable("bid") int bid
+    ) {
+        return dbClient.getClientsByYear(companyId, bid);
+    }
+
+    @PostMapping("/{companyId}/AddClient")
+    public ResponseEntity<Object> newUser(@RequestBody Map<String, Object> body,
+                                          @PathVariable("companyId") int companyId) {
+        String message = "";
+        String clientName = body.get("clientName").toString();
+        String clientPhone = body.get("clientPhone").toString();
+        String gender = body.get("gender").toString();
+        String description = body.get("desc").toString();
+        int branchId = (int) body.get("branchId");
+
+        try {
+            message = dbClient.addClient(companyId, clientName, clientPhone, branchId, gender, description);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+
+        String found = message.contains("exist") || message.contains("Taken") ? "true" : "false";
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body("{\"title\" : \"" + message + "\", \"found\" : \"" + found + "\" }");
+    }
 
 }

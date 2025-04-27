@@ -5,8 +5,10 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -19,12 +21,24 @@ import java.util.Map;
 public class BranchController {
 
 
+    private final DbCompany dbCompany;
+    private final DbBranch dbBranch;
+
+
+    @Autowired
+    public BranchController(DbCompany dbCompany, DbBranch dbBranch) {
+        this.dbCompany = dbCompany;
+        this.dbBranch = dbBranch;
+    }
+
+
+
     @RequestMapping(value = "/getBranchById", method = RequestMethod.GET)
     @ResponseBody
     public Company getCompanyById(
             @RequestParam("id") String id
     ) {
-        return DbCompany.getCompanyById(id);
+        return dbCompany.getCompanyById(id);
     }
 
     @RequestMapping(value = "{id}/getBranchesByCompanyId", method = RequestMethod.GET)
@@ -32,7 +46,7 @@ public class BranchController {
     public ArrayList<Branch> getBranchesByCompanyId(
             @PathVariable("id") int id
     ) {
-        return DbBranch.getBranchByCompanyId(id);
+        return (ArrayList<Branch>) dbBranch.getBranchByCompanyId(id);
     }
 
 
@@ -45,8 +59,8 @@ public class BranchController {
 
         try {
 
-            DbBranch.AddBranch(branchName, branchLocation, companyId);
-            branchId = DbBranch.getBranchIdByCompanyNameAndBranchName(companyId, branchName);
+            dbBranch.addBranch(branchName, branchLocation, companyId);
+            branchId = dbBranch.getBranchIdByCompanyNameAndBranchName(companyId, branchName);
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }

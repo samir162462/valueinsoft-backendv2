@@ -5,16 +5,37 @@ import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
 
 import java.sql.*;
 import java.util.ArrayList;
 
+
+@Repository
 public class DbCompany {
 
+    private final JdbcTemplate jdbcTemplate;
+    private final DbBranch dbBranch;
+    private final DbUsers dbUsers;
 
-    public static Company getCompanyByOwnerId(String id) {
+
+    @Autowired
+
+    public DbCompany(JdbcTemplate jdbcTemplate, DbBranch dbBranch, DbUsers dbUsers) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.dbBranch = dbBranch;
+        this.dbUsers = dbUsers;
+    }
+
+
+
+
+
+    public  Company getCompanyByOwnerId(String id) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
@@ -40,7 +61,7 @@ public class DbCompany {
             }
 
 
-            bsList = DbBranch.getBranchByCompanyId(company.getCompanyId());
+            bsList = (ArrayList<Branch>) dbBranch.getBranchByCompanyId(company.getCompanyId());
             company.setBranchList(bsList);
             rs.close();
             st.close();
@@ -55,7 +76,7 @@ public class DbCompany {
 
     }
 
-    public static Company getCompanyAndBranchesByUserName(String id) {
+    public  Company getCompanyAndBranchesByUserName(String id) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
@@ -81,7 +102,7 @@ public class DbCompany {
             }
             try {
                 System.out.println("companyId: " + companyId);
-                bsList = DbBranch.getBranchByCompanyId(companyId);
+                bsList = (ArrayList<Branch>) dbBranch.getBranchByCompanyId(companyId);
                 System.out.println(bsList.toString());
                 company.setCompanyId(companyId);
                 ArrayList<Branch> branchArrayList = new ArrayList<>();
@@ -140,7 +161,7 @@ public class DbCompany {
 
     }
 
-    public static Company getCompanyById(String id) {
+    public  Company getCompanyById(String id) {
 
         try {
             Connection conn = ConnectionPostgres.getConnection();
@@ -169,7 +190,7 @@ public class DbCompany {
 
 
             try {
-                bsList = DbBranch.getBranchByCompanyId(company.getCompanyId());
+                bsList = (ArrayList<Branch>) dbBranch.getBranchByCompanyId(company.getCompanyId());
                 company.setBranchList(bsList);
             } catch (Exception e) {
                 System.out.println(e.getMessage());
@@ -221,11 +242,11 @@ public class DbCompany {
         }
     }
 
-    static public String AddCompany(String companyName, String branchName, String plan, int price, String username, String comImg, String currency) {
+     public String AddCompany(String companyName, String branchName, String plan, int price, String username, String comImg, String currency) {
         try {
 
             int ownerId = 0;
-            User u1 = DbUsers.getUser(username);
+            User u1 = dbUsers.getUser(username);
             ownerId = u1.getUserId();
             if (checkExistOwnerId(ownerId)) {
                 return "The Owner already has Company!";
@@ -255,9 +276,9 @@ public class DbCompany {
                 if (generatedKeys.next()) {
                     id = generatedKeys.getInt(1);
                     CreateCompanySchema(id);
-                    DbUsers.UpdateRole("public", ownerId, "Owner");
+                    dbUsers.updateRole("public", ownerId, "Owner");
                     if (branchName.length() > 2) {
-                        DbBranch.AddBranch(branchName, "Egypt", id);
+                        dbBranch.addBranch(branchName, "Egypt", id);
 
                     }
                 } else {

@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.SecurityPack;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Role;
 import org.springframework.security.core.GrantedAuthority;
@@ -17,6 +18,13 @@ import java.util.*;
 @Service
 public class MyUserDetailsServices implements UserDetailsService {
 
+
+    private final DbUsers dbUsers;
+
+    @Autowired
+    public MyUserDetailsServices(DbUsers dbUsers) {
+        this.dbUsers = dbUsers;
+    }
 
     public Collection<? extends GrantedAuthority> getAuthorities(com.example.valueinsoftbackend.Model.User user) {
         Set<String> roles = new HashSet<>() ;
@@ -37,10 +45,10 @@ public class MyUserDetailsServices implements UserDetailsService {
         System.out.println("loadUserByUsername: "+userName);
         com.example.valueinsoftbackend.Model.User user = null;
         if (userName.contains(" : ")) {
-            user = DbUsers.getUser(userName.split(" : ")[0]);
+            user = dbUsers.getUser(userName.split(" : ")[0]);
         }else
         {
-            user = DbUsers.getUser(userName);
+            user = dbUsers.getUser(userName);
         }
         // System.out.println();
         //System.out.println(user.getUserName());

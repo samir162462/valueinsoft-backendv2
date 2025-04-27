@@ -20,7 +20,7 @@ import org.springframework.util.StopWatch;
 public class LoggingAspect {
     private static final Logger LOGGER = LogManager.getLogger(LoggingAspect.class);
 
-    @Around("execution(* com.example.valueinsoftbackend.ValueinsoftBackendApplication.*(..)))")
+    @Around("execution(* com.example.*.*(..))")
 
     public Object profileAllMethods(ProceedingJoinPoint proceedingJoinPoint) throws Throwable
     {

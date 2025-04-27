@@ -5,13 +5,41 @@ import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Component;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.List;
 
+
+@Component
 public class DbBranch {
 
 
+    private final JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    public DbBranch(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    private static final RowMapper<Branch> branchRowMapper = new RowMapper<>() {
+        @Override
+        public Branch mapRow(ResultSet rs, int rowNum) throws SQLException {
+            return new Branch(
+                    rs.getInt("branchId"),
+                    rs.getInt("companyId"),
+                    rs.getString("branchName"),
+                    rs.getString("branchLocation"),
+                    rs.getTimestamp("branchEstTime")
+            );
+        }
+    };
+
+/*
     public static ArrayList<Branch> getBranchByCompanyId(int id) {
         ArrayList<Branch> bsList = new ArrayList<>();
 
@@ -27,6 +55,7 @@ public class DbBranch {
 
             while (rs.next()) {
                 System.out.println("add  connected to company " + rs.getString(1));
+
 
 
                 Branch branch = new Branch(rs.getInt(1), rs.getInt(4), rs.getString(2), rs.getString(3), rs.getTimestamp(5));
@@ -45,6 +74,18 @@ public class DbBranch {
         return null;
 
     }
+
+
+ */
+    public List<Branch> getBranchByCompanyId(int companyId) {
+        String sql = "SELECT \"branchId\", \"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\" " +
+                "FROM public.\"Branch\" WHERE \"companyId\" = ?";
+        return jdbcTemplate.query(sql, branchRowMapper, companyId);
+    }
+
+
+
+/*
     public static ArrayList<Branch> getAllBranches() {
         ArrayList<Branch> bsList = new ArrayList<>();
 
@@ -399,5 +440,190 @@ public class DbBranch {
         }
         return true;
     }
+*/
+public List<Branch> getAllBranches() {
+    String sql = "SELECT \"branchId\", \"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\" " +
+            "FROM public.\"Branch\"";
+    return jdbcTemplate.query(sql, branchRowMapper);
+}
+
+    public int getBranchIdByCompanyNameAndBranchName(int companyId, String branchName) {
+        String sql = "SELECT \"branchId\" FROM public.\"Branch\" WHERE \"companyId\" = ? AND \"branchName\" = ?";
+        try {
+            return jdbcTemplate.queryForObject(sql, Integer.class, companyId, branchName);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private boolean checkExistBranchName(String branchName) {
+        String sql = "SELECT COUNT(*) FROM public.\"Branch\" WHERE \"branchName\" = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, branchName);
+        return count != null && count > 0;
+    }
+
+    public  String addBranch(String branchName, String branchLocation, int companyId) {
+        if (checkExistBranchName(branchName)) {
+            return "The Branch Name existed!";
+        }
+
+        String sql = "INSERT INTO public.\"Branch\" (\"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\") " +
+                "VALUES (?, ?, ?, ?)";
+        int result = jdbcTemplate.update(sql, branchName, branchLocation, companyId, new Timestamp(System.currentTimeMillis()));
+
+        if (result > 0) {
+            int branchId = getBranchIdByCompanyNameAndBranchName(companyId, branchName);
+            CreatePosProductTable(branchId, companyId);
+            CreateOrderTable(branchId, companyId);
+            CreateOrderDetailsTable(branchId, companyId);
+            CreateSupplierTable(branchId, companyId);
+            CreateTransactionTable(branchId, companyId);
+            return "The Branch added!";
+        } else {
+            return "The branch not added due to error!";
+        }
+    }
+
+    public boolean deleteBranch(int branchId, String companyId) {
+        String sql = "BEGIN; " +
+                "DELETE FROM public.\"Branch\" WHERE \"branchId\" = ?; " +
+                "DROP TABLE IF EXISTS " + companyId + ".\"PosOrderDetail_" + branchId + "\" CASCADE; " +
+                "DROP TABLE IF EXISTS " + companyId + ".\"PosOrder_" + branchId + "\" CASCADE; " +
+                "DROP TABLE IF EXISTS " + companyId + ".\"PosProduct_" + branchId + "\" CASCADE; " +
+                "DROP TABLE IF EXISTS " + companyId + ".\"InventoryTransactions_" + branchId + "\" CASCADE; " +
+                "DROP TABLE IF EXISTS " + companyId + ".\"supplier_" + branchId + "\" CASCADE; " +
+                "COMMIT;";
+
+        try {
+            jdbcTemplate.execute(sql);
+            return true;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+
+    // --- Schema/Table Creation Methods (still using JdbcTemplate) ---
+    public boolean CreatePosProductTable(int branchId, int companyId) {
+        String sql = "CREATE TABLE IF NOT EXISTS C_" + companyId + ".\"PosProduct_" + branchId + "\" (" +
+                "    \"productId\" SERIAL PRIMARY KEY," +
+                "    \"productName\" VARCHAR(30)," +
+                "    \"buyingDay\" TIMESTAMP," +
+                "    \"activationPeriod\" INTEGER," +
+                "    \"rPrice\" INTEGER," +
+                "    \"lPrice\" INTEGER," +
+                "    \"bPrice\" INTEGER," +
+                "    \"companyName\" VARCHAR(30)," +
+                "    \"type\" VARCHAR(15)," +
+                "    \"ownerName\" VARCHAR(20)," +
+                "    \"serial\" VARCHAR(35)," +
+                "    \"desc\" VARCHAR(60)," +
+                "    \"batteryLife\" INTEGER," +
+                "    \"ownerPhone\" VARCHAR(14)," +
+                "    \"ownerNI\" VARCHAR(18)," +
+                "    \"quantity\" INTEGER," +
+                "    \"pState\" VARCHAR(10)," +
+                "    \"supplierId\" INTEGER," +
+                "    \"major\" VARCHAR(30)," +
+                "    \"imgFile\" TEXT" +
+                ")";
+        try {
+            jdbcTemplate.execute(sql);
+            return true;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean CreateOrderTable(int branchId, int companyId) {
+        String sql = "CREATE TABLE IF NOT EXISTS C_" + companyId + ".\"PosOrder_" + branchId + "\" (" +
+                "    \"orderId\" SERIAL PRIMARY KEY," +
+                "    \"orderTime\" TIMESTAMP NOT NULL," +
+                "    \"clientName\" VARCHAR," +
+                "    \"orderType\" VARCHAR(10)," +
+                "    \"orderDiscount\" INTEGER," +
+                "    \"orderTotal\" INTEGER," +
+                "    \"salesUser\" VARCHAR," +
+                "    \"clientId\" INTEGER," +
+                "    \"orderIncome\" INTEGER," +
+                "    \"orderBouncedBack\" INTEGER" +
+                ")";
+        try {
+            jdbcTemplate.execute(sql);
+            return true;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean CreateSupplierTable(int branchId, int companyId) {
+        String sql = "CREATE TABLE IF NOT EXISTS C_" + companyId + ".\"supplier_" + branchId + "\" (" +
+                "    \"supplierId\" SERIAL PRIMARY KEY," +
+                "    \"SupplierName\" VARCHAR NOT NULL," +
+                "    \"supplierPhone1\" VARCHAR(14)," +
+                "    \"supplierPhone2\" VARCHAR(14)," +
+                "    \"SupplierLocation\" VARCHAR," +
+                "    \"suplierMajor\" VARCHAR(20)," +
+                "    \"supplierRemainig\" INTEGER DEFAULT 0," +
+                "    \"supplierTotalSales\" INTEGER DEFAULT 0" +
+                ")";
+        try {
+            jdbcTemplate.execute(sql);
+            return true;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean CreateTransactionTable(int branchId, int companyId) {
+        String sql = "CREATE TABLE IF NOT EXISTS C_" + companyId + ".\"InventoryTransactions_" + branchId + "\" (" +
+                "    \"transId\" SERIAL PRIMARY KEY," +
+                "    \"productId\" INTEGER," +
+                "    \"userName\" VARCHAR(15)," +
+                "    \"supplierId\" INTEGER," +
+                "    \"transactionType\" VARCHAR(15)," +
+                "    \"NumItems\" INTEGER," +
+                "    \"transTotal\" INTEGER," +
+                "    \"payType\" VARCHAR," +
+                "    \"time\" TIMESTAMP," +
+                "    \"RemainingAmount\" INTEGER," +
+                "    FOREIGN KEY (\"productId\") REFERENCES C_" + companyId + ".\"PosProduct_" + branchId + "\" (\"productId\")" +
+                ")";
+        try {
+            jdbcTemplate.execute(sql);
+            return true;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean CreateOrderDetailsTable(int branchId, int companyId) {
+        String sql = "CREATE TABLE IF NOT EXISTS C_" + companyId + ".\"PosOrderDetail_" + branchId + "\" (" +
+                "    \"orderDetailsId\" SERIAL PRIMARY KEY," +
+                "    \"itemId\" INTEGER," +
+                "    \"itemName\" VARCHAR," +
+                "    \"quantity\" INTEGER," +
+                "    \"price\" INTEGER," +
+                "    \"total\" INTEGER," +
+                "    \"orderId\" INTEGER," +
+                "    \"productId\" INTEGER," +
+                "    \"bouncedBack\" INTEGER," +
+                "    FOREIGN KEY (\"orderId\") REFERENCES C_" + companyId + ".\"PosOrder_" + branchId + "\" (\"orderId\") ON DELETE CASCADE ON UPDATE CASCADE" +
+                ")";
+        try {
+            jdbcTemplate.execute(sql);
+            return true;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return false;
+        }
+    }
+
+
+
 
 }

@@ -4,11 +4,14 @@ package com.example.valueinsoftbackend.Controller.posController;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
+import com.example.valueinsoftbackend.Model.ResponseModel.ResponsePagination;
 import com.example.valueinsoftbackend.util.PageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
 
 @Slf4j
 @RestController
@@ -37,15 +40,18 @@ public class ProductController {
                 log.info("getProducts: Search Type -> dir");
 
                 String[] words = text.split("\\s+");
-
-                return dbPosProduct.getProductBySearchText(words, branchId, companyId, null, pageHandler);
+                ResponsePagination<Product> productBySearchText = dbPosProduct.getProductBySearchText(words, branchId, companyId, null, pageHandler);
+                System.out.println(productBySearchText);
+                return productBySearchText;
             case "comName":
                 log.info("getProducts: Search Type -> ComName");
                 return dbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId, null ,pageHandler);
             case "Barcode":
                 log.info("getProducts: Search Type -> Barcode");
+                ArrayList<Product> productBySearchBarcode = DbPosProduct.getProductBySearchBarcode(text.trim(), branchId, companyId, null);
 
-                return DbPosProduct.getProductBySearchBarcode(text.trim(), branchId, companyId, null);
+                System.out.println(productBySearchBarcode.toString());
+                return productBySearchBarcode;
             case "allData":
                 log.info("getProducts: Search Type -> AllData");
                 break;
@@ -69,7 +75,9 @@ public class ProductController {
             case "dir":
                 log.info("getProductsBySearchFilter: Search Type -> dir");
                 String[] words = text.split("\\s+");
-                return dbPosProduct.getProductBySearchText(words, branchId, companyId, productFilter, pageHandler);
+                ResponsePagination<Product> productBySearchText =  dbPosProduct.getProductBySearchText(words, branchId, companyId, productFilter, pageHandler);
+                System.out.println(productBySearchText);
+                return productBySearchText;
             case "comName":
                 log.info("getProductsBySearchFilter: Search Type -> ComName");
                 return dbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId, productFilter,pageHandler);

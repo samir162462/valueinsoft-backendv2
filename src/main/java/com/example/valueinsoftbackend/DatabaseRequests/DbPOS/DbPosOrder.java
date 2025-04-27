@@ -1,3 +1,4 @@
+
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.Order;
@@ -7,11 +8,14 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Repository;
 
 import java.lang.reflect.Type;
 import java.sql.*;
 import java.util.ArrayList;
 
+
+@Repository
 public class DbPosOrder {
 
     static public ResponseEntity<Integer>  AddOrder(Order order , int companyId) {
@@ -338,3 +342,6 @@ public class DbPosOrder {
 
 
 }
+
+
+

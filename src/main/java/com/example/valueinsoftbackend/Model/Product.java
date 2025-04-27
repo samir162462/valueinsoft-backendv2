@@ -44,6 +44,7 @@ public class Product {
         this.pState = pState;
         this.supplierId = supplierId;
         this.major = major;
+        this.image =imgFile;
     }
 
     public String getMajor() {

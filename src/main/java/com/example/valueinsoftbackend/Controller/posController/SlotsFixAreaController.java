@@ -6,6 +6,7 @@ package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbSlotsFixArea;
 import com.example.valueinsoftbackend.Model.Slots.SlotsFixArea;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,6 +15,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/fixArea")
 @CrossOrigin("*")
 public class SlotsFixAreaController {
+
+    @Autowired
+    private  DbSlotsFixArea dbSlotsFixArea;
+
+
     @RequestMapping(value = "{companyName}/{branchId}/allFixSlots/{month}", method = RequestMethod.GET)
     @ResponseBody
     public ResponseEntity<Object> getBranchFixSlots(
@@ -22,7 +28,7 @@ public class SlotsFixAreaController {
             @PathVariable int month,
             @PathVariable String companyName
     ) {
-        return DbSlotsFixArea.getFixAreaSlot(branchId, companyName,month);
+        return dbSlotsFixArea.getFixAreaSlot(branchId, companyName,month);
     }
 
     @PostMapping("{companyName}/{branchId}/addSlot")
@@ -31,7 +37,7 @@ public class SlotsFixAreaController {
             @PathVariable int branchId,
             @PathVariable String companyName
     ) {
-        return DbSlotsFixArea.AddFixAreaSlot(branchId, companyName, slotsFixArea);
+        return dbSlotsFixArea.addFixAreaSlot(branchId, companyName, slotsFixArea);
 
     }
 
@@ -40,7 +46,7 @@ public class SlotsFixAreaController {
             @RequestBody SlotsFixArea slotsFixArea,
             @PathVariable String companyName
     ) {
-        return DbSlotsFixArea.updateFixAreaSlot( companyName, slotsFixArea);
+        return dbSlotsFixArea.updateFixAreaSlot( companyName, slotsFixArea);
 
     }
 }

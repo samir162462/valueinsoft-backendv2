@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,15 @@ import java.util.Map;
 public class CompanyController {
 
 
+
+    private final DbCompany DbCompany ;
+    private final DbUsers dbUsers ;
+
+    public CompanyController(com.example.valueinsoftbackend.DatabaseRequests.DbCompany dbCompany, DbUsers dbUsers) {
+        DbCompany = dbCompany;
+        this.dbUsers = dbUsers;
+    }
+
     @RequestMapping(value = "/getCompany", method = RequestMethod.GET)
     @ResponseBody
     public Company getPersonsByNames(
@@ -30,7 +40,7 @@ public class CompanyController {
 
     ) {
 
-        User u1 = DbUsers.getUser(id);
+        User u1 = dbUsers.getUser(id);
 
         return DbCompany.getCompanyByOwnerId(u1.getUserId() + "");
     }

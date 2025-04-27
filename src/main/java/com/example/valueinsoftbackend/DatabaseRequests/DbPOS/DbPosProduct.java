@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
 import org.springframework.stereotype.Service;
 
 import java.sql.*;
@@ -26,7 +27,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 @Slf4j
-@Service
+@Repository
 public class DbPosProduct {
 
     JdbcTemplate jdbcTemplate;
@@ -127,7 +128,7 @@ public class DbPosProduct {
             String query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\", \"companyName\",\n" +
                     "\t\ttype, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\", major" +
                     "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "   \"productId\" > 0  ;";
-            return (ArrayList<Product>) jdbcTemplate.query(query, new Object[]{}, new ProductMapper(false));
+            return (ArrayList<Product>) jdbcTemplate.query(query, new Object[]{}, new ProductMapper(true));
         } catch (Exception e) {
             log.info("err : " + e.getMessage());
             throw new RuntimeException("Cant handle Search in Products by Range");
@@ -171,7 +172,7 @@ public class DbPosProduct {
                             rs.getInt(18),
                             rs.getString(19),
                             rs.getString("imgFile"));
-                    pt.setImage(rs.getString(20));
+                  //  pt.setImage(rs.getString(20));
                 }
             } catch (Exception e) {
                 System.out.println("getProductById " + e.getMessage());

@@ -9,8 +9,6 @@ public class ConnectionPostgres {
 
     public static Connection getConnection() throws Exception {
 
-        // netlify pricing 19$ month
-        // https://www.pgsclusters.com/ 5$ month
 
 
         try {

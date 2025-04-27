@@ -10,9 +10,12 @@ import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.PayMobAuth;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.client.RestTemplate;
 
@@ -27,7 +30,7 @@ public class ValueinsoftBackendApplication {
     public static String trustedHost = "http://localhost:3000";
     public static String DatabaseOwner = "krdszavicoqkpf";
     public static String PAYMTOKEN = "ZXlKMGVYQWlPaUpLVjFRaUxDSmhiR2NpT2lKSVV6VXhNaUo5LmV5SmpiR0Z6Y3lJNklrMWxjbU5vWVc1MElpd2libUZ0WlNJNkltbHVhWFJwWVd3aUxDSndjbTltYVd4bFgzQnJJam94TmpnME5qZDkuTFVUTktWYVlKbkVkUzM1SDBOVDJyb21iYU1oaFBJZXhxbUg3LWcwOXNVcFJSTGM2ak05Vkh2SFV3Y2V5Q3JxNldpZ3JURGR2VGhlZVpUeHl3UUptZnc=";
-    public static final boolean goOnline = true;
+    public static final boolean goOnline = false;
 
 
     //init
@@ -35,23 +38,12 @@ public class ValueinsoftBackendApplication {
 
 
     public static void main(String[] args) {
-        SpringApplication.run(ValueinsoftBackendApplication.class, args);
+    //    SpringApplication.run(ValueinsoftBackendApplication.class, args);
+        ConfigurableApplicationContext context = SpringApplication.run(ValueinsoftBackendApplication.class, args);
 
-        //DbBranch.AddBranch("Filfilco1","Sharkia,Egypt",1000);
-        // for (int i = 1014; i <= 1019; i++) {
-        //     DbBranch.deleteBranch(i,"public");
-
-        // }
-        //DbCompany.CreateCompanySchema(1086);
-        // DbSqlCloseIdles.terminate();
-        System.out.println( "${terminate.delay}");
-        try {
-            branchArrayList = DbBranch.getAllBranches();
-            System.out.println(branchArrayList.size());
-        }catch (Exception e)
-        {
-
-        }
+        DbBranch dbBranch = context.getBean(DbBranch.class); // Ask Spring
+        branchArrayList = (ArrayList<Branch>) dbBranch.getAllBranches();
+        System.out.println(branchArrayList.size());
     }
 
     @Scheduled(initialDelay = 1 * 60 * 1000, fixedDelayString = "${terminate.delay}")

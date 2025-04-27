@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.DatabaseRequests;
+/*package com.example.valueinsoftbackend.DatabaseRequests;
 
 
 import com.example.valueinsoftbackend.Model.Client;
@@ -351,3 +351,214 @@ public class DbClient {
 
 
 }
+*/
+
+/*
+v2
+ */
+
+package com.example.valueinsoftbackend.DatabaseRequests;
+
+import com.example.valueinsoftbackend.Model.Client;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+
+@Repository
+public class DbClient {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    public DbClient(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    private String checkExistClientName(int comId, String cName, String phone) {
+        try {
+            String query = "SELECT \"clientName\", \"clientPhone\" FROM C_" + comId + ".\"Client\" WHERE \"clientPhone\" = ?";
+            return jdbcTemplate.query(query, new Object[]{phone}, rs -> {
+                if (rs.next()) {
+                    return rs.getString(1) + " , Phone:" + rs.getString(2);
+                }
+                return null;
+            });
+        } catch (Exception e) {
+            System.out.println("No user exists");
+            return null;
+        }
+    }
+
+    public ResponseEntity<ArrayList<Client>> getClientByPhoneNumberOrName(int comId, String phone, String name, Timestamp date, String shiftStartTime, int branchId) {
+        try {
+            StringBuilder queryBuilder = new StringBuilder("SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\" FROM C_")
+                    .append(comId).append(".\"Client\" WHERE ");
+            List<Object> params = new ArrayList<>();
+
+            if (branchId != 0) {
+                queryBuilder.append("\"branchId\" = ? AND ");
+                params.add(branchId);
+            }
+
+            if (name == null) {
+                queryBuilder.append("\"clientPhone\" = ?");
+                params.add(phone);
+            } else {
+                queryBuilder.append("\"clientName\" ILIKE ?");
+                params.add("%" + name + "%");
+            }
+
+            List<Client> clients = jdbcTemplate.query(queryBuilder.toString(), params.toArray(), getClientRowMapper());
+            return ResponseEntity.ok(new ArrayList<>(clients));
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return ResponseEntity.noContent().build();
+        }
+    }
+
+    public ArrayList<Client> getLatestClients(int comId, int max, int branchId) {
+        try {
+            StringBuilder queryBuilder = new StringBuilder("SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\" FROM C_")
+                    .append(comId).append(".\"Client\"");
+
+            List<Object> params = new ArrayList<>();
+
+            if (branchId != 0) {
+                queryBuilder.append(" WHERE \"branchId\" = ?");
+                params.add(branchId);
+            }
+
+            queryBuilder.append(" ORDER BY c_id DESC LIMIT ?");
+            params.add(max);
+
+            return new ArrayList<>(jdbcTemplate.query(queryBuilder.toString(), params.toArray(), getClientRowMapper()));
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return null;
+        }
+    }
+
+    public Client getClientById(int companyId, int bid, int clientId) {
+        try {
+            StringBuilder queryBuilder = new StringBuilder("SELECT c_id, \"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\" FROM C_")
+                    .append(companyId).append(".\"Client\" WHERE ");
+
+            List<Object> params = new ArrayList<>();
+
+            if (bid != 0) {
+                queryBuilder.append("\"branchId\" = ? AND ");
+                params.add(bid);
+            }
+
+            queryBuilder.append("c_id = ?");
+            params.add(clientId);
+
+            return jdbcTemplate.queryForObject(queryBuilder.toString(), params.toArray(), getClientRowMapper());
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return null;
+        }
+    }
+
+    public String addClient(int comId, String clientName, String phoneNumber, int branchId, String gender, String desc) {
+        try {
+            String checkExist = checkExistClientName(comId, clientName, phoneNumber);
+            if (checkExist != null) {
+                String[] parts = checkExist.split(" ,");
+                if (parts.length > 1 && parts[1].length() > 10) {
+                    return "The " + parts[1] + " is taken by: " + parts[0];
+                }
+                return "The Client Name exists: " + checkExist;
+            }
+
+            String query = "INSERT INTO C_" + comId + ".\"Client\"(\"clientName\", \"clientPhone\", gender, description, \"branchId\", \"registeredTime\") VALUES (?, ?, ?, ?, ?, ?)";
+            jdbcTemplate.update(query, clientName, phoneNumber, gender, desc, branchId, new Timestamp(System.currentTimeMillis()));
+
+            return "The Client added! " + clientName;
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return "The user not added -> error in server!";
+        }
+    }
+
+    public String updateClient(int comId, Client client, int branchId) {
+        try {
+            String query = "UPDATE C_" + comId + ".\"Client\" SET \"clientName\" = ?, \"clientPhone\" = ?, gender = ?, description = ?, \"branchId\" = ? WHERE c_id = ?";
+            jdbcTemplate.update(query, client.getClientName(), client.getClientPhone(), client.getGender(), client.getDescription(), branchId, client.getClientId());
+            return "The client updated successfully.";
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            return "The client was not updated due to an error.";
+        }
+    }
+
+    public boolean deleteClient(int comId, int clId, int branchId) {
+        try {
+            String query = "DELETE FROM C_" + comId + ".\"Client\" WHERE c_id = ?";
+            jdbcTemplate.update(query, clId);
+            return true;
+        } catch (Exception e) {
+            System.out.println("err in get user : " + e.getMessage());
+            return false;
+        }
+    }
+
+    public HashMap<String, ArrayList<String>> getClientsByYear(int companyId, int bid) {
+        try {
+            StringBuilder queryBuilder = new StringBuilder("SELECT count(c_id) AS numClients, TO_CHAR(date_trunc('month', \"registeredTime\"), 'Mon') AS mon FROM C_")
+                    .append(companyId).append(".\"Client\" WHERE ");
+
+            List<Object> params = new ArrayList<>();
+
+            if (bid != 0) {
+                queryBuilder.append("\"branchId\" = ? AND ");
+                params.add(bid);
+            }
+
+            queryBuilder.append("date_trunc('year', \"registeredTime\") = date_trunc('year', now()::timestamp) GROUP BY mon");
+
+            HashMap<String, ArrayList<String>> result = new HashMap<>();
+            ArrayList<String> counts = new ArrayList<>();
+            ArrayList<String> months = new ArrayList<>();
+
+            jdbcTemplate.query(queryBuilder.toString(), params.toArray(), rs -> {
+                counts.add(String.valueOf(rs.getInt("numClients")));
+                months.add(rs.getString("mon"));
+            });
+
+            result.put("labels", months);
+            result.put("data", counts);
+            return result;
+        } catch (Exception e) {
+            System.out.println("err : " + e.getMessage());
+            return null;
+        }
+    }
+
+    private RowMapper<Client> getClientRowMapper() {
+        return (rs, rowNum) -> new Client(
+                rs.getInt("c_id"),
+                rs.getString("clientName"),
+                rs.getString("clientPhone"),
+                rs.getString("gender"),
+                rs.getString("description"),
+                null
+        );
+    }
+}
+
+
+
+
+
+
+
