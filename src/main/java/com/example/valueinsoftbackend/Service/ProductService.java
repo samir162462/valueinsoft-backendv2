@@ -73,7 +73,7 @@ public class ProductService {
                 title,
                 id,
                 product.getQuantity(),
-                product.getbPrice() * product.getQuantity(),
+                product.getBPrice() * product.getQuantity(),
                 transactionType
         );
     }
