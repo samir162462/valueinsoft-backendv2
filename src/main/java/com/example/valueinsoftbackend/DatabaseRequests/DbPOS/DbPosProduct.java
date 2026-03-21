@@ -97,8 +97,14 @@ public class DbPosProduct {
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
         log.info("Inside Get Product By Search Text : " + Arrays.toString(text));
 =======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
 =======
 >>>>>>> theirs
 =======
@@ -118,6 +124,8 @@ public class DbPosProduct {
                 sqlQuery = "  \"quantity\" <> 0 AND ";
                 log.info("Inside Get Product By Search Text : No Filter");
             }
+<<<<<<< ours
+<<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
@@ -144,6 +152,8 @@ public class DbPosProduct {
                     params.add("%" + token + "%");
                 }
             }
+=======
+>>>>>>> theirs
 
             if (!conds.isEmpty()) {
                 // If baseQuery already ends with AND (as in default) we can append directly
@@ -225,6 +235,9 @@ public class DbPosProduct {
                 ArrayList<Product> results = (ArrayList<Product>) jdbcTemplate.query(qy.toString(), new Object[]{}, new ProductMapper(true));
                 return new ResponsePagination<Product>(results, count);
 =======
+=======
+
+>>>>>>> theirs
             String query = "SELECT * " +
                     "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "  ";
             StringBuilder qy = new StringBuilder(query);
@@ -250,6 +263,12 @@ public class DbPosProduct {
 <<<<<<< ours
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
