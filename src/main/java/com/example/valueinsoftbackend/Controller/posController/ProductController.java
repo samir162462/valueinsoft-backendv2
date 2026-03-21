@@ -27,12 +27,13 @@ public class ProductController {
     }
 
     @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/{selectedPageNumber}", method = RequestMethod.GET)
-    public Object getProducts(@PathVariable int companyId,
-                              @PathVariable String branchId,
-                              @PathVariable String searchType,
-                              @PathVariable String text,
-                                @PathVariable int selectedPageNumber
+    public Object getProducts(@PathVariable("companyId") int companyId,
+                              @PathVariable("branchId") String branchId,
+                              @PathVariable("searchType") String searchType,
+                              @PathVariable("text") String text,
+                              @PathVariable("selectedPageNumber") int selectedPageNumber
     ) {
+        log.info("getProducts called with searchType={}, companyId={}, branchId={}, text={}, page={}", searchType, companyId, branchId, text, selectedPageNumber);
         PageHandler pageHandler = new PageHandler("productId", selectedPageNumber, 10);
         // code here
         switch (searchType) {
@@ -41,6 +42,7 @@ public class ProductController {
 
                 String[] words = text.split("\\s+");
                 ResponsePagination<Product> productBySearchText = dbPosProduct.getProductBySearchText(words, branchId, companyId, null, pageHandler);
+
                 System.out.println(productBySearchText);
                 return productBySearchText;
             case "comName":
@@ -61,12 +63,13 @@ public class ProductController {
 
     //todo -------- filter Search POST DAta
     @PostMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/filter/{pageNumber}")
-    public Object getProductsBySearchFilter(@PathVariable int companyId,
-                                            @PathVariable String branchId,
-                                            @PathVariable String searchType,
-                                            @PathVariable String text,
-                                            @PathVariable int pageNumber,
+    public Object getProductsBySearchFilter(@PathVariable("companyId") int companyId,
+                                            @PathVariable("branchId") String branchId,
+                                            @PathVariable("searchType") String searchType,
+                                            @PathVariable("text") String text,
+                                            @PathVariable("pageNumber") int pageNumber,
                                             @RequestBody ProductFilter productFilter) {
+        log.info("getProductsBySearchFilter called with searchType={}, companyId={}, branchId={}, text={}, page={}", searchType, companyId, branchId, text, pageNumber);
         // code here
         System.out.println(productFilter.toString());
         PageHandler pageHandler = new PageHandler("productId", pageNumber, 10);
@@ -96,7 +99,7 @@ public class ProductController {
     //----get----
 
     @GetMapping("{companyId}/{branchId}/{productId}")
-    Product productById(@PathVariable int branchId, @PathVariable int companyId, @PathVariable int productId) {
+    Product productById(@PathVariable("companyId") int companyId, @PathVariable("branchId") int branchId, @PathVariable("productId") int productId) {
         return dbPosProduct.getProductById(productId, branchId, companyId);
     }
 
@@ -114,7 +117,7 @@ public class ProductController {
 
     //--Search ProdsNames
     @GetMapping("/PN/{companyId}/{branchId}/{text}")
-    ResponseEntity<Object> productNames(@PathVariable int branchId, @PathVariable int companyId, @PathVariable String text) {
+    ResponseEntity<Object> productNames(@PathVariable("companyId") int companyId, @PathVariable("branchId") int branchId, @PathVariable("text") String text) {
         return dbPosProduct.getProductNames(text, branchId, companyId);
     }
 

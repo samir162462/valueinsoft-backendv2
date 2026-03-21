@@ -73,48 +73,196 @@ public class DbPosProduct {
     }
 
     public int countSQL(String sql) {
-        String sqlR = sql.replace("*", "count(*)");
-        System.out.println(sqlR);
-        return jdbcTemplate.queryForObject(sqlR, Integer.class);
+        // Build a safe count query by wrapping the provided query as a subselect.
+        // Trim any trailing semicolon first.
+        String trimmed = sql.trim();
+        if (trimmed.endsWith(";")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+        String countQuery = "SELECT count(*) FROM (" + trimmed + ") AS sub_count";
+        System.out.println(countQuery);
+        return jdbcTemplate.queryForObject(countQuery, Integer.class);
+    }
+
+    // Overload to support count with parameters for prepared queries
+    private int countSQL(String sql, Object[] args) {
+        String trimmed = sql.trim();
+        if (trimmed.endsWith(";")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+        String countQuery = "SELECT count(*) FROM (" + trimmed + ") AS sub_count";
+        System.out.println(countQuery);
+        return jdbcTemplate.queryForObject(countQuery, args, Integer.class);
     }
 
     public ResponsePagination<Product> getProductBySearchText(String[] text, String branchId, int companyId, ProductFilter productFilter, PageHandler pageHandler) {
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
         log.info("Inside Get Product By Search Text : " + Arrays.toString(text));
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+        log.info("Inside Get Product By Search Text : {}", Arrays.toString(text));
         int count = 0;
+>>>>>>> theirs
         try {
             String sqlQuery = "";
-            if (productFilter != null) sqlQuery = productFilter.sqlString();
-            else {
+            if (productFilter != null) {
+                sqlQuery = productFilter.sqlString();
+            } else {
                 sqlQuery = "  \"quantity\" <> 0 AND ";
                 log.info("Inside Get Product By Search Text : No Filter");
-            };
+            }
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
 
+<<<<<<< ours
+            String baseQuery = "SELECT * FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery;
+            StringBuilder qy = new StringBuilder(baseQuery);
+
+            ArrayList<Object> params = new ArrayList<>();
+=======
+>>>>>>> theirs
+
+            // Build conditions for tokens using parameterized LIKE and LOWER for case-insensitive matching
+            ArrayList<String> conds = new ArrayList<>();
+            if (text != null && text.length > 0) {
+                for (int i = 0; i < text.length; i++) {
+                    String token = text[i] == null ? "" : text[i].trim();
+                    if (token.isEmpty()) continue;
+                    // normalize and escape single quotes just in case (though we use parameters)
+                    String safe = token.replace("'", "''").toLowerCase();
+                    // Use ILIKE (case-insensitive) and pass raw token as parameter (JdbcTemplate will handle quoting)
+                    conds.add("\"productName\" ILIKE ?");
+                    params.add("%" + token + "%");
+                }
+            }
+
+            if (!conds.isEmpty()) {
+                // If baseQuery already ends with AND (as in default) we can append directly
+                qy.append("(");
+                qy.append(String.join(" AND ", conds));
+                qy.append(")");
+
+                // count with same params
+                int count = countSQL(qy.toString(), params.toArray());
+
+                // append paging
+                qy.append(pageHandler.handlePageSqlQuery()).append(" ;");
+
+                System.out.println("SQL: " + qy.toString());
+                System.out.println("Params: " + params);
+                log.debug("Final product search SQL: {}", qy.toString());
+
+                ArrayList<Product> results = (ArrayList<Product>) jdbcTemplate.query(qy.toString(), params.toArray(), new ProductMapper(true));
+
+                // Diagnostic: if no results, try logging some candidate matches to help debugging
+                if ((results == null || results.isEmpty()) && !params.isEmpty()) {
+                    try {
+                        System.out.println("No results from search; running diagnostic queries for tokens: " + params);
+                        for (Object p : params) {
+                            String tok = p == null ? "" : p.toString();
+                            // build a simple diagnostic query to show up to 5 product names that match the token
+                            String diag = "SELECT \"productName\" FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" WHERE \"productName\" ILIKE ? LIMIT 5;";
+                            try {
+                                java.util.List<String> names = jdbcTemplate.queryForList(diag, new Object[]{tok}, String.class);
+                                System.out.println("Diagnostic matches for token '" + tok + "' -> " + names);
+                            } catch (Exception ignore) {
+                                System.out.println("Diagnostic query failed for token: " + tok + " -> " + ignore.getMessage());
+                            }
+                        }
+                        // Also show first 20 product names (with quantity) to inspect stored values
+                        try {
+                            String sample = "SELECT \"productName\" FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" WHERE \"quantity\" <> 0 LIMIT 20;";
+                            java.util.List<String> sampleNames = jdbcTemplate.queryForList(sample, String.class);
+                            System.out.println("Sample product names (quantity<>0): " + sampleNames);
+                        } catch (Exception ignore) {
+                            System.out.println("Diagnostic sample query failed -> " + ignore.getMessage());
+                        }
+                    } catch (Exception ignored) {}
+
+                    // FALLBACK: if no results and we used the default quantity filter (i.e., productFilter == null),
+                    // run the same token search WITHOUT the quantity filter and return those results so the client can see out-of-stock matches.
+                    if (productFilter == null) {
+                        try {
+                            System.out.println("No in-stock matches found. Running fallback search without quantity filter.");
+                            String altBase = "SELECT * FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where ";
+                            StringBuilder altQy = new StringBuilder(altBase);
+                            altQy.append("(");
+                            altQy.append(String.join(" AND ", conds));
+                            altQy.append(")");
+
+                            int altCount = countSQL(altQy.toString(), params.toArray());
+                            altQy.append(pageHandler.handlePageSqlQuery()).append(" ;");
+                            System.out.println("Fallback SQL: " + altQy.toString());
+                            ArrayList<Product> altResults = (ArrayList<Product>) jdbcTemplate.query(altQy.toString(), params.toArray(), new ProductMapper(true));
+                            System.out.println("Fallback results count: " + (altResults == null ? 0 : altResults.size()));
+                            return new ResponsePagination<Product>(altResults, altCount);
+                        } catch (Exception fallbackEx) {
+                            System.out.println("Fallback search failed: " + fallbackEx.getMessage());
+                        }
+                    }
+                }
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+
+                return new ResponsePagination<Product>(results, count);
+            } else {
+                // no search tokens, just return empty pagination or full range depending on original semantics
+                int count = countSQL(qy.toString());
+                qy.append(pageHandler.handlePageSqlQuery()).append(" ;");
+                ArrayList<Product> results = (ArrayList<Product>) jdbcTemplate.query(qy.toString(), new Object[]{}, new ProductMapper(true));
+                return new ResponsePagination<Product>(results, count);
+=======
             String query = "SELECT * " +
                     "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "  ";
             StringBuilder qy = new StringBuilder(query);
+            String[] cleanedWords = Arrays.stream(text)
+                    .map(String::trim)
+                    .filter(word -> !word.isEmpty())
+                    .toArray(String[]::new);
             System.out.println(qy);
-            if (text.length > 0) {
-                for (int i = 0; i < text.length; i++) {
+            if (cleanedWords.length > 0) {
+                for (int i = 0; i < cleanedWords.length; i++) {
+                    String normalizedWord = cleanedWords[i].toLowerCase();
+                    String clause = "LOWER(\"productName\") LIKE '%" + normalizedWord + "%'";
                     if (i == 0) {
-                        String capital = text[i].substring(0, 1).toUpperCase() + text[i].substring(1);
-                        String small = text[i].substring(0, 1).toLowerCase() + text[i].substring(1);
-                        String s1 = "(\"productName\" LIKE '%" + capital + "%' or \"productName\" LIKE '%" + small + "%')";
-                        qy.append(s1);
+                        qy.append("(").append(clause).append(")");
                         continue;
                     }
-                    String s2 = " And \"productName\" LIKE '%" + text[i] + "%'";
-                    qy.append(s2);
+                    qy.append(" And ").append(clause);
                 }
 
                 count = countSQL(qy.toString());
-                qy.append(pageHandler.handlePageSqlQuery() + " ;");
+                qy.append(pageHandler.handlePageSqlQuery()).append(" ;");
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
             }
-            System.out.println(qy);
-            return new ResponsePagination<Product>(
-                    (ArrayList<Product>) jdbcTemplate.query(
-                            qy.toString(), new Object[]{}, new ProductMapper(true)), count);
+
         } catch (Exception e) {
-            log.info("err : " + e.getMessage());
+            log.info("err : {}", e.getMessage());
             throw new RuntimeException("Cant handle Search in Products by text");
         }
     }
@@ -195,11 +343,14 @@ public class DbPosProduct {
 
         try {
 
-            String capital = text.substring(0, 1).toUpperCase() + text.substring(1);
-            String small = text.substring(0, 1).toLowerCase() + text.substring(1);
+            // guard against empty input
+            if (text == null || text.trim().isEmpty()) return ResponseEntity.status(200).body(new ArrayList<>());
+
+            // escape single quotes and prepare safe search token
+            String safe = text.replace("'", "''");
             Connection conn = ConnectionPostgres.getConnection();
             String query = "SELECT  DISTINCT ON (\"productName\") \"productName\" ,\"companyName\" , type ,major \n" +
-                    "\tFROM c_" + companyId + ".\"PosProduct_" + branchId + "\" where \"productName\" LIKE '%" + capital + "%' or \"productName\" Like '%" + small + "%' ORDER BY \n" +
+                    "\tFROM c_" + companyId + ".\"PosProduct_" + branchId + "\" where \"productName\" ILIKE '%" + safe + "%' ORDER BY \n" +
                     "        \"productName\";";
             System.out.println(query);
             Statement st = conn.createStatement();
@@ -342,10 +493,12 @@ public class DbPosProduct {
             Connection conn = ConnectionPostgres.getConnection();
             ArrayList<Product> productArrayList = new ArrayList<>();
             String query = "";
+            // escape single quotes in barcode
+            String safeTrim = (trim == null) ? "" : trim.replace("'", "''");
             query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
                     "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
                     "\"pState\", \"supplierId\",\"major\" , \"imgFile\" " +
-                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  serial = '" + trim + "' ";
+                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  serial = '" + safeTrim + "' ";
 
 
             Statement st = conn.createStatement();
