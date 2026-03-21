@@ -1,8 +1,10 @@
 com\example\valueinsoftbackend\Controller\DataVisualizationControllers\DVCompanyAnalysisController.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosDamagedList.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosShiftPeriod.class
+com\example\valueinsoftbackend\DatabaseRequests\DbPOS\ProductQueryBuilder.class
 com\example\valueinsoftbackend\Model\SupplierBProduct.class
 com\example\valueinsoftbackend\Config\MainConfig.class
+com\example\valueinsoftbackend\DatabaseRequests\DbPOS\ProductQuerySpec.class
 com\example\valueinsoftbackend\Controller\MoneyController\ClientReceiptController.class
 com\example\valueinsoftbackend\OnlinePayment\OPModel\TransactionProcessedCallback.class
 com\example\valueinsoftbackend\util\JwtUtil.class
@@ -15,12 +17,12 @@ com\example\valueinsoftbackend\OnlinePayment\OPModel\PaymentKeyRequest.class
 com\example\valueinsoftbackend\util\Test1.class
 com\example\valueinsoftbackend\Controller\AuthenticateController.class
 com\example\valueinsoftbackend\Model\Sales\SupplierReceipt.class
+com\example\valueinsoftbackend\Model\ResponseModel\ProductOperationResponse.class
 com\example\valueinsoftbackend\Model\Order.class
 com\example\valueinsoftbackend\util\PageHandler.class
 com\example\valueinsoftbackend\DatabaseRequests\DbApp\DbSubscription.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosInventoryTransaction.class
 com\example\valueinsoftbackend\SecurityPack\SecurityConfiguration.class
-com\example\valueinsoftbackend\Model\Product.class
 com\example\valueinsoftbackend\Model\Slots\SlotsFixArea.class
 com\example\valueinsoftbackend\Controller\CompanyController.class
 com\example\valueinsoftbackend\Model\DataVisualizationModels\DvSales.class
@@ -60,6 +62,7 @@ com\example\valueinsoftbackend\Controller\posController\SlotsFixAreaController.c
 com\example\valueinsoftbackend\OnlinePayment\OPModel\OrderRegistration.class
 com\example\valueinsoftbackend\Controller\posController\CategoryController.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbExpenses.class
+com\example\valueinsoftbackend\Model\ResponseModel\ResponsePagination.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosInventoryTransaction$InventoryTransactionMapper.class
 com\example\valueinsoftbackend\Model\OrderDetails.class
 com\example\valueinsoftbackend\Model\Sales\ExpensesSum.class
