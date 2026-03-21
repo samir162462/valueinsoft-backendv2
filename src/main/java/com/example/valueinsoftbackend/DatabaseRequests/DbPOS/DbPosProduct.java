@@ -13,22 +13,23 @@ import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.example.valueinsoftbackend.util.PageHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
-import org.springframework.stereotype.Service;
 
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-@Slf4j
 @Repository
 public class DbPosProduct {
+
+    private static final Logger log = LoggerFactory.getLogger(DbPosProduct.class);
 
     JdbcTemplate jdbcTemplate;
 
@@ -92,68 +93,34 @@ public class DbPosProduct {
     }
 
     public ResponsePagination<Product> getProductBySearchText(String[] text, String branchId, int companyId, ProductFilter productFilter, PageHandler pageHandler) {
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-        log.info("Inside Get Product By Search Text : " + Arrays.toString(text));
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
+
         log.info("Inside Get Product By Search Text : {}", Arrays.toString(text));
-        int count = 0;
->>>>>>> theirs
         try {
-            String sqlQuery = "";
+            int count;
+            String sqlQuery;
             if (productFilter != null) {
                 sqlQuery = productFilter.sqlString();
             } else {
                 sqlQuery = "  \"quantity\" <> 0 AND ";
                 log.info("Inside Get Product By Search Text : No Filter");
             }
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
 
-<<<<<<< ours
             String baseQuery = "SELECT * FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery;
             StringBuilder qy = new StringBuilder(baseQuery);
 
             ArrayList<Object> params = new ArrayList<>();
-=======
->>>>>>> theirs
 
             // Build conditions for tokens using parameterized LIKE and LOWER for case-insensitive matching
             ArrayList<String> conds = new ArrayList<>();
             if (text != null && text.length > 0) {
-                for (int i = 0; i < text.length; i++) {
-                    String token = text[i] == null ? "" : text[i].trim();
+                for (String t : text) {
+                    String token = t == null ? "" : t.trim();
                     if (token.isEmpty()) continue;
-                    // normalize and escape single quotes just in case (though we use parameters)
-                    String safe = token.replace("'", "''").toLowerCase();
                     // Use ILIKE (case-insensitive) and pass raw token as parameter (JdbcTemplate will handle quoting)
                     conds.add("\"productName\" ILIKE ?");
                     params.add("%" + token + "%");
                 }
             }
-=======
->>>>>>> theirs
 
             if (!conds.isEmpty()) {
                 // If baseQuery already ends with AND (as in default) we can append directly
@@ -162,7 +129,7 @@ public class DbPosProduct {
                 qy.append(")");
 
                 // count with same params
-                int count = countSQL(qy.toString(), params.toArray());
+                count = countSQL(qy.toString(), params.toArray());
 
                 // append paging
                 qy.append(pageHandler.handlePageSqlQuery()).append(" ;");
@@ -220,66 +187,15 @@ public class DbPosProduct {
                         }
                     }
                 }
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
 
                 return new ResponsePagination<Product>(results, count);
             } else {
                 // no search tokens, just return empty pagination or full range depending on original semantics
-                int count = countSQL(qy.toString());
+                count = countSQL(qy.toString());
                 qy.append(pageHandler.handlePageSqlQuery()).append(" ;");
                 ArrayList<Product> results = (ArrayList<Product>) jdbcTemplate.query(qy.toString(), new Object[]{}, new ProductMapper(true));
                 return new ResponsePagination<Product>(results, count);
-=======
-=======
-
->>>>>>> theirs
-            String query = "SELECT * " +
-                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "  ";
-            StringBuilder qy = new StringBuilder(query);
-            String[] cleanedWords = Arrays.stream(text)
-                    .map(String::trim)
-                    .filter(word -> !word.isEmpty())
-                    .toArray(String[]::new);
-            System.out.println(qy);
-            if (cleanedWords.length > 0) {
-                for (int i = 0; i < cleanedWords.length; i++) {
-                    String normalizedWord = cleanedWords[i].toLowerCase();
-                    String clause = "LOWER(\"productName\") LIKE '%" + normalizedWord + "%'";
-                    if (i == 0) {
-                        qy.append("(").append(clause).append(")");
-                        continue;
-                    }
-                    qy.append(" And ").append(clause);
-                }
-
-                count = countSQL(qy.toString());
-                qy.append(pageHandler.handlePageSqlQuery()).append(" ;");
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-            }
-
+        }
         } catch (Exception e) {
             log.info("err : {}", e.getMessage());
             throw new RuntimeException("Cant handle Search in Products by text");
@@ -287,17 +203,19 @@ public class DbPosProduct {
     }
 
     public ArrayList<Product> getProductsAllRange(String branchId, int companyId, ProductFilter productFilter) {
-        log.info("Inside Get Product By Search  Range: " + productFilter);
+        log.info("Inside Get Product By Search Range: {}", productFilter);
         try {
             String sqlQuery = "";
             if (productFilter != null) sqlQuery = productFilter.sqlString();
             else log.info("Inside Get Product By Search Text : No Filter");
-            String query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\", \"companyName\",\n" +
-                    "\t\ttype, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\", major" +
-                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where " + sqlQuery + "   \"productId\" > 0  ;";
+            String query = """
+                SELECT "productId", "productName", "buyingDay", "activationPeriod", "rPrice", "lPrice", "bPrice", "companyName",
+                type, "ownerName", serial, "desc", "batteryLife", "ownerPhone", "ownerNI", quantity, "pState", "supplierId", major
+                FROM C_%d."PosProduct_%s" where %s "productId" > 0 ;
+                """.formatted(companyId, branchId, sqlQuery);
             return (ArrayList<Product>) jdbcTemplate.query(query, new Object[]{}, new ProductMapper(true));
         } catch (Exception e) {
-            log.info("err : " + e.getMessage());
+            log.info("err : {}", e.getMessage());
             throw new RuntimeException("Cant handle Search in Products by Range");
         }
 
@@ -305,114 +223,83 @@ public class DbPosProduct {
 
     public Product getProductById(int supplierId, int branchId, int companyId) {
         log.info("Inside getProductById Function");
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT * FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  \"productId\" = " + supplierId + ";";
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-            String payload = "";
-            Product pt = null;
-
-
-            try {
-
-
-                while (rs.next()) {
-                    pt = new Product(
-                            rs.getInt(1),
-                            rs.getString(2),
-                            rs.getTimestamp(3),
-                            rs.getString(4),
-                            rs.getInt(5),
-                            rs.getInt(6),
-                            rs.getInt(7),
-                            rs.getString(8),
-                            rs.getString(9),
-                            rs.getString(10),
-                            rs.getString(11),
-                            rs.getString(12),
-                            rs.getInt(13),
-                            rs.getString(14),
-                            rs.getString(15),
-                            rs.getInt(16),
-                            rs.getString(17),
-                            rs.getInt(18),
-                            rs.getString(19),
-                            rs.getString("imgFile"));
-                  //  pt.setImage(rs.getString(20));
-                }
-            } catch (Exception e) {
-                System.out.println("getProductById " + e.getMessage());
+        String query = "SELECT * FROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  \"productId\" = " + supplierId + ";";
+        Product pt = null;
+        try (Connection conn = ConnectionPostgres.getConnection();
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery(query)) {
+            while (rs.next()) {
+                pt = new Product(
+                        rs.getInt(1),
+                        rs.getString(2),
+                        rs.getTimestamp(3),
+                        rs.getString(4),
+                        rs.getInt(5),
+                        rs.getInt(6),
+                        rs.getInt(7),
+                        rs.getString(8),
+                        rs.getString(9),
+                        rs.getString(10),
+                        rs.getString(11),
+                        rs.getString(12),
+                        rs.getInt(13),
+                        rs.getString(14),
+                        rs.getString(15),
+                        rs.getInt(16),
+                        rs.getString(17),
+                        rs.getInt(18),
+                        rs.getString(19),
+                        rs.getString("imgFile"));
             }
-
-            rs.close();
-            st.close();
-            conn.close();
-
-            return pt;
         } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
-
+            log.info("err : " + e.getMessage());
         }
-        return null;
+        return pt;
     }
 
     public static ResponseEntity<Object> getProductNames(String text, int branchId, int companyId) {
         log.info("Inside getProductNames Function");
 
         try {
-
             // guard against empty input
             if (text == null || text.trim().isEmpty()) return ResponseEntity.status(200).body(new ArrayList<>());
 
             // escape single quotes and prepare safe search token
             String safe = text.replace("'", "''");
-            Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT  DISTINCT ON (\"productName\") \"productName\" ,\"companyName\" , type ,major \n" +
-                    "\tFROM c_" + companyId + ".\"PosProduct_" + branchId + "\" where \"productName\" ILIKE '%" + safe + "%' ORDER BY \n" +
-                    "        \"productName\";";
-            System.out.println(query);
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-
+            String query = """
+                SELECT DISTINCT ON ("productName") "productName", "companyName", type, major
+                FROM c_%d."PosProduct_%s" where "productName" ILIKE '%%%s%%' ORDER BY
+                "productName";
+                """.formatted(companyId, branchId, safe);
             ArrayList<ProductUtilNames> productNames = new ArrayList<>();
-
-            try {
+            try (Connection conn = ConnectionPostgres.getConnection();
+                 Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery(query)) {
                 while (rs.next()) {
                     ProductUtilNames productUtilNames = new ProductUtilNames(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4));
                     productNames.add(productUtilNames);
                 }
-
-            } catch (Exception e) {
-                System.out.println("getProductById " + e.getMessage());
-                return ResponseEntity.status(406).body("errorIn getProductNames To array" + e.getMessage());
             }
-
-            rs.close();
-            st.close();
-            conn.close();
             return ResponseEntity.status(200).body(productNames);
-
         } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
+            log.error("err : {}", e.getMessage());
             return ResponseEntity.status(406).body("errorIn getProductNames To array" + e.getMessage());
-
         }
-
     }
 
     public ResponsePagination<Product> getProductBySearchCompanyName(String comName, String branchId, int companyId, ProductFilter productFilter, PageHandler pageHandler) {
         log.info("Inside getProductBySearchCompanyName Function");
 
         try {
-            int count = 0;
-            String query = "";
+            int count;
 
-            String sqlQuery = "";
+            String sqlQuery;
+            String query;
             if (productFilter != null) {
                 sqlQuery = productFilter.sqlString();
             } else {
                 System.out.println("No Filter");
+                sqlQuery = "";
             }
             if (comName.contains("All")) {
                 query = "SELECT * " +
@@ -438,21 +325,16 @@ public class DbPosProduct {
     static public ResponseEntity<Object> AddProduct(Product prod, String branchId, int companyId) {
         log.info("Inside AddProduct Function");
 
-        try {
-
-
-            Connection conn = ConnectionPostgres.getConnection();
-
-
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_" + companyId + ".\"PosProduct_" + branchId + "\"(\n" +
-                    "\"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\",\n" +
-                    "\t\"lPrice\", \"bPrice\", \"companyName\", type, \"ownerName\", serial, \"desc\",\n" +
-                    "\t\"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\" ,\"major\" , \"imgFile\" )\n" +
-                    "\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?);", Statement.RETURN_GENERATED_KEYS);
+        try (Connection conn = ConnectionPostgres.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("INSERT INTO C_" + companyId + ".\"PosProduct_" + branchId + "\"(\n" +
+                     "\"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\",\n" +
+                     "\t\"lPrice\", \"bPrice\", \"companyName\", type, \"ownerName\", serial, \"desc\",\n" +
+                     "\t\"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity, \"pState\", \"supplierId\" ,\"major\" , \"imgFile\" )\n" +
+                     "\tVALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?);", Statement.RETURN_GENERATED_KEYS)) {
 
             stmt.setString(1, prod.getProductName());
             stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
-            stmt.setInt(3, Integer.valueOf(prod.getActivationPeriod()));
+            stmt.setInt(3, Integer.parseInt(prod.getActivationPeriod()));
             stmt.setInt(4, prod.getrPrice());
             stmt.setInt(5, prod.getlPrice());
             stmt.setInt(6, prod.getbPrice());
@@ -483,8 +365,6 @@ public class DbPosProduct {
                 }
             }
 
-            stmt.close();
-            conn.close();
             ObjectMapper mapper = new ObjectMapper();
             ObjectNode json = mapper.createObjectNode();
             json.put("title", "The Product  Saved");
@@ -494,34 +374,29 @@ public class DbPosProduct {
             json.put("transactionType", "Add");
             return ResponseEntity.status(201).body(json.toString());
 
-            // Crate Branch table for new branch in DB
-
         } catch (Exception e) {
-            System.out.println(e.getMessage());
+            log.error("{}", e.getMessage());
             return null;
-
         }
-
     }
     //Todo ----- BarCode --------------
 
     public static ArrayList<Product> getProductBySearchBarcode(String trim, String branchId, int companyId, Object o) {
         log.info("Inside getProductBySearchBarcode Function");
 
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            ArrayList<Product> productArrayList = new ArrayList<>();
-            String query = "";
-            // escape single quotes in barcode
-            String safeTrim = (trim == null) ? "" : trim.replace("'", "''");
-            query = "SELECT \"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\",\n" +
-                    "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", \"ownerNI\", quantity,\n" +
-                    "\"pState\", \"supplierId\",\"major\" , \"imgFile\" " +
-                    "\tFROM C_" + companyId + ".\"PosProduct_" + branchId + "\" where  serial = '" + safeTrim + "' ";
+        ArrayList<Product> productArrayList = new ArrayList<>();
+        // escape single quotes in barcode
+        String safeTrim = (trim == null) ? "" : trim.replace("'", "''");
+        String query = """
+            SELECT "productId", "productName", "buyingDay", "activationPeriod", "rPrice", "lPrice", "bPrice",
+            "companyName", type, "ownerName", serial, "desc", "batteryLife", "ownerPhone", "ownerNI", quantity,
+            "pState", "supplierId","major" , "imgFile"
+            FROM C_%d."PosProduct_%s" where serial = '%s' 
+            """.formatted(companyId, branchId, safeTrim);
 
-
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
+        try (Connection conn = ConnectionPostgres.getConnection();
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery(query)) {
             while (rs.next()) {
                 Product prod = new Product(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(4), rs.getInt(5), rs.getInt(6), rs.getInt(7), rs.getString(8), rs.getString(9), rs.getString(10), rs.getString(11), rs.getString(12),
                         rs.getInt(13), rs.getString(14), rs.getString(15),
@@ -531,16 +406,11 @@ public class DbPosProduct {
                 productArrayList.add(prod);
                 // print the results
             }
-            rs.close();
-            st.close();
-            conn.close();
-            return productArrayList;
-
         } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
+            log.error("err : {}", e.getMessage());
             return null;
-
         }
+        return productArrayList;
     }
 
     //-------------------------------------------------------------
@@ -549,19 +419,14 @@ public class DbPosProduct {
     static public ResponseEntity<Object> EditProduct(Product prod, String branchId, int companyId) {
         log.info("Inside EditProduct Function");
 
-        try {
-
-
-            Connection conn = ConnectionPostgres.getConnection();
-
-
-            PreparedStatement stmt = conn.prepareStatement("UPDATE C_" + companyId + ".\"PosProduct_" + branchId + "\"\n" +
-                    "\tSET  \"productName\"=?, \"buyingDay\"=?, \"activationPeriod\"=?, \"rPrice\"=?, \"lPrice\"=?, \"bPrice\"=?, \"companyName\"=?, type=?, \"ownerName\"=?, serial=?, \"desc\"=?, \"batteryLife\"=?, \"ownerPhone\"=?, \"ownerNI\"=?, quantity=?, \"pState\"=?, \"supplierId\"=?, major=?, \"imgFile\"=? \n" +
-                    "\tWHERE \"productId\"=?;");
+        try (Connection conn = ConnectionPostgres.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("UPDATE C_" + companyId + ".\"PosProduct_" + branchId + "\"\n" +
+                     "\tSET  \"productName\"=?, \"buyingDay\"=?, \"activationPeriod\"=?, \"rPrice\"=?, \"lPrice\"=?, \"bPrice\"=?, \"companyName\"=?, type=?, \"ownerName\"=?, serial=?, \"desc\"=?, \"batteryLife\"=?, \"ownerPhone\"=?, \"ownerNI\"=?, quantity=?, \"pState\"=?, \"supplierId\"=?, major=?, \"imgFile\"=? \n" +
+                     "\tWHERE \"productId\"=?;")) {
 
             stmt.setString(1, prod.getProductName());
             stmt.setTimestamp(2, prod.getBuyingDay());
-            stmt.setInt(3, Integer.valueOf(prod.getActivationPeriod()));
+            stmt.setInt(3, Integer.parseInt(prod.getActivationPeriod()));
             stmt.setInt(4, prod.getrPrice());
             stmt.setInt(5, prod.getlPrice());
             stmt.setInt(6, prod.getbPrice());
@@ -580,20 +445,13 @@ public class DbPosProduct {
             stmt.setString(19, prod.getImage());
             //Id
             stmt.setInt(20, prod.getProductId());
-            System.out.println(stmt);
+            log.debug("{}", stmt);
             int affectedRows = stmt.executeUpdate();
             if (affectedRows == 0) {
                 throw new SQLException("Creating user failed, no rows affected.");
             }
 
-
-            stmt.close();
-            conn.close();
-            System.out.println("Conniction closed");
-            // create `ObjectMapper` instance
             ObjectMapper mapper = new ObjectMapper();
-
-            // create a JSON object
             ObjectNode json = mapper.createObjectNode();
             json.put("title", "The Product Edit Saved");
             json.put("id", prod.getProductId());
@@ -601,22 +459,11 @@ public class DbPosProduct {
             json.put("transTotal", prod.getbPrice() * prod.getQuantity());
             json.put("transactionType", "Update");
 
-            // convert `ObjectNode` to pretty-print JSON
-            // without pretty-print, use `user.toString()` method
-            String jsonS = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(json);
-
-            // print json
-            System.out.println(jsonS);
-
             return ResponseEntity.status(HttpStatus.OK).body(json.toString());
-            // Crate Branch table for new branch in DB
 
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            System.out.println("Nothing");
-
+            log.error("{}", e.getMessage());
             return ResponseEntity.status(HttpStatus.NO_CONTENT).body(null);
-
         }
 
     }

@@ -49,7 +49,6 @@ com\example\valueinsoftbackend\DatabaseRequests\DbSupplier.class
 com\example\valueinsoftbackend\Model\AppModel\AppModelSubscription.class
 com\example\valueinsoftbackend\Model\Sales\SalesProduct.class
 com\example\valueinsoftbackend\Controller\BranchController.class
-com\example\valueinsoftbackend\Controller\posController\ProductController.class
 com\example\valueinsoftbackend\Controller\MoneyController\ExpensesController.class
 com\example\valueinsoftbackend\Model\Branch.class
 com\example\valueinsoftbackend\DatabaseRequests\DbBranch$1.class
@@ -61,7 +60,6 @@ com\example\valueinsoftbackend\Controller\posController\SlotsFixAreaController.c
 com\example\valueinsoftbackend\OnlinePayment\OPModel\OrderRegistration.class
 com\example\valueinsoftbackend\Controller\posController\CategoryController.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbExpenses.class
-com\example\valueinsoftbackend\Model\ResponseModel\ResponsePagination.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosInventoryTransaction$InventoryTransactionMapper.class
 com\example\valueinsoftbackend\Model\OrderDetails.class
 com\example\valueinsoftbackend\Model\Sales\ExpensesSum.class
@@ -73,7 +71,6 @@ com\example\valueinsoftbackend\Controller\MoneyController\ExpensesStaticControll
 com\example\valueinsoftbackend\Filters\JwtRequestFilter.class
 com\example\valueinsoftbackend\Controller\MainAppController\AppSubscriptionController.class
 com\example\valueinsoftbackend\Controller\posController\ShiftPeriodController.class
-com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosProduct.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosCategory.class
 com\example\valueinsoftbackend\DatabaseRequests\DbUsers.class
 com\example\valueinsoftbackend\Model\User.class
@@ -92,7 +89,6 @@ com\example\valueinsoftbackend\Model\Company.class
 com\example\valueinsoftbackend\Model\Sales\ClientReceipt.class
 com\example\valueinsoftbackend\Model\DataVisualizationModels\CompanyAnalysis.class
 com\example\valueinsoftbackend\Controller\DataVisualizationControllers\DvSalesController.class
-com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosProduct$ProductMapper.class
 com\example\valueinsoftbackend\OnlinePayment\OPModel\Billing_data.class
 com\example\valueinsoftbackend\SqlConnection\ConnectionPostgres.class
 com\example\valueinsoftbackend\OnlinePayment\OPModel\PayMobAuth.class
