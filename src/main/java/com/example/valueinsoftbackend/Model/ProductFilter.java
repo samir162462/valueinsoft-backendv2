@@ -5,14 +5,14 @@
 package com.example.valueinsoftbackend.Model;
 
 public class ProductFilter {
-    boolean outOfStock;
-    boolean bouncedBack;
-    boolean used;
-    boolean toSell;
-    int rangeMin;
-    int rangeMax;
-    String major;
-    String dates;
+    private boolean outOfStock;
+    private boolean bouncedBack;
+    private boolean used;
+    private boolean toSell;
+    private int rangeMin;
+    private int rangeMax;
+    private String major;
+    private String dates;
 
 
     public ProductFilter(boolean outOfStock, boolean bouncedBack, boolean used, boolean toSell, int rangeMin, int rangeMax, String major, String dates) {
@@ -26,37 +26,29 @@ public class ProductFilter {
         this.dates = dates;
     }
 
-    public String  sqlString()
-    {
-        String text  = "";
-        StringBuilder stringBuilder = new StringBuilder(text);
-        if (outOfStock == true &&toSell ==true) {
+    @Deprecated
+    public String sqlString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (outOfStock && toSell) {
             stringBuilder.append("quantity >= 0 And ");
-        }else if(outOfStock == false &&toSell ==true){
+        } else if (!outOfStock && toSell) {
             stringBuilder.append("quantity > 0 And ");
-
-        }else if(outOfStock == true && !toSell){
+        } else if (outOfStock) {
             stringBuilder.append("quantity = 0 And ");
-
         }
 
-        if (rangeMin > 0 || rangeMax<100000) {
-            stringBuilder.append("\"rPrice\" between "+rangeMin+" And "+rangeMax+" And ");
-
+        if (rangeMin > 0 || rangeMax < 100000) {
+            stringBuilder.append("\"rPrice\" between ").append(rangeMin).append(" And ").append(rangeMax).append(" And ");
         }
-        if (used == true) {
-        stringBuilder.append("\"pState\" = 'Used' And ");
-
+        if (used) {
+            stringBuilder.append("\"pState\" = 'Used' And ");
         }
-        if (major != null && major!="") {
-            stringBuilder.append("\"major\" = '"+major+"' And ");
-
+        if (major != null && !major.isBlank()) {
+            stringBuilder.append("\"major\" = '").append(major).append("' And ");
         }
-        if (dates != null && dates!="") {
-            stringBuilder.append("\"buyingDay\" between "+dates+" And ");
-
+        if (dates != null && !dates.isBlank()) {
+            stringBuilder.append("\"buyingDay\" between ").append(dates).append(" And ");
         }
-
 
         return stringBuilder.toString();
     }
@@ -82,7 +74,7 @@ public class ProductFilter {
     }
 
     public void setDates(String dates) {
-        dates = dates;
+        this.dates = dates;
     }
 
     public boolean isUsed() {

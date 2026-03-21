@@ -7,11 +7,13 @@ package com.example.valueinsoftbackend.util;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 
 @Data
 @AllArgsConstructor
 @ToString
+@RequiredArgsConstructor
 public class PageHandler {
 
     String orderString;

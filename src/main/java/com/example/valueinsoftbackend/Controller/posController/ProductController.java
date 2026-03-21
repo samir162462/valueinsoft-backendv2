@@ -1,17 +1,20 @@
 package com.example.valueinsoftbackend.Controller.posController;
 
 
-import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
+import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
 import com.example.valueinsoftbackend.Model.ResponseModel.ResponsePagination;
+import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
+import com.example.valueinsoftbackend.Service.ProductService;
 import com.example.valueinsoftbackend.util.PageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @RestController
@@ -19,11 +22,11 @@ import java.util.ArrayList;
 @CrossOrigin("*")
 public class ProductController {
 
-    DbPosProduct dbPosProduct;
+    private final ProductService productService;
 
     @Autowired
-    public ProductController(DbPosProduct dbPosProduct) {
-        this.dbPosProduct = dbPosProduct;
+    public ProductController(ProductService productService) {
+        this.productService = productService;
     }
 
     @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/{selectedPageNumber}", method = RequestMethod.GET)
@@ -31,37 +34,26 @@ public class ProductController {
                               @PathVariable("branchId") String branchId,
                               @PathVariable("searchType") String searchType,
                               @PathVariable("text") String text,
-                              @PathVariable("selectedPageNumber") int selectedPageNumber
-    ) {
-        log.info("getProducts called with searchType={}, companyId={}, branchId={}, text={}, page={}", searchType, companyId, branchId, text, selectedPageNumber);
+                              @PathVariable("selectedPageNumber") int selectedPageNumber) {
+        log.info("getProducts called with searchType={}, companyId={}, branchId={}, text={}, page={}",
+                searchType, companyId, branchId, text, selectedPageNumber);
+
         PageHandler pageHandler = new PageHandler("productId", selectedPageNumber, 10);
-        // code here
+
         switch (searchType) {
             case "dir":
-                log.info("getProducts: Search Type -> dir");
-
-                String[] words = text.split("\\s+");
-                ResponsePagination<Product> productBySearchText = dbPosProduct.getProductBySearchText(words, branchId, companyId, null, pageHandler);
-
-                System.out.println(productBySearchText);
-                return productBySearchText;
+                return productService.searchProductsByText(text.split("\\s+"), branchId, companyId, null, pageHandler);
             case "comName":
-                log.info("getProducts: Search Type -> ComName");
-                return dbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId, null ,pageHandler);
+                return productService.searchProductsByCompanyName(text.trim(), branchId, companyId, null, pageHandler);
             case "Barcode":
-                log.info("getProducts: Search Type -> Barcode");
-                ArrayList<Product> productBySearchBarcode = DbPosProduct.getProductBySearchBarcode(text.trim(), branchId, companyId, null);
-
-                System.out.println(productBySearchBarcode.toString());
-                return productBySearchBarcode;
+                return productService.getProductsByBarcode(text.trim(), branchId, companyId);
             case "allData":
-                log.info("getProducts: Search Type -> AllData");
-                break;
+                throw new IllegalArgumentException("allData requires filter search endpoint");
+            default:
+                throw new RuntimeException("Search Type is not Correct");
         }
-        throw new RuntimeException("Search Type is not Correct");
     }
 
-    //todo -------- filter Search POST DAta
     @PostMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/filter/{pageNumber}")
     public Object getProductsBySearchFilter(@PathVariable("companyId") int companyId,
                                             @PathVariable("branchId") String branchId,
@@ -69,57 +61,52 @@ public class ProductController {
                                             @PathVariable("text") String text,
                                             @PathVariable("pageNumber") int pageNumber,
                                             @RequestBody ProductFilter productFilter) {
-        log.info("getProductsBySearchFilter called with searchType={}, companyId={}, branchId={}, text={}, page={}", searchType, companyId, branchId, text, pageNumber);
-        // code here
-        System.out.println(productFilter.toString());
+        log.info("getProductsBySearchFilter called with searchType={}, companyId={}, branchId={}, text={}, page={}",
+                searchType, companyId, branchId, text, pageNumber);
+
         PageHandler pageHandler = new PageHandler("productId", pageNumber, 10);
 
         switch (searchType) {
             case "dir":
-                log.info("getProductsBySearchFilter: Search Type -> dir");
-                String[] words = text.split("\\s+");
-                ResponsePagination<Product> productBySearchText =  dbPosProduct.getProductBySearchText(words, branchId, companyId, productFilter, pageHandler);
-                System.out.println(productBySearchText);
-                return productBySearchText;
+                return productService.searchProductsByText(text.split("\\s+"), branchId, companyId, productFilter, pageHandler);
             case "comName":
-                log.info("getProductsBySearchFilter: Search Type -> ComName");
-                return dbPosProduct.getProductBySearchCompanyName(text.trim(), branchId, companyId, productFilter,pageHandler);
+                return productService.searchProductsByCompanyName(text.trim(), branchId, companyId, productFilter, pageHandler);
             case "shortCate":
-                log.info("getProductsBySearchFilter: Search Type -> shortCate");
-
-                break;
+                throw new IllegalArgumentException("shortCate search is not implemented");
             case "allData":
-                log.info("getProductsBySearchFilter: Search Type -> allData");
-                return dbPosProduct.getProductsAllRange(branchId, companyId, productFilter);
+                return productService.getProductsAllRange(branchId, companyId, productFilter);
+            default:
+                throw new RuntimeException("Search Type is not Correct");
         }
-        throw new RuntimeException("Search Type is not Correct");
     }
 
-
-    //----get----
-
     @GetMapping("{companyId}/{branchId}/{productId}")
-    Product productById(@PathVariable("companyId") int companyId, @PathVariable("branchId") int branchId, @PathVariable("productId") int productId) {
-        return dbPosProduct.getProductById(productId, branchId, companyId);
+    public Product productById(@PathVariable("companyId") int companyId,
+                               @PathVariable("branchId") int branchId,
+                               @PathVariable("productId") int productId) {
+        return productService.getProductById(productId, branchId, companyId);
     }
 
     @PostMapping("{companyId}/{branchId}/saveProduct")
-    ResponseEntity<Object> newProduct(@RequestBody Product newProProduct, @PathVariable String branchId, @PathVariable int companyId) {
-        return dbPosProduct.AddProduct(newProProduct, branchId, companyId);
+    public ResponseEntity<ProductOperationResponse> newProduct(@RequestBody Product newProProduct,
+                                                               @PathVariable String branchId,
+                                                               @PathVariable int companyId) {
+        ProductOperationResponse response = productService.addProduct(newProProduct, branchId, companyId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    //--------------editProduct------------------
     @PutMapping("{companyId}/{branchId}/editProduct")
-    ResponseEntity<Object> EditProduct(@RequestBody Product editProduct, @PathVariable String branchId, @PathVariable int companyId) {
-        System.out.println("In Edit Product");
-        return dbPosProduct.EditProduct(editProduct, branchId, companyId);
+    public ResponseEntity<ProductOperationResponse> editProduct(@RequestBody Product editProduct,
+                                                                @PathVariable String branchId,
+                                                                @PathVariable int companyId) {
+        ProductOperationResponse response = productService.editProduct(editProduct, branchId, companyId);
+        return ResponseEntity.ok(response);
     }
 
-    //--Search ProdsNames
     @GetMapping("/PN/{companyId}/{branchId}/{text}")
-    ResponseEntity<Object> productNames(@PathVariable("companyId") int companyId, @PathVariable("branchId") int branchId, @PathVariable("text") String text) {
-        return dbPosProduct.getProductNames(text, branchId, companyId);
+    public ResponseEntity<List<ProductUtilNames>> productNames(@PathVariable("companyId") int companyId,
+                                                               @PathVariable("branchId") int branchId,
+                                                               @PathVariable("text") String text) {
+        return ResponseEntity.ok(productService.getProductNames(text, branchId, companyId));
     }
-
-
 }
