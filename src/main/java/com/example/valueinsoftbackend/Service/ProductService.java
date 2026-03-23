@@ -61,12 +61,14 @@ public class ProductService {
 
     public ProductOperationResponse addProduct(Product product, String branchId, int companyId) {
         long id = productCommandRepository.addProduct(product, branchId, companyId);
-        return buildOperationResponse("The Product  Saved", id, product, "Add");
+        Product savedProduct = productRepository.getProductById((int) id, Integer.parseInt(branchId), companyId);
+        return buildOperationResponse("The Product  Saved", id, savedProduct == null ? product : savedProduct, "Add");
     }
 
     public ProductOperationResponse editProduct(Product product, String branchId, int companyId) {
         productCommandRepository.updateProduct(product, branchId, companyId);
-        return buildOperationResponse("The Product Edit Saved", product.getProductId(), product, "Update");
+        Product savedProduct = productRepository.getProductById(product.getProductId(), Integer.parseInt(branchId), companyId);
+        return buildOperationResponse("The Product Edit Saved", product.getProductId(), savedProduct == null ? product : savedProduct, "Update");
     }
 
     private ProductOperationResponse buildOperationResponse(String title, long id, Product product, String transactionType) {
@@ -75,7 +77,8 @@ public class ProductService {
                 id,
                 product.getQuantity(),
                 product.getBPrice() * product.getQuantity(),
-                transactionType
+                transactionType,
+                product
         );
     }
 

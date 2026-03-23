@@ -1,5 +1,7 @@
 package com.example.valueinsoftbackend.Model.ResponseModel;
 
+import com.example.valueinsoftbackend.Model.Product;
+
 public class ProductOperationResponse {
 
     private String title;
@@ -7,13 +9,15 @@ public class ProductOperationResponse {
     private int numItems;
     private int transTotal;
     private String transactionType;
+    private Product product;
 
-    public ProductOperationResponse(String title, long id, int numItems, int transTotal, String transactionType) {
+    public ProductOperationResponse(String title, long id, int numItems, int transTotal, String transactionType, Product product) {
         this.title = title;
         this.id = id;
         this.numItems = numItems;
         this.transTotal = transTotal;
         this.transactionType = transactionType;
+        this.product = product;
     }
 
     public String getTitle() {
@@ -54,5 +58,13 @@ public class ProductOperationResponse {
 
     public void setTransactionType(String transactionType) {
         this.transactionType = transactionType;
+    }
+
+    public Product getProduct() {
+        return product;
+    }
+
+    public void setProduct(Product product) {
+        this.product = product;
     }
 }

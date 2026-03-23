@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,8 +15,11 @@ public class Product {
     String productName;
     Timestamp buyingDay;
     String activationPeriod;
+    @JsonProperty("rPrice")
     int rPrice;
+    @JsonProperty("lPrice")
     int lPrice;
+    @JsonProperty("bPrice")
     int bPrice;
     String companyName;
     String type;

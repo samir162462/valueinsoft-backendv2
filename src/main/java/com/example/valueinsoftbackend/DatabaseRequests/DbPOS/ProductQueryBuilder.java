@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.text.Normalizer;
 
 final class ProductQueryBuilder {
 
@@ -98,9 +99,25 @@ final class ProductQueryBuilder {
             }
 
             String token = value.trim();
-            if (!token.isEmpty()) {
-                tokens.add(token);
+            if (token.isEmpty()) {
+                continue;
             }
+
+            // Remove control characters and invisible/formatting chars (zero-width, etc.)
+            token = token.replaceAll("\\p{C}", "");
+
+            // Normalize unicode to a consistent form to avoid mismatch (NFKC)
+            token = Normalizer.normalize(token, Normalizer.Form.NFKC);
+
+            // Replace punctuation with a single space, then collapse whitespace
+            token = token.replaceAll("[\\p{Punct}]+", " ").replaceAll("\\s+", " ").trim();
+
+            // Skip tokens that are too short to be useful (single characters)
+            if (token.length() < 2) {
+                continue;
+            }
+
+            tokens.add(token);
         }
 
         return tokens;

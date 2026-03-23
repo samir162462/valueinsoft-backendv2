@@ -92,6 +92,7 @@ public class ProductController {
                                                                @PathVariable String branchId,
                                                                @PathVariable int companyId) {
         ProductOperationResponse response = productService.addProduct(newProProduct, branchId, companyId);
+        System.out.println(newProProduct);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

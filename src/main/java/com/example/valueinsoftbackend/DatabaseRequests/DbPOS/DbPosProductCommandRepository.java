@@ -34,13 +34,14 @@ public class DbPosProductCommandRepository {
                 """.formatted(ProductQueryBuilder.productTable(companyId, branchId));
 
         MapSqlParameterSource params = createProductParams(product);
-        params.addValue("buyingDay", new Timestamp(System.currentTimeMillis()));
+        params.addValue("buyingDay", resolveBuyingDay(product));
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
         int affectedRows = jdbcTemplate.update(sql, params, keyHolder, new String[]{"productId"});
         if (affectedRows == 0 || keyHolder.getKey() == null) {
             throw new IllegalStateException("Creating product failed");
         }
+        System.out.println(sql);
 
         return keyHolder.getKey().longValue();
     }
@@ -107,5 +108,13 @@ public class DbPosProductCommandRepository {
             return 0;
         }
         return Integer.parseInt(activationPeriod.trim());
+    }
+
+    private Timestamp resolveBuyingDay(Product product) {
+        if (product.getBuyingDay() != null) {
+            return product.getBuyingDay();
+        }
+
+        return new Timestamp(System.currentTimeMillis());
     }
 }

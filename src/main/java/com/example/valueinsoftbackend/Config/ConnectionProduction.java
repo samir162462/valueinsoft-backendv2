@@ -21,7 +21,6 @@ public class ConnectionProduction {
     final private String url = "jdbc:postgresql://localhost:5432/localvls";
     @Bean
     public DataSource PostgresDataSource() {
-        log.info("Inside PostgresDataSource Production");
         DriverManagerDataSource dataSource = new DriverManagerDataSource();
         dataSource.setDriverClassName("org.postgresql.Driver");
         dataSource.setUrl(url);
