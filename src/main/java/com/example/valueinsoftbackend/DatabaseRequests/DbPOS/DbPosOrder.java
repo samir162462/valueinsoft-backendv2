@@ -44,17 +44,15 @@ public class DbPosOrder {
                     sb.append(" , ");
                 }
             }
-            sb.append("; BEGIN; ");
+            sb.append("; ");
             //Update quantity in orderList
             for (int i = 0; i < orddet.size(); i++) {
                 OrderDetails obj = orddet.get(i);
-                sb.append("UPDATE C_"+companyId+".\"PosProduct_" + branchId + "\"\n" +
-                        "\tSET  quantity= quantity - " + obj.getQuantity() + "\n" +
-                        "\tWHERE \"productId\" = " + obj.getProductId() + " ;");
+                sb.append("UPDATE C_").append(companyId).append(".\"PosProduct_").append(branchId).append("\"\n\tSET  quantity= quantity - ").append(obj.getQuantity()).append("\n\tWHERE \"productId\" = ").append(obj.getProductId()).append(" ;");
+                sb.append("INSERT INTO C_").append(companyId).append(".\"InventoryTransactions_").append(branchId).append("\"(\n\t \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n\tVALUES (").append(obj.getProductId()).append(", '").append(order.getSalesUser()).append("', 0, 'Sold', -").append(obj.getQuantity()).append(", ").append(obj.getTotal()).append(", 'Sale', CURRENT_TIMESTAMP, 0);");
             }
 
-            sb.append(" " +
-                    "COMMIT ; ");
+            sb.append(" ");
             System.out.println(sb.toString());
             PreparedStatement stmt = conn.prepareStatement(sb.toString());
             stmt.setTimestamp(1, new Timestamp(System.currentTimeMillis()));
@@ -306,22 +304,42 @@ public class DbPosOrder {
 
     static public String bounceBackOrderDetailItem(int odId, int branchId ,int companyId ,int toWho) { //Inventory
         try {
+            String restoreInventoryQuantityQuery = "";
+            String inventoryTransactionQuery = "";
+            String orderIdQuery = "(select \"orderId\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ")";
+            String orderDetailTotalQuery = "(select \"total\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ")";
+            String orderDetailQuantityQuery = "(select \"quantity\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ")";
+            String orderDetailProductIdQuery = "(select \"productId\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ")";
+            String fullBounceDiscountQuery =
+                    "(case when exists (select 1 from C_"+companyId+".\"PosOrder_" + branchId + "\" where \"orderId\" = " + orderIdQuery + " and \"orderDiscount\" > 0) " +
+                    "and not exists (select 1 from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderId\" = " + orderIdQuery + " and \"orderDetailsId\" <> " + odId + " and \"bouncedBack\" = 0) " +
+                    "then (select \"orderDiscount\" from C_"+companyId+".\"PosOrder_" + branchId + "\" where \"orderId\" = " + orderIdQuery + ") else 0 end)";
+            String orderDetailIncomeImpactQuery =
+                    "((" + orderDetailTotalQuery + ") - " +
+                    "((select \"bPrice\" from C_"+companyId+".\"PosProduct_"+branchId+"\" where \"productId\" = " + orderDetailProductIdQuery + ") * " + orderDetailQuantityQuery + "))";
+            if (toWho == 1) {
+                restoreInventoryQuantityQuery =
+                        "update C_"+companyId+".\"PosProduct_" + branchId + "\" set \"quantity\" = \"quantity\" + " + orderDetailQuantityQuery + " where \"productId\" = " + orderDetailProductIdQuery + " ;\n";
+                inventoryTransactionQuery =
+                        "insert into C_"+companyId+".\"InventoryTransactions_" + branchId + "\"(\n" +
+                        "\t \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
+                        "\tvalues (" + orderDetailProductIdQuery + ", " +
+                        "(select \"salesUser\" from C_"+companyId+".\"PosOrder_" + branchId + "\" where \"orderId\" = " + orderIdQuery + "), " +
+                        "0, 'BounceBackInv', " +
+                        orderDetailQuantityQuery + ", " +
+                        orderDetailTotalQuery + ", " +
+                        "'BounceBack', CURRENT_TIMESTAMP, 0);\n";
+            }
             Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("Do $$\n" +
-                    "Begin\n" +
-                    "update C_"+companyId+".\"PosProduct_" + branchId + "\" set \"quantity\" = \"quantity\" + (select \"quantity\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") where \"productId\" = (select \"productId\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") ;\n" +
-                    "update C_"+companyId+".\"PosOrder_" + branchId + "\" set \"orderBouncedBack\" = \"orderBouncedBack\" + (select \"total\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") where \"orderId\" = (select \"orderId\" from C_"+companyId+".\"PosOrderDetail_" + branchId + "\" where \"orderDetailsId\" = " + odId + ") ;\n" +
-                    "update C_"+companyId+".\"PosOrder_"+branchId+"\" set \"orderIncome\" = \"orderIncome\" -  \n" +
-                    "((select \"total\"  from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+") -\n" +
-                    "((select \"bPrice\"  from C_"+companyId+".\"PosProduct_"+branchId+"\" where \"productId\" = \n" +
-                    "  (select \"productId\"  from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+"))*\n" +
-                    "  (select \"quantity\"  from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+")))\n" +
-                    " where \"orderId\" = (select \"orderId\" from C_"+companyId+".\"PosOrderDetail_"+branchId+"\" where \"orderDetailsId\" = "+odId+") ;" +
+            PreparedStatement stmt = conn.prepareStatement(
+                    restoreInventoryQuantityQuery +
+                    "update C_"+companyId+".\"PosOrder_" + branchId + "\" set \"orderBouncedBack\" = \"orderBouncedBack\" + " + orderDetailTotalQuery + " + " + fullBounceDiscountQuery + " where \"orderId\" = " + orderIdQuery + " ;\n" +
+                    "update C_"+companyId+".\"PosOrder_"+branchId+"\" set \"orderIncome\" = \"orderIncome\" - " + orderDetailIncomeImpactQuery + " + " + fullBounceDiscountQuery + "\n" +
+                    " where \"orderId\" = " + orderIdQuery + " ;\n" +
+                    inventoryTransactionQuery +
                     "update C_"+companyId+".\"PosOrderDetail_" + branchId + "\"\n" +
                     "\tset \"bouncedBack\" = "+toWho+"  " +
-                    "\tWHERE \"orderDetailsId\" = " + odId + ";\n" +
-                    "Exception When Others then Rollback;\n" +
-                    "end $$;");
+                    "\tWHERE \"orderDetailsId\" = " + odId + ";\n");
 
             Statement st = conn.createStatement();
             int i = stmt.executeUpdate();

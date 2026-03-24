@@ -64,6 +64,12 @@ public class DbPosDamagedList {
         String query = "INSERT INTO c_"+companyName+".\"DamagedList\"(\n" +
                 " \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\" ,  \"quantity\")\n" +
                 "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?,?);";
+        String updateProductQuantityQuery = "UPDATE c_"+companyName+".\"PosProduct_"+branchId+"\"\n" +
+                "\tSET quantity = quantity - ?\n" +
+                "\tWHERE \"productId\" = ?;";
+        String insertInventoryTransactionQuery = "INSERT INTO c_"+companyName+".\"InventoryTransactions_"+branchId+"\"(\n" +
+                " \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
+                "\tVALUES (?, ?, COALESCE((SELECT \"supplierId\" FROM c_"+companyName+".\"PosProduct_"+branchId+"\" WHERE \"productId\" = ?), 0), ?, ?, ?, ?, ?, ?);";
         try {
             jdbcTemplate.update(query,
                     damagedItem.getProductId(),
@@ -76,6 +82,23 @@ public class DbPosDamagedList {
                     damagedItem.isPaid(),
                     damagedItem.getBranchId(),
                     damagedItem.getQuantity()
+            );
+            jdbcTemplate.update(
+                    updateProductQuantityQuery,
+                    damagedItem.getQuantity(),
+                    damagedItem.getProductId()
+            );
+            jdbcTemplate.update(
+                    insertInventoryTransactionQuery,
+                    damagedItem.getProductId(),
+                    damagedItem.getCashierUser(),
+                    damagedItem.getProductId(),
+                    "Damaged",
+                    damagedItem.getQuantity() * -1,
+                    damagedItem.getAmountTP(),
+                    damagedItem.isPaid() ? "PaidDamaged" : "Damaged",
+                    damagedItem.getTime(),
+                    damagedItem.isPaid() ? 0 : damagedItem.getAmountTP()
             );
         } catch (Exception e) {
             System.out.println(e.getMessage());
