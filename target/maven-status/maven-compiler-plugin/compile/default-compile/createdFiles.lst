@@ -20,7 +20,6 @@ com\example\valueinsoftbackend\Model\Sales\SupplierReceipt.class
 com\example\valueinsoftbackend\Model\ResponseModel\ProductOperationResponse.class
 com\example\valueinsoftbackend\Model\Order.class
 com\example\valueinsoftbackend\util\PageHandler.class
-com\example\valueinsoftbackend\DatabaseRequests\DbApp\DbSubscription.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosInventoryTransaction.class
 com\example\valueinsoftbackend\SecurityPack\SecurityConfiguration.class
 com\example\valueinsoftbackend\Model\Slots\SlotsFixArea.class
@@ -31,7 +30,6 @@ com\example\valueinsoftbackend\Controller\Intefaces\Crud.class
 com\example\valueinsoftbackend\Controller\posController\OrderController.class
 com\example\valueinsoftbackend\DatabaseRequests\DbDataVisualization\Sales\DbDvSales.class
 com\example\valueinsoftbackend\Model\Expenses.class
-com\example\valueinsoftbackend\SecurityPack\WebConfig.class
 com\example\valueinsoftbackend\DatabaseRequests\DbDataVisualization\Sales\DbDvCompany.class
 com\example\valueinsoftbackend\Model\DamagedItem.class
 com\example\valueinsoftbackend\Controller\SupplierController.class
@@ -43,7 +41,6 @@ com\example\valueinsoftbackend\Model\DataVisualizationModels\DVSalesYearly.class
 com\example\valueinsoftbackend\Model\DataVisualizationModels\DvCompanyChartSalesIncome.class
 com\example\valueinsoftbackend\SecurityPack\SpringDataRestCustomization.class
 com\example\valueinsoftbackend\Model\Supplier.class
-com\example\valueinsoftbackend\SecurityPack\DevConfiguration.class
 com\example\valueinsoftbackend\DatabaseRequests\DbMoney\DBMSupplierReceipt.class
 com\example\valueinsoftbackend\Controller\posController\InventoryTransactionController.class
 com\example\valueinsoftbackend\Controller\MoneyController\SupplierReceiptController.class
@@ -54,7 +51,6 @@ com\example\valueinsoftbackend\Controller\BranchController.class
 com\example\valueinsoftbackend\Controller\MoneyController\ExpensesController.class
 com\example\valueinsoftbackend\Model\Branch.class
 com\example\valueinsoftbackend\DatabaseRequests\DbBranch$1.class
-com\example\valueinsoftbackend\Config\ConnectionProduction.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbSlotsFixArea$1.class
 com\example\valueinsoftbackend\Model\ShiftPeriod.class
 com\example\valueinsoftbackend\Controller\posController\DamagedItemController.class
@@ -98,7 +94,5 @@ com\example\valueinsoftbackend\OnlinePayment\OPModel\PayMobAuth.class
 com\example\valueinsoftbackend\Controller\WebAdminController.class
 com\example\valueinsoftbackend\DatabaseRequests\DbClient.class
 com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosOrder$1.class
-com\example\valueinsoftbackend\OnlinePayment\OPController\PayMobController.class
-com\example\valueinsoftbackend\Config\ConnectionConfigDev.class
 com\example\valueinsoftbackend\Controller\ClientController.class
 com\example\valueinsoftbackend\Controller\DataVisualizationControllers\DVSalesCompanyController.class

@@ -16,7 +16,6 @@ import java.util.Map;
 
 
 @RestController
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RequestMapping("/Company")
 
 public class CompanyController {

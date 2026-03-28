@@ -12,7 +12,6 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/Categories")
-@CrossOrigin("*")
 public class CategoryController {
 
 

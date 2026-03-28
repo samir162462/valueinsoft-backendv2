@@ -14,7 +14,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/Order")
-@CrossOrigin("*")
 public class OrderController {
 
 private final DbPosOrder dbPosOrder;

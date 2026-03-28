@@ -2,10 +2,14 @@ package com.example.valueinsoftbackend.Filters;
 
 import com.example.valueinsoftbackend.SecurityPack.MyUserDetailsServices;
 import com.example.valueinsoftbackend.util.JwtUtil;
+import io.jsonwebtoken.JwtException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -19,44 +23,50 @@ import java.io.IOException;
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtRequestFilter.class);
+
     @Autowired
     private MyUserDetailsServices myUserDetailsServices;
 
     @Autowired
     private JwtUtil jwtUtil;
 
-
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
 
         final String authorizationHeader = request.getHeader("Authorization");
         String username = null;
-        String jwt= null;
+        String jwt = null;
 
-        if (authorizationHeader!=null && authorizationHeader.startsWith("Bearer "))
-        {
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             jwt = authorizationHeader.substring(7);
-            username = jwtUtil.extractUsername(jwt);
-            System.out.println("username ->>: "+ username);
-            System.out.println("jwt: "+ jwt);
-        }
-
-        if (username!= null && SecurityContextHolder.getContext().getAuthentication() ==null)
-        {
-            UserDetails userDetails = this.myUserDetailsServices.loadUserByUsername(username);
-            if (jwtUtil.validateToken(jwt,userDetails))
-            {
-                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,null,userDetails.getAuthorities());
-                usernamePasswordAuthenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+            try {
+                username = jwtUtil.extractUsername(jwt);
+            } catch (JwtException | IllegalArgumentException exception) {
+                log.warn("Ignoring invalid JWT for request {} {}", request.getMethod(), request.getRequestURI());
+                SecurityContextHolder.clearContext();
             }
-
         }
 
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            try {
+                UserDetails userDetails = myUserDetailsServices.loadUserByUsername(username);
+                if (jwtUtil.validateToken(jwt, userDetails)) {
+                    UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    usernamePasswordAuthenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+                }
+            } catch (JwtException | IllegalArgumentException | UsernameNotFoundException exception) {
+                log.warn("Ignoring unauthenticated JWT context for request {} {}", request.getMethod(), request.getRequestURI());
+                SecurityContextHolder.clearContext();
+            }
+        }
 
-
-        filterChain.doFilter(request,response);
-
+        filterChain.doFilter(request, response);
     }
 }

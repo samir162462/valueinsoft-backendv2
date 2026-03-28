@@ -3,16 +3,17 @@ C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftba
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\util\CustomPair.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\InventoryTransaction.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\SqlConnection\ConnectionPostgres.java
-C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\SecurityPack\DevConfiguration.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\util\ConvertStringToTimeStamp.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Config\JwtProperties.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\User.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Controller\CompanyController.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\util\Test1.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosShiftPeriod.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\SecurityPack\MyUserDetailsServices.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Config\SchemaCompatibilityInitializer.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\SubCategory.java
-C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Config\ConnectionConfigDev.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Branch.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\ExceptionPack\ApiException.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbApp\DbSubscription.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Sales\SalesProduct.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Controller\posController\DamagedItemController.java
@@ -21,6 +22,7 @@ C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftba
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\DamagedItem.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\OnlinePayment\OPModel\OrderRegistration.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\AppModel\AppModelSubscription.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\ExceptionPack\ApiErrorResponse.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbDataVisualization\Sales\DbDvSales.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Slots\SlotsFixArea.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbUsers.java
@@ -46,6 +48,7 @@ C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftba
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\OnlinePayment\OPModel\Billing_data.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbDVCompanyAnalysis.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\OnlinePayment\OPModel\PaymentKeyRequest.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\SecurityPack\LegacyAwareBcryptPasswordEncoder.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\OnlinePayment\OPController\PayMobController.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Sales\SupplierReceipt.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbDataVisualization\Sales\DbDvCompany.java
@@ -57,9 +60,7 @@ C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftba
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\util\PageHandler.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbSlotsFixArea.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosProduct.java
-C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\SecurityPack\WebConfig.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Category.java
-C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Config\ConnectionProduction.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Client.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbExpenses.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Controller\ClientController.java
@@ -73,6 +74,7 @@ C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftba
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\AuthenticationRespone.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbPOS\DbPosDamagedList.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Sales\ClientReceipt.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\util\TenantSqlIdentifiers.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbCompany.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\Expenses.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\DataVisualizationModels\CompanyAnalysis.java
@@ -96,7 +98,9 @@ C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftba
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\OrderDetails.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Controller\AuthenticateController.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\ResponseModel\ProductOperationResponse.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Config\CorsProperties.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbBranch.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\DatabaseRequests\DbMoney\DBMClientReceipt.java
+C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\ExceptionPack\GlobalExceptionHandler.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Controller\BranchController.java
 C:\Web\Backend VLS\valueinsoft-backendv2\src\main\java\com\example\valueinsoftbackend\Model\DataVisualizationModels\DVSalesYearly.java

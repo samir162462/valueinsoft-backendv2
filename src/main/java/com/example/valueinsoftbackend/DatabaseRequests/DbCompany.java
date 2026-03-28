@@ -334,7 +334,7 @@ public class DbCompany {
                 "(\n" +
                 "    id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 21 START 10000 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"userName\" character varying(30) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
-                "    \"userPassword\" character varying(30) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
+                "    \"userPassword\" character varying(100) COLLATE pg_catalog.\"default\" NOT NULL,\n" +
                 "    \"userEmail\" character varying(60) COLLATE pg_catalog.\"default\",\n" +
                 "    \"userRole\" character varying(15) COLLATE pg_catalog.\"default\",\n" +
                 "    \"userPhone\" character varying COLLATE pg_catalog.\"default\",\n" +

@@ -1,4 +1,4 @@
-# Valueinsoft Backend Documentation
+﻿# Valueinsoft Backend Documentation
 
 ## 1. Overview
 
@@ -670,3 +670,41 @@ So the backend has test scaffolding, but not meaningful automated coverage of bu
 - Formalize the payment/subscription workflow with explicit states and audit trails.
 - Add API documentation through OpenAPI or SpringDoc.
 - Add versioned API contracts if frontend and backend will continue evolving independently.
+
+## 14. Backend Modernization Roadmap
+
+A dedicated modernization roadmap now lives in `VALUEINSOFT_BACKEND_MODERNIZATION_PLAN.md`.
+
+That roadmap is intentionally phased so the backend can be evolved safely without a rewrite. It follows this order:
+
+1. Phase 1: essential security and stability
+2. Phase 2: service-layer and transaction foundation
+3. Phase 3: business completeness for sales, supplier accounting, inventory, and shifts
+4. Phase 4: operational accounting ledger
+5. Phase 5: reporting
+6. Phase 6: tests, logging, and stronger operational practice
+
+## 15. Phase 1 Essential Status Update
+
+Status on 2026-03-29:
+
+- completed for the planned Phase 1 scope
+- verified with `./mvnw.cmd -q -DskipTests compile`
+
+Implemented in Phase 1:
+
+- replaced `NoOpPasswordEncoder` with a legacy-aware BCrypt migration path
+- externalized datasource, JWT, PayMob, and CORS configuration into Spring property classes and environment-backed settings
+- standardized profile handling to `dev` and `production`
+- centralized CORS in Spring Security and removed controller-level wildcard CORS annotations
+- added a global structured API error response model and exception handler
+- refactored the touched auth and finance repositories toward validated parameterized SQL
+- added a shared tenant SQL identifier validator for dynamic schema and table names
+
+What remains for the next phase:
+
+- service-layer extraction across the main domains
+- transaction management for order creation, inventory updates, supplier payments, and expenses
+- request DTO validation
+- migration tooling
+- broader repository cleanup beyond the touched Phase 1 modules

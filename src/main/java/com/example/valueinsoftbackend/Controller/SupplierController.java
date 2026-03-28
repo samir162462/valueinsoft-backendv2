@@ -21,7 +21,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/suppliers")
-@CrossOrigin("*")
 public class SupplierController {
 
     @RequestMapping(value = "/all/{companyId}/{branchId}", method = RequestMethod.GET)

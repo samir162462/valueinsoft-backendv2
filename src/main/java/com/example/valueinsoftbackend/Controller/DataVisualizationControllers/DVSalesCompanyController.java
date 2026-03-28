@@ -22,7 +22,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/DvCompany")
-@CrossOrigin("*")
 public class DVSalesCompanyController {
 
 

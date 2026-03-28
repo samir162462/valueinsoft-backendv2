@@ -30,6 +30,7 @@ public class Product {
     String ownerPhone;
     String ownerNI;
     int quantity;
+    @JsonProperty("pState")
     String pState;
     int supplierId;
     String major;

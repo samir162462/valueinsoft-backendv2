@@ -13,7 +13,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/Client")
-@CrossOrigin("*")
 public class ClientController {
 
 
@@ -116,7 +115,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/Client")
-@CrossOrigin("*")
 public class ClientController {
 
     private final DbClient dbClient;

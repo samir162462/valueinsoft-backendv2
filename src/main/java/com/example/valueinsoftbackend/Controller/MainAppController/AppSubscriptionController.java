@@ -14,7 +14,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/appSubscription")
-@CrossOrigin("*")
 public class AppSubscriptionController  {
     @RequestMapping(value = "/{branchId}",method = RequestMethod.GET)
     public ArrayList<AppModelSubscription> AppModelSubscriptionByBranchId(@PathVariable int branchId  ) throws Exception

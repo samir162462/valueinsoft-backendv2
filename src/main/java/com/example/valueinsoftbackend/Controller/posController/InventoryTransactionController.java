@@ -18,7 +18,6 @@ import java.util.Date;
 import java.util.Map;
 @RestController
 @RequestMapping("/invTrans")
-@CrossOrigin("*")
 public class InventoryTransactionController {
 
 

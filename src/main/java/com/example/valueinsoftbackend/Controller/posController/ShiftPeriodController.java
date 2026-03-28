@@ -13,7 +13,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/shiftPeriod")
-@CrossOrigin("*")
 public class ShiftPeriodController {
 
     @Autowired

@@ -15,7 +15,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/DvCa")
-@CrossOrigin("*")
 public class DVCompanyAnalysisController {
 
     @RequestMapping(value = "/CompanyAnalysis", method = RequestMethod.POST)

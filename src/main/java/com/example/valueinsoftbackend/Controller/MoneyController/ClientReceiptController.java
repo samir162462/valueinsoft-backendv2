@@ -15,7 +15,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/CR")
-@CrossOrigin("*")
 public class ClientReceiptController {
 
 

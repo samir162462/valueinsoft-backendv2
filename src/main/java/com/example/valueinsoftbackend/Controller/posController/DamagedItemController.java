@@ -20,7 +20,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/DamagedItem")
-@CrossOrigin("*")
 public class DamagedItemController {
 
     DbPosDamagedList dbPosDamagedList;

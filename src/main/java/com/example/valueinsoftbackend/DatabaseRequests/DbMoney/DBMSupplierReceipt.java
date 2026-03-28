@@ -1,100 +1,110 @@
-/*
- * Copyright (c) Samir Filifl
- */
-
 package com.example.valueinsoftbackend.DatabaseRequests.DbMoney;
 
-import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Sales.SupplierReceipt;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
 
-import java.sql.*;
-import java.util.ArrayList;
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
+import java.util.List;
 
+@Repository
 public class DBMSupplierReceipt {
 
-    static public ResponseEntity<Object> getSupplierReceipts(int companyId, int  supplierId )
-    {
+    private static final RowMapper<SupplierReceipt> supplierReceiptRowMapper = (rs, rowNum) -> new SupplierReceipt(
+            rs.getInt("srId"),
+            rs.getInt("transId"),
+            rs.getBigDecimal("amountPaid"),
+            rs.getBigDecimal("remainingAmount"),
+            rs.getTimestamp("receiptTime"),
+            rs.getString("userRecived"),
+            rs.getInt("supplierId"),
+            rs.getString("type"),
+            rs.getInt("branchId")
+    );
 
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT \"srId\", \"transId\", \"amountPaid\"::money::numeric::float8, \"remainingAmount\"::money::numeric::float8, \"receiptTime\", \"userRecived\", \"supplierId\", type, \"branchId\"\n" +
-                    "\tFROM c_"+companyId+".\"supplierReciepts\" where \"supplierId\"  =  "+supplierId+" ORDER BY \"receiptTime\" DESC ;";
-            // create the java statement
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-            ArrayList<SupplierReceipt> supplierReceipts = new ArrayList<>();
-            System.out.println(query);
-            while (rs.next())
-            {
-                SupplierReceipt clientReceiptIn = new SupplierReceipt(
-                        rs.getInt(1),rs.getInt(2),rs.getBigDecimal(3),rs.getBigDecimal(4),
-                        rs.getTimestamp(5),rs.getString(6),rs.getInt(7),rs.getString(8),rs.getInt(9));
-                supplierReceipts.add(clientReceiptIn);
+    private final JdbcTemplate jdbcTemplate;
+    private final DataSource dataSource;
+
+    public DBMSupplierReceipt(JdbcTemplate jdbcTemplate, DataSource dataSource) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.dataSource = dataSource;
+    }
+
+    public List<SupplierReceipt> getSupplierReceipts(int companyId, int supplierId) {
+        TenantSqlIdentifiers.requirePositive(supplierId, "supplierId");
+        String sql = "SELECT \"srId\", \"transId\", \"amountPaid\"::money::numeric AS \"amountPaid\", " +
+                "\"remainingAmount\"::money::numeric AS \"remainingAmount\", \"receiptTime\", \"userRecived\", " +
+                "\"supplierId\", type, \"branchId\" FROM " + TenantSqlIdentifiers.companySchema(companyId) +
+                ".\"supplierReciepts\" WHERE \"supplierId\" = ? ORDER BY \"receiptTime\" DESC";
+        return jdbcTemplate.query(sql, supplierReceiptRowMapper, supplierId);
+    }
+
+    public String addSupplierReceipt(int companyId, SupplierReceipt supplierReceipt) {
+        TenantSqlIdentifiers.requirePositive(supplierReceipt.getBranchId(), "branchId");
+        String receiptsTable = TenantSqlIdentifiers.companySchema(companyId) + ".\"supplierReciepts\"";
+        String inventoryTable = TenantSqlIdentifiers.inventoryTransactionsTable(companyId, supplierReceipt.getBranchId());
+        String supplierTable = TenantSqlIdentifiers.supplierTable(companyId, supplierReceipt.getBranchId());
+
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+
+            try (PreparedStatement insertReceipt = connection.prepareStatement(
+                    "INSERT INTO " + receiptsTable +
+                            " (\"transId\", \"amountPaid\", \"remainingAmount\", \"receiptTime\", \"userRecived\", \"supplierId\", type, \"branchId\") " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                 PreparedStatement updateInventory = connection.prepareStatement(
+                         "UPDATE " + inventoryTable + " SET \"RemainingAmount\" = ? WHERE \"transId\" = ?");
+                 PreparedStatement updateSupplier = connection.prepareStatement(
+                         "UPDATE " + supplierTable + " SET \"supplierRemainig\" = \"supplierRemainig\" - ? WHERE \"supplierId\" = ?")) {
+
+                insertReceipt.setInt(1, supplierReceipt.getTransId());
+                insertReceipt.setBigDecimal(2, supplierReceipt.getAmountPaid());
+                insertReceipt.setBigDecimal(3, supplierReceipt.getRemainingAmount());
+                insertReceipt.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+                insertReceipt.setString(5, supplierReceipt.getUserRecived());
+                insertReceipt.setInt(6, supplierReceipt.getSupplierId());
+                insertReceipt.setString(7, supplierReceipt.getType());
+                insertReceipt.setInt(8, supplierReceipt.getBranchId());
+                insertReceipt.executeUpdate();
+
+                updateInventory.setBigDecimal(1, supplierReceipt.getRemainingAmount());
+                updateInventory.setInt(2, supplierReceipt.getTransId());
+                int inventoryRows = updateInventory.executeUpdate();
+
+                updateSupplier.setBigDecimal(1, supplierReceipt.getAmountPaid());
+                updateSupplier.setInt(2, supplierReceipt.getSupplierId());
+                int supplierRows = updateSupplier.executeUpdate();
+
+                if (inventoryRows != 1 || supplierRows != 1) {
+                    connection.rollback();
+                    throw new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_RECEIPT_DEPENDENCY_NOT_FOUND",
+                            "Supplier receipt references a missing transaction or supplier");
+                }
+
+                connection.commit();
+                return "the Client Receipt Added Successfully : " + supplierReceipt.getSupplierId();
+            } catch (Exception exception) {
+                connection.rollback();
+                if (exception instanceof ApiException) {
+                    throw (ApiException) exception;
+                }
+                throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SUPPLIER_RECEIPT_INSERT_FAILED",
+                        "the ReceiptUser not added -> error in server!");
+            } finally {
+                connection.setAutoCommit(true);
             }
-            rs.close();
-            st.close();
-            conn.close();
-            return ResponseEntity.status(HttpStatus.CREATED).body(supplierReceipts);
-
-        }catch (Exception e)
-        {
-            System.out.println(" no user exist"+e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
-
+        } catch (ApiException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SUPPLIER_RECEIPT_INSERT_FAILED",
+                    "the ReceiptUser not added -> error in server!");
         }
-
     }
-
-    static public ResponseEntity<Object> AddSupplierReceipt(int companyId,SupplierReceipt supplierReceipt) {
-        try {
-
-            Connection conn = ConnectionPostgres.getConnection();
-
-
-            PreparedStatement stmt = conn.prepareStatement("BEGIN;\n" +
-                    " INSERT INTO c_"+companyId+".\"supplierReciepts\"(\n" +
-                    " \"transId\", \"amountPaid\", \"remainingAmount\", \"receiptTime\", \"userRecived\", \"supplierId\", type, \"branchId\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?); " +
-                    "UPDATE c_"+companyId+".\"InventoryTransactions_"+supplierReceipt.getBranchId()+"\"\n" +
-                    "\tSET \"RemainingAmount\"=?\n" +
-                    "\tWHERE \"transId\"=?; " +
-                    "UPDATE c_"+companyId+".supplier_"+supplierReceipt.getBranchId()+"\n" +
-                    "\tSET  \"supplierRemainig\"= \"supplierRemainig\" -  ?\n" +
-                    "\tWHERE \"supplierId\"=?;" +
-                    "COMMIT;");
-
-            stmt.setInt(1, supplierReceipt.getTransId());
-            stmt.setBigDecimal(2, supplierReceipt.getAmountPaid());
-            stmt.setBigDecimal(3, supplierReceipt.getRemainingAmount());
-            stmt.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
-            stmt.setString(5, supplierReceipt.getUserRecived());
-            stmt.setInt(6, supplierReceipt.getSupplierId());
-            stmt.setString(7, supplierReceipt.getType());
-            stmt.setInt(8, supplierReceipt.getBranchId());
-            stmt.setInt(9, supplierReceipt.getRemainingAmount().intValue());
-            stmt.setInt(10, supplierReceipt.getTransId());
-            stmt.setInt(11, supplierReceipt.getAmountPaid().intValue());
-            stmt.setInt(12, supplierReceipt.getSupplierId());
-            System.out.println(stmt.toString());
-
-            int i = stmt.executeUpdate();
-            stmt.close();
-            conn.close();
-
-            // Crate Branch table for new branch in DB
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("the ReceiptUser not added -> error in server!") ;
-
-        }
-        System.out.println("inAddSupplierReceipt");
-
-        return ResponseEntity.status(HttpStatus.CREATED).body("the Client Receipt Added Successfully : " + supplierReceipt.getSupplierId()) ;
-
-    }
-
 }

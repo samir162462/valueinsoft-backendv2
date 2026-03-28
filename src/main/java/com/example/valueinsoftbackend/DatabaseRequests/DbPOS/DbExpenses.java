@@ -1,211 +1,118 @@
-/*
- * Copyright (c) Samir Filifl
- */
-
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Expenses;
 import com.example.valueinsoftbackend.Model.Sales.ExpensesSum;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
 
-import java.sql.*;
-import java.util.ArrayList;
+import java.sql.Timestamp;
+import java.util.List;
 
+@Repository
 public class DbExpenses {
 
-    //-----------GET----------
-    static boolean iSExistExpensesStatic(int branchId, int companyId,String name) {
-        try {
-            String query = "select EXISTS (SELECT name FROM c_"+companyId+".\"ExpensesStatic\"\n" +
-                    "where \"branchId\" = "+branchId+" and name = '"+name+"' )";
-            Connection conn = ConnectionPostgres.getConnection();
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-            System.out.println(query);
-            try {
-                while (rs.next()) {
-                    System.out.println(rs.getBoolean(1));
-                    return rs.getBoolean(1);
-                }
-            } catch (Exception e) {
-                System.out.println("getProductById " + e.getMessage());
-                return true;
-            }
-            rs.close();
-            st.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
-            return true;
-        }
-        return true;
+    private static final RowMapper<Expenses> expensesRowMapper = (rs, rowNum) -> new Expenses(
+            rs.getInt("eId"),
+            rs.getString("type"),
+            rs.getBigDecimal("amount"),
+            rs.getTimestamp("time"),
+            rs.getInt("branchId"),
+            rs.getString("user"),
+            rs.getString("name")
+    );
+
+    private static final RowMapper<ExpensesSum> expensesSumRowMapper = (rs, rowNum) -> new ExpensesSum(
+            rs.getDate("expenseDate"),
+            rs.getInt("totalAmount"),
+            rs.getInt("transactionCount")
+    );
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public DbExpenses(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
-
-    public static ResponseEntity<Object> getAllExpensesItems(int branchId, int companyId, boolean isStatic) {
-        try {
-            String query = " ";
-            if (isStatic) {
-                query = "select \"eId\", type, amount::money::numeric::float8, \"time\", \"branchId\", \"user\", name \n" +
-                        "from  c_" + companyId + ".\"ExpensesStatic\"\n" +
-                        "where \"branchId\" = " + branchId + " ;";
-            } else {
-                query = "select \"eId\", type, amount::money::numeric::float8, \"time\", \"branchId\", \"user\", name \n" +
-                        "from  c_" + companyId + ".\"Expenses\"\n" +
-                        "where \"branchId\" = " + branchId + " ;";
-            }
-
-            Connection conn = ConnectionPostgres.getConnection();
-            System.out.println(query);
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-
-            ArrayList<Expenses> expensesArrayList = new ArrayList<>();
-
-            try {
-                while (rs.next()) {
-                    Expenses expenses = new Expenses(rs.getInt(1), rs.getString(2), rs.getBigDecimal(3), rs.getTimestamp(4), rs.getInt(5), rs.getString(6), rs.getString(7));
-                    expensesArrayList.add(expenses);
-                }
-
-            } catch (Exception e) {
-                System.out.println("getProductById " + e.getMessage());
-                return ResponseEntity.status(406).body("errorIn getProductNames To array" + e.getMessage());
-            }
-
-            rs.close();
-            st.close();
-            conn.close();
-            return ResponseEntity.status(200).body(expensesArrayList);
-
-        } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
-            return ResponseEntity.status(406).body("errorIn expensesArrayList To array" + e.getMessage());
-
-        }
-
+    public List<Expenses> getAllExpensesItems(int branchId, int companyId, boolean isStatic) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        String sql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name " +
+                "FROM " + TenantSqlIdentifiers.expensesTable(companyId, isStatic) + " WHERE \"branchId\" = ?";
+        return jdbcTemplate.query(sql, expensesRowMapper, branchId);
     }
 
-    public static ResponseEntity<Object> getPurchasesExpensesByMonth(int branchId, int companyId, String timeText) {
-
-        try {
-            String[] times = timeText.split("x");
-            System.out.println("-----------> "+times+"<-------------");
-            if (times[1].compareTo(times[0]) <0) {
-                System.out.println("time 1 > t2");
-            }else{
-                System.out.println("time2 > t1");
-            }
-            Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT EXTRACT(day FROM time::date) d, EXTRACT(month FROM time::date) m, \n" +
-                    "       EXTRACT(year FROM time::date) y,time::date, sum(\"transTotal\"), count(time) t \n" +
-                    "   FROM c_"+companyId+".\"InventoryTransactions_"+branchId+"\" \n" +
-                    "   where \"time\" >= date_trunc('month', '"+times[0]+"'::timestamp)\n" +
-                    "  \tand \"time\" < date_trunc('month', '"+times[1]+"'::timestamp) + interval '1 month' \n" +
-                    "  GROUP BY 1,2,3,time::date\n" +
-                    "  ORDER BY 3,2,1 ASC;\n";
-            System.out.println(query);
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-
-            ArrayList<ExpensesSum> expensesArrayList = new ArrayList<>();
-
-            try {
-                while (rs.next()) {
-                    ExpensesSum expenses = new ExpensesSum(rs.getDate(4),rs.getInt(5),rs.getInt(6));
-                    expensesArrayList.add(expenses);
-                }
-
-            } catch (Exception e) {
-                System.out.println("getProductById " + e.getMessage());
-                return ResponseEntity.status(406).body("errorIn getProductNames To array" + e.getMessage());
-            }
-
-            rs.close();
-            st.close();
-            conn.close();
-            return ResponseEntity.status(200).body(expensesArrayList);
-
-        } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
-            return ResponseEntity.status(406).body("errorIn expensesArrayList To array" + e.getMessage());
-
-        }
-
+    public List<ExpensesSum> getPurchasesExpensesByMonth(int branchId, int companyId, String timeText) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        String[] times = parseRange(timeText);
+        String sql = "SELECT time::date AS expenseDate, sum(\"transTotal\") AS totalAmount, count(time) AS transactionCount " +
+                "FROM " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) + " " +
+                "WHERE \"time\" >= date_trunc('month', CAST(? AS timestamp)) " +
+                "AND \"time\" < date_trunc('month', CAST(? AS timestamp)) + interval '1 month' " +
+                "GROUP BY time::date ORDER BY time::date ASC";
+        return jdbcTemplate.query(sql, expensesSumRowMapper, times[0], times[1]);
     }
 
-    static public ResponseEntity<Object> AddExpenses(int branchId, int companyId, Expenses expenses, boolean isStatic) {
-        try {
-
-            if (isStatic&& iSExistExpensesStatic(branchId,companyId,expenses.getName())) {
-                return ResponseEntity.status(HttpStatus.ALREADY_REPORTED).body("the Name Exists! => "+expenses.getName());
-
-            }
-
-            String query = " ";
-            if (isStatic) {
-                query = "INSERT INTO c_" + companyId + ".\"ExpensesStatic\"(\n" +
-                        "\t type, amount, \"time\", \"branchId\", \"user\" , name)\n" +
-                        "\tVALUES ( ?, ?, ?, ?, ?,?);";
-            } else {
-                query = "INSERT INTO c_" + companyId + ".\"Expenses\"(\n" +
-                        "\t type, amount, \"time\", \"branchId\", \"user\" , name)\n" +
-                        "\tVALUES ( ?, ?, ?, ?, ?,?);";
-            }
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement(query);
-
-            stmt.setString(1, expenses.getType());
-            stmt.setBigDecimal(2, expenses.getAmount());
-            stmt.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
-            stmt.setInt(4, branchId);
-            stmt.setString(5, expenses.getUser());
-            stmt.setString(6, expenses.getName());
-
-            int i = stmt.executeUpdate();
-            System.out.println(i + " records inserted");
-            stmt.close();
-            conn.close();
-
-            // Crate Branch table for new branch in DB
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return ResponseEntity.status(HttpStatus.NO_CONTENT).body("Record Not Inserted");
-
+    public String addExpenses(int branchId, int companyId, Expenses expenses, boolean isStatic) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        if (isStatic && existsStaticExpense(branchId, companyId, expenses.getName())) {
+            throw new ApiException(HttpStatus.CONFLICT, "EXPENSE_NAME_EXISTS", "the Name Exists! => " + expenses.getName());
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body("Record Inserted");
-    }
-
-    //todo Update
-    static public ResponseEntity<Object> updateExpenses(int branchId, int companyId, Expenses expenses) {
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("UPDATE c_" + companyId + ".\"Expenses\"\n" +
-                    "\tSET type=?, amount=?, \"time\"=?, \"branchId\"=?, \"user\"=? ,name=? \n" +
-                    "\tWHERE  \"eId\"=?;");
-
-            stmt.setString(1, expenses.getType());
-            stmt.setBigDecimal(2, expenses.getAmount());
-            stmt.setTimestamp(3, expenses.getTime());
-            stmt.setInt(4, branchId);
-            stmt.setString(5, expenses.getUser());
-            stmt.setString(6, expenses.getName());
-            stmt.setInt(7, expenses.getExId());
-
-            int i = stmt.executeUpdate();
-            System.out.println(i + " client update record ");
-            stmt.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return ResponseEntity.status(HttpStatus.NO_CONTENT).body("Record Not Updated");
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.expensesTable(companyId, isStatic) +
+                " (type, amount, \"time\", \"branchId\", \"user\", name) VALUES (?, ?, ?, ?, ?, ?)";
+        int rows = jdbcTemplate.update(
+                sql,
+                expenses.getType(),
+                expenses.getAmount(),
+                new Timestamp(System.currentTimeMillis()),
+                branchId,
+                expenses.getUser(),
+                expenses.getName()
+        );
+        if (rows != 1) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "EXPENSE_INSERT_FAILED", "Record Not Inserted");
         }
-        return ResponseEntity.status(HttpStatus.CREATED).body("Record Updated");
+        return "Record Inserted";
     }
 
+    public String updateExpenses(int branchId, int companyId, Expenses expenses) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        String sql = "UPDATE " + TenantSqlIdentifiers.expensesTable(companyId, false) +
+                " SET type = ?, amount = ?, \"time\" = ?, \"branchId\" = ?, \"user\" = ?, name = ? WHERE \"eId\" = ?";
+        int rows = jdbcTemplate.update(
+                sql,
+                expenses.getType(),
+                expenses.getAmount(),
+                expenses.getTime(),
+                branchId,
+                expenses.getUser(),
+                expenses.getName(),
+                expenses.getExId()
+        );
+        if (rows != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "EXPENSE_NOT_FOUND", "Record Not Updated");
+        }
+        return "Record Updated";
+    }
 
+    private boolean existsStaticExpense(int branchId, int companyId, String name) {
+        String sql = "SELECT EXISTS (SELECT 1 FROM " + TenantSqlIdentifiers.expensesTable(companyId, true) +
+                " WHERE \"branchId\" = ? AND name = ?)";
+        Boolean exists = jdbcTemplate.queryForObject(sql, Boolean.class, branchId, name);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    private String[] parseRange(String timeText) {
+        if (timeText == null || timeText.isBlank()) {
+            throw new IllegalArgumentException("option is required");
+        }
+        String[] times = timeText.split("x");
+        if (times.length != 2 || times[0].isBlank() || times[1].isBlank()) {
+            throw new IllegalArgumentException("option must contain a start and end date separated by x");
+        }
+        return times;
+    }
 }
