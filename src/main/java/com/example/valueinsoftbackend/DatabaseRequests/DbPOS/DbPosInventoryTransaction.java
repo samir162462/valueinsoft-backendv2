@@ -5,33 +5,29 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Repository;
 
-import java.sql.*;
-import java.util.ArrayList;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 
-@Service
-@Slf4j
+@Repository
 public class DbPosInventoryTransaction {
 
+    private final JdbcTemplate jdbcTemplate;
 
-    JdbcTemplate jdbcTemplate;
-
-    @Autowired
     public DbPosInventoryTransaction(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public class InventoryTransactionMapper implements RowMapper<InventoryTransaction> {
+    public static class InventoryTransactionMapper implements RowMapper<InventoryTransaction> {
         @Override
         public InventoryTransaction mapRow(ResultSet rs, int rowNum) throws SQLException {
-            InventoryTransaction inventoryTransaction = new InventoryTransaction(
+            return new InventoryTransaction(
                     rs.getInt("transId"),
                     rs.getInt("productId"),
                     rs.getString("userName"),
@@ -41,55 +37,42 @@ public class DbPosInventoryTransaction {
                     rs.getInt("transTotal"),
                     rs.getString("payType"),
                     rs.getTimestamp("time"),
-                    rs.getInt("RemainingAmount"));
-            return inventoryTransaction;
+                    rs.getInt("RemainingAmount")
+            );
         }
     }
 
-    public ArrayList<InventoryTransaction> getInventoryTrans(int companyId , int branchId , String startDate, String endDate  )
-    {
-        List<InventoryTransaction> inventoryTransactionList ;
-        String query = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\"\n" +
-                "\tFROM C_"+companyId+".\"InventoryTransactions_"+branchId+"\" " +
-                "where \"time\" >= date_trunc('month', '"+startDate+"'::timestamp)\n" +
-                "  \tand \"time\" < date_trunc('month', '"+endDate+"'::timestamp) + interval '1 month'";
-        inventoryTransactionList = jdbcTemplate.query(query, new Object[] {}, new InventoryTransactionMapper());
-        log.info("Inside Get inventoryTransactionList");
-        return (ArrayList<InventoryTransaction>) inventoryTransactionList;
-
+    public List<InventoryTransaction> getInventoryTrans(int companyId, int branchId, String startDate, String endDate) {
+        String sql = "SELECT \"transId\", \"productId\", \"userName\", \"supplierId\", \"transactionType\", " +
+                "\"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\" " +
+                "FROM " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) +
+                " WHERE \"time\" >= date_trunc('month', ?::timestamp) " +
+                "AND \"time\" < date_trunc('month', ?::timestamp) + interval '1 month'";
+        return jdbcTemplate.query(sql, new InventoryTransactionMapper(), startDate, endDate);
     }
 
-
-     public String AddTransactionToInv(int productId, String userName, int supplierId, String transactionType , int NumItems, int transTotal , String payType, Timestamp time , int remainingAmount, int branchId ,int companyId)
-    {
-        String sql  ="BEGIN;\n" +
-                "INSERT INTO C_"+companyId+".\"InventoryTransactions_"+branchId+"\"(\n" +
-                "\t \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
-                "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?);" +
-                "UPDATE C_"+companyId+".supplier_"+branchId+"\n" +
-                "SET  \"supplierRemainig\" = \"supplierRemainig\" + "+transTotal+", \"supplierTotalSales\" = \"supplierTotalSales\" + "+remainingAmount+" "+
-                "\tWHERE \"supplierId\"= " +supplierId+";" +
-                "COMMIT;\n";
-        log.info("Inside Add TransactionToInv");
-        try {
-            jdbcTemplate.update(sql,
-                    productId,
-                    userName,
-                    supplierId,
-                    transactionType,
-                    NumItems,
-                    transTotal,
-                    payType,
-                    time,
-                    remainingAmount);
-
-        }catch (Exception e )
-        {
-            System.out.println(e.getMessage());
-            return "the supplier not added bs error!";
-        }
-        return "the supplier added! ok 200";
+    public int insertInventoryTransaction(InventoryTransaction inventoryTransaction, int branchId, int companyId) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) +
+                " (\"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\") " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        return jdbcTemplate.update(
+                sql,
+                inventoryTransaction.getProductId(),
+                inventoryTransaction.getUserName(),
+                inventoryTransaction.getSupplierId(),
+                inventoryTransaction.getTransactionType(),
+                inventoryTransaction.getNumItems(),
+                inventoryTransaction.getTransTotal(),
+                inventoryTransaction.getPayType(),
+                new Timestamp(inventoryTransaction.getTime().getTime()),
+                inventoryTransaction.getRemainingAmount()
+        );
     }
 
-
+    public int updateSupplierTotals(int companyId, int branchId, int supplierId, int transTotal, int remainingAmount) {
+        String sql = "UPDATE " + TenantSqlIdentifiers.supplierTable(companyId, branchId) +
+                " SET \"supplierRemainig\" = \"supplierRemainig\" + ?, " +
+                "\"supplierTotalSales\" = \"supplierTotalSales\" + ? WHERE \"supplierId\" = ?";
+        return jdbcTemplate.update(sql, transTotal, remainingAmount, supplierId);
+    }
 }

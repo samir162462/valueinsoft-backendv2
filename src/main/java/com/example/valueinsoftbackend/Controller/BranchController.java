@@ -3,9 +3,12 @@ package com.example.valueinsoftbackend.Controller;
 import java.util.ArrayList;
 import java.util.Map;
 
+import javax.validation.constraints.Positive;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,25 +18,28 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.valueinsoftbackend.DatabaseRequests.DbApp.DbSubscription;
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
+import com.example.valueinsoftbackend.Service.SubscriptionService;
 
 @RestController
+@Validated
 @RequestMapping("/Branch")
 public class BranchController {
 
 
     private final DbCompany dbCompany;
     private final DbBranch dbBranch;
+    private final SubscriptionService subscriptionService;
 
 
     @Autowired
-    public BranchController(DbCompany dbCompany, DbBranch dbBranch) {
+    public BranchController(DbCompany dbCompany, DbBranch dbBranch, SubscriptionService subscriptionService) {
         this.dbCompany = dbCompany;
         this.dbBranch = dbBranch;
+        this.subscriptionService = subscriptionService;
     }
 
 
@@ -76,10 +82,10 @@ public class BranchController {
     @RequestMapping(value = "/isActive/{branchId}", method = RequestMethod.GET)
     @ResponseBody
     public ResponseEntity<Object> isActiveBranch(
-            @PathVariable("branchId") int branchId
+            @PathVariable("branchId") @Positive int branchId
     ) {
 
-        Map<String, Object> Details = DbSubscription.isActive(branchId);
+        Map<String, Object> Details = subscriptionService.isActive(branchId);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Details);
     }

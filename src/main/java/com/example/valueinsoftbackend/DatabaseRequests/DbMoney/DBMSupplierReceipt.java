@@ -8,9 +8,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.util.List;
 
@@ -30,81 +27,57 @@ public class DBMSupplierReceipt {
     );
 
     private final JdbcTemplate jdbcTemplate;
-    private final DataSource dataSource;
 
-    public DBMSupplierReceipt(JdbcTemplate jdbcTemplate, DataSource dataSource) {
+    public DBMSupplierReceipt(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.dataSource = dataSource;
     }
 
     public List<SupplierReceipt> getSupplierReceipts(int companyId, int supplierId) {
         TenantSqlIdentifiers.requirePositive(supplierId, "supplierId");
         String sql = "SELECT \"srId\", \"transId\", \"amountPaid\"::money::numeric AS \"amountPaid\", " +
                 "\"remainingAmount\"::money::numeric AS \"remainingAmount\", \"receiptTime\", \"userRecived\", " +
-                "\"supplierId\", type, \"branchId\" FROM " + TenantSqlIdentifiers.companySchema(companyId) +
-                ".\"supplierReciepts\" WHERE \"supplierId\" = ? ORDER BY \"receiptTime\" DESC";
+                "\"supplierId\", type, \"branchId\" FROM " + TenantSqlIdentifiers.supplierReceiptsTable(companyId) +
+                " WHERE \"supplierId\" = ? ORDER BY \"receiptTime\" DESC";
         return jdbcTemplate.query(sql, supplierReceiptRowMapper, supplierId);
     }
 
-    public String addSupplierReceipt(int companyId, SupplierReceipt supplierReceipt) {
-        TenantSqlIdentifiers.requirePositive(supplierReceipt.getBranchId(), "branchId");
-        String receiptsTable = TenantSqlIdentifiers.companySchema(companyId) + ".\"supplierReciepts\"";
-        String inventoryTable = TenantSqlIdentifiers.inventoryTransactionsTable(companyId, supplierReceipt.getBranchId());
-        String supplierTable = TenantSqlIdentifiers.supplierTable(companyId, supplierReceipt.getBranchId());
+    public int insertSupplierReceipt(int companyId, SupplierReceipt supplierReceipt) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.supplierReceiptsTable(companyId) +
+                " (\"transId\", \"amountPaid\", \"remainingAmount\", \"receiptTime\", \"userRecived\", \"supplierId\", type, \"branchId\") " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
-        try (Connection connection = dataSource.getConnection()) {
-            connection.setAutoCommit(false);
+        return jdbcTemplate.update(
+                sql,
+                supplierReceipt.getTransId(),
+                supplierReceipt.getAmountPaid(),
+                supplierReceipt.getRemainingAmount(),
+                new Timestamp(System.currentTimeMillis()),
+                supplierReceipt.getUserRecived(),
+                supplierReceipt.getSupplierId(),
+                supplierReceipt.getType(),
+                supplierReceipt.getBranchId()
+        );
+    }
 
-            try (PreparedStatement insertReceipt = connection.prepareStatement(
-                    "INSERT INTO " + receiptsTable +
-                            " (\"transId\", \"amountPaid\", \"remainingAmount\", \"receiptTime\", \"userRecived\", \"supplierId\", type, \"branchId\") " +
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                 PreparedStatement updateInventory = connection.prepareStatement(
-                         "UPDATE " + inventoryTable + " SET \"RemainingAmount\" = ? WHERE \"transId\" = ?");
-                 PreparedStatement updateSupplier = connection.prepareStatement(
-                         "UPDATE " + supplierTable + " SET \"supplierRemainig\" = \"supplierRemainig\" - ? WHERE \"supplierId\" = ?")) {
+    public int updateInventoryRemainingAmount(int companyId, int branchId, int transId, java.math.BigDecimal remainingAmount) {
+        String sql = "UPDATE " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) +
+                " SET \"RemainingAmount\" = ? WHERE \"transId\" = ?";
+        return jdbcTemplate.update(sql, remainingAmount, transId);
+    }
 
-                insertReceipt.setInt(1, supplierReceipt.getTransId());
-                insertReceipt.setBigDecimal(2, supplierReceipt.getAmountPaid());
-                insertReceipt.setBigDecimal(3, supplierReceipt.getRemainingAmount());
-                insertReceipt.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
-                insertReceipt.setString(5, supplierReceipt.getUserRecived());
-                insertReceipt.setInt(6, supplierReceipt.getSupplierId());
-                insertReceipt.setString(7, supplierReceipt.getType());
-                insertReceipt.setInt(8, supplierReceipt.getBranchId());
-                insertReceipt.executeUpdate();
+    public int decrementSupplierRemaining(int companyId, int branchId, int supplierId, java.math.BigDecimal amountPaid) {
+        String sql = "UPDATE " + TenantSqlIdentifiers.supplierTable(companyId, branchId) +
+                " SET \"supplierRemainig\" = \"supplierRemainig\" - ? WHERE \"supplierId\" = ?";
+        return jdbcTemplate.update(sql, amountPaid, supplierId);
+    }
 
-                updateInventory.setBigDecimal(1, supplierReceipt.getRemainingAmount());
-                updateInventory.setInt(2, supplierReceipt.getTransId());
-                int inventoryRows = updateInventory.executeUpdate();
-
-                updateSupplier.setBigDecimal(1, supplierReceipt.getAmountPaid());
-                updateSupplier.setInt(2, supplierReceipt.getSupplierId());
-                int supplierRows = updateSupplier.executeUpdate();
-
-                if (inventoryRows != 1 || supplierRows != 1) {
-                    connection.rollback();
-                    throw new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_RECEIPT_DEPENDENCY_NOT_FOUND",
-                            "Supplier receipt references a missing transaction or supplier");
-                }
-
-                connection.commit();
-                return "the Client Receipt Added Successfully : " + supplierReceipt.getSupplierId();
-            } catch (Exception exception) {
-                connection.rollback();
-                if (exception instanceof ApiException) {
-                    throw (ApiException) exception;
-                }
-                throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SUPPLIER_RECEIPT_INSERT_FAILED",
-                        "the ReceiptUser not added -> error in server!");
-            } finally {
-                connection.setAutoCommit(true);
-            }
-        } catch (ApiException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SUPPLIER_RECEIPT_INSERT_FAILED",
-                    "the ReceiptUser not added -> error in server!");
+    public void verifyDependentRows(int inventoryRows, int supplierRows) {
+        if (inventoryRows != 1 || supplierRows != 1) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "SUPPLIER_RECEIPT_DEPENDENCY_NOT_FOUND",
+                    "Supplier receipt references a missing transaction or supplier"
+            );
         }
     }
 }

@@ -1,50 +1,45 @@
 package com.example.valueinsoftbackend.Controller.MoneyController;
 
-import com.example.valueinsoftbackend.Controller.Intefaces.Crud;
-import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbExpenses;
-import com.example.valueinsoftbackend.Model.Expenses;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.valueinsoftbackend.Model.Request.ExpenseUpsertRequest;
+import com.example.valueinsoftbackend.Service.ExpensesService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Positive;
 
 @RestController
+@Validated
 @RequestMapping("/Expenses")
-public class ExpensesController implements Crud {
+public class ExpensesController {
 
-    private final DbExpenses dbExpenses;
-    private final ObjectMapper objectMapper;
+    private final ExpensesService expensesService;
 
-    public ExpensesController(DbExpenses dbExpenses, ObjectMapper objectMapper) {
-        this.dbExpenses = dbExpenses;
-        this.objectMapper = objectMapper;
+    public ExpensesController(ExpensesService expensesService) {
+        this.expensesService = expensesService;
     }
 
-    @Override
-    public ResponseEntity<Object> getAll(int companyId, int branchId, String option) {
-        return ResponseEntity.ok(dbExpenses.getPurchasesExpensesByMonth(branchId, companyId, option));
+    @GetMapping("{companyId}/{branchId}/{option}/getAll")
+    public ResponseEntity<Object> getAll(@PathVariable @Positive int companyId,
+                                         @PathVariable @Positive int branchId,
+                                         @PathVariable @NotBlank String option) {
+        return ResponseEntity.ok(expensesService.getPurchasesExpensesByMonth(companyId, branchId, option));
     }
 
-    @Override
-    public ResponseEntity<Object> getById(int companyId, int branchId, int oId) {
-        return null;
+    @PostMapping("{companyId}/{branchId}/create")
+    public ResponseEntity<Object> create(@PathVariable @Positive int companyId,
+                                         @PathVariable @Positive int branchId,
+                                         @Valid @RequestBody ExpenseUpsertRequest body) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(expensesService.createExpense(companyId, branchId, body, false));
     }
 
-    @Override
-    public ResponseEntity<Object> create(Object body, int companyId, int branchId) {
-        Expenses expenses = objectMapper.convertValue(body, Expenses.class);
-        return ResponseEntity.status(HttpStatus.CREATED).body(dbExpenses.addExpenses(branchId, companyId, expenses, false));
-    }
-
-    @Override
-    public ResponseEntity<Object> updateById(Object body, int companyId, int branchId) {
-        Expenses expenses = objectMapper.convertValue(body, Expenses.class);
-        return ResponseEntity.status(HttpStatus.CREATED).body(dbExpenses.updateExpenses(branchId, companyId, expenses));
-    }
-
-    @Override
-    public ResponseEntity<Object> DeleteById(int companyId, int branchId) {
-        return null;
+    @PutMapping("{companyId}/{branchId}/update")
+    public ResponseEntity<Object> updateById(@PathVariable @Positive int companyId,
+                                             @PathVariable @Positive int branchId,
+                                             @Valid @RequestBody ExpenseUpsertRequest body) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(expensesService.updateExpense(companyId, branchId, body));
     }
 }

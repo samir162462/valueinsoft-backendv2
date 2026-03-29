@@ -1,203 +1,134 @@
-/*
- * Copyright (c) Samir Filifl
- */
-
 package com.example.valueinsoftbackend.DatabaseRequests.DbApp;
 
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.AppModel.AppModelSubscription;
-import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
-import com.example.valueinsoftbackend.OnlinePayment.OPController.PayMobController;
-import com.example.valueinsoftbackend.OnlinePayment.OPModel.OrderRegistration;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
-import java.sql.*;
-import java.util.ArrayList;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+@Repository
 public class DbSubscription {
 
-    public static ArrayList<AppModelSubscription> getBranchSubscription(int branchId) {
+    private static final RowMapper<AppModelSubscription> subscriptionRowMapper = (rs, rowNum) -> new AppModelSubscription(
+            rs.getInt("sId"),
+            rs.getDate("startTime"),
+            rs.getDate("endTime"),
+            rs.getInt("branchId"),
+            rs.getBigDecimal("amountToPay"),
+            rs.getBigDecimal("amountPaid"),
+            rs.getInt("order_id"),
+            rs.getString("status")
+    );
 
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT \"sId\", \"startTime\", \"endTime\", \"branchId\", \"amountToPay\"::money::numeric::float8, \"amountPaid\"::money::numeric::float8 , order_id, status \n" +
-                    "\tFROM public.\"CompanySubscription\" where \"branchId\" = " + branchId + " ORDER BY \"sId\" ASC  ;";
-            // create the java statement
-            System.out.println(query);
+    private final JdbcTemplate jdbcTemplate;
 
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-            ArrayList<AppModelSubscription> appModelSubscriptions = new ArrayList<>();
-            while (rs.next()) {
-                AppModelSubscription appModelSubscription = new AppModelSubscription(rs.getInt(1), rs.getDate(2), rs.getDate(3), rs.getInt(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getInt(7), rs.getString(8));
-                appModelSubscriptions.add(appModelSubscription);
-            }
-            rs.close();
-            st.close();
-            conn.close();
-            return appModelSubscriptions;
+    public DbSubscription(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
-        } catch (Exception e) {
-            System.out.println(" no user exist" + e.getMessage());
-            return null;
+    public List<AppModelSubscription> getBranchSubscription(int branchId) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        String sql = "SELECT \"sId\", \"startTime\", \"endTime\", \"branchId\", " +
+                "\"amountToPay\"::money::numeric AS \"amountToPay\", " +
+                "\"amountPaid\"::money::numeric AS \"amountPaid\", order_id, status " +
+                "FROM " + TenantSqlIdentifiers.companySubscriptionTable() +
+                " WHERE \"branchId\" = ? ORDER BY \"sId\" ASC";
+        return jdbcTemplate.query(sql, subscriptionRowMapper, branchId);
+    }
 
+    public int createBranchSubscription(AppModelSubscription appModelSubscription) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.companySubscriptionTable() +
+                " (\"startTime\", \"endTime\", \"branchId\", \"amountToPay\", \"amountPaid\", order_id, status) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            preparedStatement.setDate(1, appModelSubscription.getStartTime());
+            preparedStatement.setDate(2, appModelSubscription.getEndTime());
+            preparedStatement.setInt(3, appModelSubscription.getBranchId());
+            preparedStatement.setBigDecimal(4, appModelSubscription.getAmountToPay());
+            preparedStatement.setBigDecimal(5, appModelSubscription.getAmountPaid());
+            preparedStatement.setInt(6, appModelSubscription.getOrder_id());
+            preparedStatement.setString(7, appModelSubscription.getStatus());
+            return preparedStatement;
+        }, keyHolder);
+
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SUBSCRIPTION_INSERT_FAILED", "Subscription could not be created");
+        }
+        return key.intValue();
+    }
+
+    public void updateBranchSubscriptionWithPayMobId(int orderId, int subscriptionId) {
+        int rows = jdbcTemplate.update(
+                "UPDATE " + TenantSqlIdentifiers.companySubscriptionTable() + " SET order_id = ? WHERE \"sId\" = ?",
+                orderId,
+                subscriptionId
+        );
+        if (rows != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "SUBSCRIPTION_NOT_FOUND", "Subscription not found");
         }
     }
 
-
-    static public String AddBranchSubscription(AppModelSubscription appModelSubscription) {
-        try {
-
-            Connection conn = ConnectionPostgres.getConnection();
-
-
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO public.\"CompanySubscription\"(\n" +
-                    "\t \"startTime\", \"endTime\", \"branchId\", \"amountToPay\", \"amountPaid\" , order_id, status )\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?,?,?);", Statement.RETURN_GENERATED_KEYS);
-
-            stmt.setDate(1, appModelSubscription.getStartTime());
-            stmt.setDate(2, appModelSubscription.getEndTime());
-            stmt.setInt(3, appModelSubscription.getBranchId());
-            stmt.setBigDecimal(4, appModelSubscription.getAmountToPay());
-            stmt.setBigDecimal(5, appModelSubscription.getAmountPaid());
-            stmt.setInt(6, 0);
-            stmt.setString(7, "NP");
-            int i = stmt.executeUpdate();
-            ResultSet rs = stmt.getGeneratedKeys();
-            if (rs.next()) {
-                // Retrieve the auto generated key(s).
-                int key = rs.getInt(1);
-                ArrayList<String> items = new ArrayList<>();
-                BigDecimal b1 = new BigDecimal(100);
-                System.out.println(appModelSubscription.getAmountToPay().multiply(b1));
-                OrderRegistration orderRegistration = new OrderRegistration(PayMobController.createPostAuth(), "false",appModelSubscription.getAmountToPay().multiply(b1) +"" , "EGP", appModelSubscription.getBranchId(), key, items);
-                int order_Id = Integer.valueOf(orderRegistration.createOrderRegistrationId(orderRegistration));
-                if (order_Id != 0) {
-                    updateBranchSubscriptionWithPayMobId(order_Id, key);
-                }
-            }
-
-            System.out.println(i + " record Added to BranchSubscription");
-            stmt.close();
-            conn.close();
-
-            // Crate Branch table for new branch in DB
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return "the BranchSubscription not added -> error in server! :: -> "+e.getMessage();
-
+    public void markBranchSubscriptionPaid(int orderId) {
+        int rows = jdbcTemplate.update(
+                "UPDATE " + TenantSqlIdentifiers.companySubscriptionTable() +
+                        " SET status = 'PD', \"amountPaid\" = COALESCE(\"amountToPay\", \"amountPaid\") " +
+                        "WHERE order_id = ? AND status <> 'PD'",
+                orderId
+        );
+        if (rows == 0 && !existsByOrderId(orderId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "SUBSCRIPTION_ORDER_NOT_FOUND", "Subscription order not found");
         }
-
-        return "the Add BranchSubscription Added Successfully : " + appModelSubscription.getBranchId();
     }
 
-
-    static public String updateBranchSubscriptionWithPayMobId(int orderId, int sID) {
-        try {
-
-            Connection conn = ConnectionPostgres.getConnection();
-
-
-            PreparedStatement stmt = conn.prepareStatement("UPDATE public.\"CompanySubscription\"\n" +
-                    "\tSET  order_id=?\n" +
-                    "\tWHERE \"sId\"=? ;");
-
-            stmt.setInt(1, orderId);
-            stmt.setInt(2, sID);
-
-            int i = stmt.executeUpdate();
-
-
-            System.out.println(i + " record Updated orderId-> sID <-> BranchSubscription");
-            stmt.close();
-            conn.close();
-
-            // Crate Branch table for new branch in DB
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return "the BranchSubscription not added -> error in server!";
-
-        }
-
-        return "the updated BranchSubscription  Successfully : ";
-    }
-    static public String updateBranchSubscriptionStatusSuccess(int order_id, boolean success) {
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("UPDATE public.\"CompanySubscription\"\n" +
-                    "\tSET  status='PD'\n" +
-                    "\tWHERE  order_id = "+order_id+" ;");
-
-            System.out.println(order_id);
-            System.out.println(stmt);
-
-            int i = stmt.executeUpdate();
-            System.out.println(i + " record Updated updateBranchSubscriptionStatus <-> BranchSubscription");
-            stmt.close();
-            conn.close();
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return "the BranchSubscription not added -> error in server!";
-
-        }
-
-        return "the updated BranchSubscription  Successfully : ";
+    public boolean existsByOrderId(int orderId) {
+        Boolean exists = jdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM " + TenantSqlIdentifiers.companySubscriptionTable() + " WHERE order_id = ?)",
+                Boolean.class,
+                orderId
+        );
+        return Boolean.TRUE.equals(exists);
     }
 
-    public static Map<String, Object> isActive(int branchId) {
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            String query = "SELECT  \"startTime\" , \"endTime\", CURRENT_DATE as currentDate , \"endTime\" - \"startTime\"  as allTime , \"endTime\" - CURRENT_DATE  as remaining ,\n" +
-                    "status ,\n" +
-                    "CASE\n" +
-                    "\t\tWHEN \"endTime\" - CURRENT_DATE > 0 THEN true\n" +
-                    "\t\tWHEN \"endTime\" - CURRENT_DATE < 1  THEN false\n" +
-                    "\t\tELSE false\n" +
-                    "\tEND AS active\n" +
-                    "\n" +
-                    "FROM public.\"CompanySubscription\"\n" +
-                    "Where \"branchId\" = "+branchId+"\n" +
-                    "ORDER BY \"sId\" DESC \n" +
-                    "LIMIT 1";
-            // create the java statement
-            System.out.println(query);
+    public Map<String, Object> isActive(int branchId) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        String sql = "SELECT \"startTime\", \"endTime\", CURRENT_DATE AS currentDate, " +
+                "\"endTime\" - \"startTime\" AS allTime, \"endTime\" - CURRENT_DATE AS remaining, status, " +
+                "CASE WHEN \"endTime\" - CURRENT_DATE > 0 THEN true ELSE false END AS active " +
+                "FROM " + TenantSqlIdentifiers.companySubscriptionTable() +
+                " WHERE \"branchId\" = ? ORDER BY \"sId\" DESC LIMIT 1";
 
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-            ArrayList<AppModelSubscription> appModelSubscriptions = new ArrayList<>();
-            while (rs.next()) {
-                Date sDate =  rs.getDate(1);
-                Date eDate =  rs.getDate(2);
-                Date cDate =  rs.getDate(3);
-                int allTime  = rs.getInt(4);
-                int remainingTime  = rs.getInt(5);
-                String status = rs.getString(6);
-                boolean active = rs.getBoolean(7);
-                Map<String, Object> branchSubscriptionObject = new HashMap<>();
-                branchSubscriptionObject.put("sDate",sDate);
-                branchSubscriptionObject.put("eDate",eDate);
-                branchSubscriptionObject.put("cDate",cDate);
-                branchSubscriptionObject.put("allTime",allTime);
-                branchSubscriptionObject.put("remainingTime",remainingTime);
-                branchSubscriptionObject.put("status",status);
-                branchSubscriptionObject.put("active",active);
-                System.out.println(branchSubscriptionObject);
-                return branchSubscriptionObject;
-            }
-            rs.close();
-            st.close();
-            conn.close();
+        List<Map<String, Object>> rows = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Map<String, Object> details = new HashMap<>();
+            details.put("sDate", rs.getDate("startTime"));
+            details.put("eDate", rs.getDate("endTime"));
+            details.put("cDate", rs.getDate("currentDate"));
+            details.put("allTime", rs.getInt("allTime"));
+            details.put("remainingTime", rs.getInt("remaining"));
+            details.put("status", rs.getString("status"));
+            details.put("active", rs.getBoolean("active"));
+            return details;
+        }, branchId);
 
-        } catch (Exception e) {
-            System.out.println(" err in is active ____ " + e.getMessage());
-            return null;
+        return rows.isEmpty() ? null : rows.get(0);
+    }
 
-        }
-        return null;
+    public AppModelSubscription toSubscription(Date startTime, Date endTime, int branchId,
+                                               java.math.BigDecimal amountToPay, java.math.BigDecimal amountPaid,
+                                               int orderId, String status) {
+        return new AppModelSubscription(0, startTime, endTime, branchId, amountToPay, amountPaid, orderId, status);
     }
 }

@@ -106,10 +106,10 @@ Remaining risks after Phase 1:
 Status:
 
 - started on 2026-03-29
-- partially completed for the highest-risk write slice
+- partially completed for the order and finance/payment write slices
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
-Completed in the current Phase 2 slice:
+Completed so far in Phase 2:
 
 1. service-layer and transaction boundary for the order write path
 - added `OrderService` to own order creation and bounce-back orchestration
@@ -131,13 +131,42 @@ Completed in the current Phase 2 slice:
 - reduced stale JWT noise from `WARN` to `DEBUG`
 - added `target/` to `.gitignore` so new build output is not reintroduced by default
 
+5. transactional supplier receipt and payment handling
+- added `SupplierReceiptService` as the business entry point for supplier-receipt writes
+- moved supplier-receipt creation, inventory remaining-amount updates, and supplier remaining-balance updates behind one Spring transaction boundary
+- refactored the touched supplier receipt repository path to parameterized Spring JDBC operations with validated tenant identifiers
+
+6. transactional expenses and finance write cleanup
+- added `ExpensesService` to own create and update behavior for dynamic and static expenses
+- replaced the touched loose expense request parsing with validated DTO-driven controller inputs
+- kept existing success contracts while moving the touched finance writes behind Spring-managed service orchestration
+
+7. subscription and payment side-effect stabilization
+- added `SubscriptionService` for branch-subscription creation, branch-activity checks, and payment success handling
+- added `PayMobService` so PayMob auth, order creation, payment-key generation, and callback parsing no longer depend on controller-owned static logic
+- refactored `DbSubscription` to constructor-injected parameterized Spring JDBC operations
+- moved subscription creation and payment-success status updates behind explicit transaction boundaries
+
+8. broader request validation and migration scaffolding
+- added validated DTOs for supplier receipts, expenses, branch subscriptions, and payment-token requests
+- extended validation coverage across the touched money, subscription, and payment controllers
+- added Flyway scaffolding and a baseline placeholder migration while keeping Flyway disabled by default until curated migrations are ready
+- performed the one-time tracked `target/` cleanup from the git index while leaving local build output on disk
+
+9. supplier master-data and inventory-transaction stabilization
+- added `SupplierService` so supplier create, update, delete, supplier-sales lookup, and supplier bought-product writes no longer depend on static controller-to-repository calls
+- refactored `DbSupplier` to constructor-injected parameterized Spring JDBC operations with validated tenant identifiers
+- added `InventoryTransactionService` and refactored `DbPosInventoryTransaction` so inventory-transaction writes and supplier balance side effects run through one transaction boundary instead of string-built multi-statement SQL
+- added validated DTOs for supplier create/update, supplier bought-product, inventory transaction create, and inventory transaction query payloads
+- preserved the existing supplier and inventory route surface while moving the touched stock/finance write logic behind services
+
 Current Phase 2 remaining scope:
 
-- continue service extraction and transaction handling for supplier payments, expenses, and subscription/payment side effects
-- expand DTO validation across the older controllers that still accept loose maps and mixed payload shapes
-- prepare Flyway or equivalent migration structure
-- continue repository cleanup in supplier, company, and analytics flows
-- perform a one-time tracked `target/` cleanup from the git index once it is safe to do so
+- continue service extraction and transaction handling in the untouched money and stock flows, especially company provisioning, damaged-item writes, and analytics update paths
+- expand DTO validation across the remaining controllers that still accept loose maps and mixed payload shapes
+- turn the Flyway scaffold into curated shared-schema and tenant-provisioning migrations when the change set is ready
+- continue repository cleanup in untouched legacy modules so raw JDBC and string-built SQL stop being the default pattern
+- complete the broader logging cleanup so business write flows are consistently traceable beyond the touched services
 
 Objectives:
 
@@ -238,12 +267,11 @@ Expected outcome:
 
 ## Recommended Next Step
 
-Continue Phase 2 with the next critical write slices after order stabilization:
+Continue Phase 2 by finishing the remaining legacy write and validation surface around the now-stabilized core flows:
 
-1. supplier receipt and payment handling
-2. expenses and other multi-step finance writes
-3. subscription and payment side effects
-4. broader controller DTO validation
-5. tracked `target/` cleanup and migration scaffolding
+1. clean the untouched supplier, inventory, company, and analytics repositories that still rely on raw JDBC or string-built SQL
+2. extend DTO and Bean Validation coverage across the remaining legacy controllers
+3. convert the Flyway scaffold into curated migrations for shared tables and controlled tenant provisioning changes
+4. complete structured logging replacement in the remaining high-risk financial and stock-changing paths
 
-That sequencing preserves the roadmap priority: stabilize business correctness and rollback safety across the remaining money/stock flows before expanding accounting and reporting features.
+That sequencing keeps the roadmap aligned with business correctness first: finish rollback safety, validation, and repository consistency across the remaining legacy write surface before moving on to accounting and reporting expansion.

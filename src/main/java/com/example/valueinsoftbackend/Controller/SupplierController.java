@@ -4,130 +4,107 @@
 
 package com.example.valueinsoftbackend.Controller;
 
-
-import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
+import com.example.valueinsoftbackend.Model.Request.SupplierCreateRequest;
+import com.example.valueinsoftbackend.Model.Request.SupplierProductCreateRequest;
+import com.example.valueinsoftbackend.Model.Request.SupplierUpdateRequest;
 import com.example.valueinsoftbackend.Model.Supplier;
 import com.example.valueinsoftbackend.Model.SupplierBProduct;
-import com.google.gson.JsonObject;
+import com.example.valueinsoftbackend.Service.SupplierService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.sql.SQLException;
-import java.util.ArrayList;
+import javax.validation.Valid;
+import javax.validation.constraints.Positive;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
+@Validated
 @RequestMapping("/suppliers")
 public class SupplierController {
 
-    @RequestMapping(value = "/all/{companyId}/{branchId}", method = RequestMethod.GET)
-    @ResponseBody
-    public ArrayList<Supplier> getsuppliers(
+    private final SupplierService supplierService;
 
-            @PathVariable int companyId,
-            @PathVariable int branchId
-    ) {
-
-
-        return DbSupplier.getSuppliers(branchId, companyId);
+    public SupplierController(SupplierService supplierService) {
+        this.supplierService = supplierService;
     }
 
-
-    @RequestMapping(value = "{companyId}{branchId}/remain/{productId}", method = RequestMethod.GET)
-    @ResponseBody
-    public String getRemaining(
-
-            @PathVariable int productId,
-            @PathVariable int companyId,
-            @PathVariable int branchId
+    @GetMapping("/all/{companyId}/{branchId}")
+    public List<Supplier> getsuppliers(
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId
     ) {
+        return supplierService.getSuppliers(companyId, branchId);
+    }
 
-        return DbSupplier.getRemainingSupplierAmountByProductId(productId, branchId, companyId).toString();
+    @GetMapping({"{companyId}{branchId}/remain/{productId}", "{companyId}/{branchId}/remain/{productId}"})
+    public String getRemaining(
+            @PathVariable @Positive int productId,
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId
+    ) {
+        return supplierService.getRemainingAmountByProductId(companyId, branchId, productId).toString();
     }
 
     @PostMapping("/saveSupplier")
-
-    public ResponseEntity<Object> newSupplier(@RequestBody Map<String, String> requestBody) {
-
-
-        String answer = DbSupplier.AddSupplier(requestBody.get("supplierName"), requestBody.get("supplierPhone1"), requestBody.get("supplierPhone2"), requestBody.get("suplierLocation"), requestBody.get("suplierMajor"), Integer.valueOf(requestBody.get("branchId")), Integer.valueOf(requestBody.get("companyId")));
-
-
+    public ResponseEntity<Object> newSupplier(@Valid @RequestBody SupplierCreateRequest requestBody) {
+        String answer = supplierService.createSupplier(requestBody);
         return ResponseEntity.status(HttpStatus.CREATED).body(answer);
-
     }
 
-
-    @RequestMapping(value = "{companyId}/{branchId}/update/{id}", method = RequestMethod.PUT)
+    @PutMapping("{companyId}/{branchId}/update/{id}")
     public Map<String, String> updateSupplier(
-            @RequestBody Supplier supplier,
-            @PathVariable int branchId,
-            @PathVariable int companyId
-
+            @Valid @RequestBody SupplierUpdateRequest supplier,
+            @PathVariable @Positive int branchId,
+            @PathVariable @Positive int companyId,
+            @PathVariable("id") @Positive int supplierId
     ) {
-
-        //todo --update method
         Map<String, String> response = new HashMap<>();
-        response.put("Response", DbSupplier.updateSupplier(supplier, branchId, companyId));
+        response.put("Response", supplierService.updateSupplier(companyId, branchId, supplierId, supplier));
         return response;
     }
 
-    //todo --Delete
     @DeleteMapping("{companyId}/{branchId}/delete/{id}")
     public Map<String, Boolean> deleteUser(
-            @PathVariable(value = "id") int supplierId,
-            @PathVariable int branchId,
-            @PathVariable int companyId
-
-    ) throws Exception {
+            @PathVariable(value = "id") @Positive int supplierId,
+            @PathVariable @Positive int branchId,
+            @PathVariable @Positive int companyId
+    ) {
         Map<String, Boolean> response = new HashMap<>();
-        boolean bol = DbSupplier.deleteSupp(supplierId, branchId, companyId);
-        response.put("deleted", bol);
+        response.put("deleted", supplierService.deleteSupplier(companyId, branchId, supplierId));
         return response;
     }
 
-    @RequestMapping(value = "{companyId}/{branchId}/SupplierSales/{supplierId}", method = RequestMethod.GET)
-    @ResponseBody
-    public ArrayList<InventoryTransaction> getSupplierSales(
-
-            @PathVariable int supplierId,
-            @PathVariable int companyId,
-            @PathVariable int branchId
+    @GetMapping("{companyId}/{branchId}/SupplierSales/{supplierId}")
+    public List<InventoryTransaction> getSupplierSales(
+            @PathVariable @Positive int supplierId,
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId
     ) {
-
-        return DbSupplier.getSupplierSales(branchId, supplierId, companyId);
+        return supplierService.getSupplierSales(companyId, branchId, supplierId);
     }
 
-    @RequestMapping(value = "{companyId}/{branchId}/SupplierBProduct/{supplierId}", method = RequestMethod.GET)
-    @ResponseBody
-    public ArrayList<SupplierBProduct> getSupplierBProduct(
-
-            @PathVariable int supplierId,
-            @PathVariable int companyId,
-            @PathVariable int branchId
+    @GetMapping("{companyId}/{branchId}/SupplierBProduct/{supplierId}")
+    public List<SupplierBProduct> getSupplierBProduct(
+            @PathVariable @Positive int supplierId,
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId
     ) {
-
-        return DbSupplier.getSupplierBProduct(branchId, supplierId, companyId);
+        return supplierService.getSupplierBoughtProducts(companyId, branchId, supplierId);
     }
-
 
     @PostMapping("{companyId}/{branchId}/saveSupplierBProduct/{productId}")
     public ResponseEntity<Object> newSupplierBProduct(
-            @PathVariable int productId,
-            @PathVariable int companyId,
-            @PathVariable int branchId,
-            @RequestBody SupplierBProduct requestBody
+            @PathVariable @Positive int productId,
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId,
+            @Valid @RequestBody SupplierProductCreateRequest requestBody
     ) {
-        try {
-            return ResponseEntity.status(HttpStatus.ACCEPTED).body(DbSupplier.AddSupplierBProduct(requestBody,productId,branchId,companyId ));
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("error");
-
-        }
-
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(supplierService.createSupplierBoughtProduct(companyId, branchId, productId, requestBody));
     }
 }

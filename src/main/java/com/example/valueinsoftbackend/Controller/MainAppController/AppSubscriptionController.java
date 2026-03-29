@@ -4,44 +4,43 @@
 
 package com.example.valueinsoftbackend.Controller.MainAppController;
 
-
-import com.example.valueinsoftbackend.DatabaseRequests.DbApp.DbSubscription;
-import com.example.valueinsoftbackend.Model.AppModel.AppModelSubscription;
+import com.example.valueinsoftbackend.Model.Request.CreateSubscriptionRequest;
+import com.example.valueinsoftbackend.Service.SubscriptionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
+import javax.validation.Valid;
+import javax.validation.constraints.Positive;
 import java.util.Map;
 
 @RestController
+@Validated
 @RequestMapping("/appSubscription")
-public class AppSubscriptionController  {
-    @RequestMapping(value = "/{branchId}",method = RequestMethod.GET)
-    public ArrayList<AppModelSubscription> AppModelSubscriptionByBranchId(@PathVariable int branchId  ) throws Exception
-    {
+public class AppSubscriptionController {
 
+    private static final Logger log = LoggerFactory.getLogger(AppSubscriptionController.class);
 
-        return DbSubscription.getBranchSubscription(branchId);
+    private final SubscriptionService subscriptionService;
 
+    public AppSubscriptionController(SubscriptionService subscriptionService) {
+        this.subscriptionService = subscriptionService;
     }
 
-    @RequestMapping(value = "/AddSubscription",method = RequestMethod.POST)
-    public String AddSubscription(@RequestBody AppModelSubscription appModelSubscription ) throws Exception
-    {
+    @RequestMapping(value = "/{branchId}", method = RequestMethod.GET)
+    public Object appModelSubscriptionByBranchId(@PathVariable @Positive int branchId) {
+        return subscriptionService.getBranchSubscription(branchId);
+    }
 
-
-        return DbSubscription.AddBranchSubscription(appModelSubscription);
-
+    @RequestMapping(value = "/AddSubscription", method = RequestMethod.POST)
+    public String addSubscription(@Valid @RequestBody CreateSubscriptionRequest appModelSubscription) {
+        return subscriptionService.addBranchSubscription(appModelSubscription);
     }
 
     @GetMapping(path = {"/Res"})
-    public Map<String, String> PayMobTransactionCallBack(
-                     @RequestParam(required=false) Map<String,String> qparams) {
-        qparams.forEach((a,b) -> {
-            System.out.println(String.format("%s -> %s",a,b));
-            System.out.println(qparams.get("success"));
-        });
+    public Map<String, String> payMobTransactionCallBack(@RequestParam(required = false) Map<String, String> qparams) {
+        log.debug("Received PayMob redirect callback query params: {}", qparams.keySet());
         return qparams;
-
     }
-
 }

@@ -714,10 +714,10 @@ What remains for the next phase:
 Status on 2026-03-29:
 
 - started for the backend foundation phase
-- completed for the first high-risk slice around order writes and controller validation
+- completed for the order slice and the next finance/subscription write slice
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
-Implemented in the current Phase 2 slice:
+Implemented so far in Phase 2:
 
 - added `OrderService` so order creation and order-item bounce-back no longer live directly in the controller path
 - added Spring transaction management for the touched order write path
@@ -727,18 +727,33 @@ Implemented in the current Phase 2 slice:
 - extended the global exception handler so validation failures return structured field-level details
 - reduced JWT stale-token noise to debug level in the request filter
 - added `target/` to `.gitignore` so new build output is ignored by default
+- added `SupplierReceiptService` and moved supplier-receipt creation plus related inventory/supplier balance updates behind one transaction boundary
+- moved the touched supplier receipt persistence path to parameterized Spring JDBC operations with validated tenant identifiers
+- added `ExpensesService` and validated DTOs for create and update operations in both expenses controllers
+- added `SubscriptionService` and `PayMobService` so subscription creation, PayMob order/payment-key generation, callback parsing, and payment-success updates no longer rely on controller-owned static logic
+- refactored `DbSubscription` into constructor-injected Spring JDBC code
+- added validated DTOs for supplier receipts, expenses, branch subscriptions, and PayMob payment-token requests
+- added Flyway scaffolding with a baseline placeholder migration while leaving Flyway disabled by default until curated migrations are ready
+- removed already tracked `target/` build output from the git index so the next commit can leave the repository source-only while keeping local build files on disk
+- added `SupplierService` so supplier create/update/delete and supplier bought-product writes no longer depend on static repository access
+- refactored `DbSupplier` to parameterized Spring JDBC with validated tenant identifiers
+- added `InventoryTransactionService` and refactored `DbPosInventoryTransaction` away from string-built multi-statement SQL into service-owned transactional writes
+- added validated DTOs for supplier create/update, supplier bought-product, inventory transaction create, and inventory transaction query payloads
 
 Current result:
 
 - the backend now has a real transactional service boundary for the most critical POS write flow
 - order creation and bounce-back are safer against partial-write failure than the old controller/raw-SQL path
-- the touched write endpoints reject invalid payloads early instead of failing later inside repository code
-- and the current roadmap risk is narrowed from the whole order module to the untouched supplier, company, finance, and analytics areas
+- supplier receipts, expenses, and branch-subscription payment side effects now also run through explicit service boundaries instead of controller-owned orchestration
+- supplier master-data writes and inventory-transaction writes now also run through typed controller payloads and service-owned transaction boundaries
+- the touched money and payment endpoints reject invalid payloads early instead of failing later inside repository code
+- Flyway structure and repository hygiene are prepared for the next foundation pass
+- and the current roadmap risk is narrowed to company provisioning, damaged-item flows, analytics updates, and the remaining legacy-controller areas
 
 Remaining Foundation work:
 
-- service extraction and transaction boundaries for supplier payments, expenses, and subscription/payment side effects
-- request DTO migration across the older controllers that still use loose maps
-- Flyway or equivalent migration structure
-- broader repository cleanup in untouched legacy modules
-- one-time cleanup of already tracked `target/` artifacts from the repository index
+- service extraction and transaction boundaries in the untouched money and stock paths that still rely on legacy raw JDBC patterns
+- request DTO migration across the remaining controllers that still use loose maps
+- curated Flyway migrations for shared tables and controlled tenant-provisioning changes
+- broader repository cleanup in untouched company, damaged-item, and analytics modules
+- structured logging completion across the remaining legacy write surface
