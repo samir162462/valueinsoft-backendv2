@@ -2,32 +2,44 @@ package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Company;
+import com.example.valueinsoftbackend.Model.Request.CreateCompanyRequest;
+import com.example.valueinsoftbackend.Model.Request.UpdateCompanyImageRequest;
 import com.example.valueinsoftbackend.Model.User;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import com.example.valueinsoftbackend.Service.CompanyService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 
 import java.util.ArrayList;
 import java.util.Map;
 
+import javax.validation.Valid;
+import javax.validation.constraints.Positive;
+
 
 @RestController
+@Validated
 @RequestMapping("/Company")
 
 public class CompanyController {
 
+    private static final Logger log = LoggerFactory.getLogger(CompanyController.class);
 
+    private final DbCompany dbCompany;
+    private final DbUsers dbUsers;
+    private final CompanyService companyService;
 
-    private final DbCompany DbCompany ;
-    private final DbUsers dbUsers ;
-
-    public CompanyController(com.example.valueinsoftbackend.DatabaseRequests.DbCompany dbCompany, DbUsers dbUsers) {
-        DbCompany = dbCompany;
+    public CompanyController(DbCompany dbCompany, DbUsers dbUsers, CompanyService companyService) {
+        this.dbCompany = dbCompany;
         this.dbUsers = dbUsers;
+        this.companyService = companyService;
     }
 
     @RequestMapping(value = "/getCompany", method = RequestMethod.GET)
@@ -40,8 +52,11 @@ public class CompanyController {
     ) {
 
         User u1 = dbUsers.getUser(id);
+        if (u1 == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");
+        }
 
-        return DbCompany.getCompanyByOwnerId(u1.getUserId() + "");
+        return dbCompany.getCompanyByOwnerId(u1.getUserId());
     }
 
 
@@ -50,7 +65,7 @@ public class CompanyController {
     public ArrayList<Company> getAllCompanies(
     ) {
 
-        return DbCompany.getAllCompanies();
+        return dbCompany.getAllCompanies();
     }
 
 
@@ -66,7 +81,7 @@ public class CompanyController {
     ) {
 
 
-        return DbCompany.getCompanyAndBranchesByUserName(id);
+        return dbCompany.getCompanyAndBranchesByUserName(id);
     }
 
     @RequestMapping(value = "/getCompanyById", method = RequestMethod.GET)
@@ -79,52 +94,27 @@ public class CompanyController {
     ) {
 
 
-        return DbCompany.getCompanyById(id);
+        return dbCompany.getCompanyById(id);
     }
 
     @PostMapping("/saveCompany")
-
-    public Object newCompany(@RequestBody Map<String, Object> body) {
-
-        String ownerName = body.get("ownerName").toString();
-        String companyName = body.get("companyName").toString();
-        String branchName = body.get("branchName").toString();
-        String plan = body.get("plan").toString();
-        String comImg = body.get("comImg").toString();
-        String currency = body.get("currency").toString();
-        int planPrice = Integer.valueOf(body.get("EstablishPrice").toString()) ;
-        Company com = null;
-        try {
-            String msg = "";
-            msg =  DbCompany.AddCompany(companyName, branchName, plan, planPrice, ownerName,comImg,currency);
-            if (msg.contains("already")) {
-                return msg;
-            }
-            com = DbCompany.getCompanyByOwnerId(ownerName);
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return null;
-
-        }
-
-
-        return com;
+    public Company newCompany(@Valid @RequestBody CreateCompanyRequest request) {
+        return companyService.createCompany(request);
 
     }
 
     @PutMapping("/updateImg/{companyId}")
-    public ResponseEntity<String> updateImg(@PathVariable int  companyId, @RequestBody Map<String, String> requestBody) {
-
-        return DbCompany.UpdateCompanyImg(companyId,requestBody.get("imgFile"));
+    public ResponseEntity<String> updateImg(@PathVariable @Positive int companyId,
+                                            @Valid @RequestBody UpdateCompanyImageRequest requestBody) {
+        companyService.updateCompanyImage(companyId, requestBody.getImgFile());
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body("Image Changed!");
     }
 
 
     @GetMapping("/listHeaders")
     public ResponseEntity<String> listAllHeaders(
             @RequestHeader Map<String, String> headers) {
-        headers.forEach((key, value) -> {
-            System.out.println(String.format("Header '%s' = %s", key, value));
-        });
+        headers.forEach((key, value) -> log.debug("Header '{}' = {}", key, value));
         return new ResponseEntity<String>(
                 String.format("Listed %d headers", headers.size()), HttpStatus.OK);
     }

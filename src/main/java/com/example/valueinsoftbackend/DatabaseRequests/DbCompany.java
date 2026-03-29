@@ -2,328 +2,180 @@ package com.example.valueinsoftbackend.DatabaseRequests;
 
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
-import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.List;
 
 
 @Repository
 public class DbCompany {
 
+    private static final RowMapper<Company> COMPANY_ROW_MAPPER = (rs, rowNum) -> {
+        Company company = new Company(
+                rs.getInt("id"),
+                rs.getString("companyName"),
+                rs.getTimestamp("establishedTime"),
+                rs.getString("planName"),
+                rs.getInt("planPrice"),
+                rs.getString("currency"),
+                rs.getString("comImg"),
+                null
+        );
+        company.setOwnerId(rs.getInt("ownerId"));
+        return company;
+    };
+
     private final JdbcTemplate jdbcTemplate;
     private final DbBranch dbBranch;
-    private final DbUsers dbUsers;
-
 
     @Autowired
-
-    public DbCompany(JdbcTemplate jdbcTemplate, DbBranch dbBranch, DbUsers dbUsers) {
+    public DbCompany(JdbcTemplate jdbcTemplate, DbBranch dbBranch) {
         this.jdbcTemplate = jdbcTemplate;
         this.dbBranch = dbBranch;
-        this.dbUsers = dbUsers;
     }
 
-
-
-
-
-    public  Company getCompanyByOwnerId(String id) {
-
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-
-            ArrayList<Branch> bsList;
-            Company company = null;
-            String query = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\" ,\"currency\", \"comImg\"\n" +
-                    "\tFROM public.\"Company\" where \"ownerId\" = " + id + ";";
-
-
-            // create the java statement
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-
-            while (rs.next()) {
-                System.out.println("add  connected to company " + rs.getString(1));
-
-
-                company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), rs.getString(7), rs.getString(8), null);
-
-                // print the results
-
-            }
-
-
-            bsList = (ArrayList<Branch>) dbBranch.getBranchByCompanyId(company.getCompanyId());
-            company.setBranchList(bsList);
-            rs.close();
-            st.close();
-            conn.close();
-            return company;
-
-        } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
-
-        }
-        return null;
-
+    public Company getCompanyByOwnerId(String id) {
+        return getCompanyByOwnerId(Integer.parseInt(id));
     }
 
-    public  Company getCompanyAndBranchesByUserName(String id) {
-
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-
-            ArrayList<Branch> bsList = new ArrayList<>();
-            Company company = new Company(0, null, null, null, 0, null, null, null);
-            String query = "SELECT  \"companyId\" ,public.users.\"branchId\" \n" +
-                    "FROM public.users  \n" +
-                    " JOIN public.\"Branch\"\n" +
-                    "ON public.users.\"branchId\" = public.\"Branch\".\"branchId\" where public.\"users\".\"userName\" = '" + id + "';";
-
-            String qu1 = "SELECT * FROM public.users\n" +
-                    "ORDER BY id ASC ";
-            // create the java statement
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-            int companyId = 0;
-            int branchId = 0;
-            while (rs.next()) {
-                companyId = rs.getInt(1);
-                branchId = rs.getInt(2);
-                System.out.println(branchId);
-            }
-            try {
-                System.out.println("companyId: " + companyId);
-                bsList = (ArrayList<Branch>) dbBranch.getBranchByCompanyId(companyId);
-                System.out.println(bsList.toString());
-                company.setCompanyId(companyId);
-                ArrayList<Branch> branchArrayList = new ArrayList<>();
-                for (int i = 0; i < bsList.size(); i++) {
-                    if (bsList.get(i).getBranchID() == branchId)
-                        branchArrayList.add(bsList.get(i));
-                }
-                company.setBranchList(branchArrayList);
-            } catch (Exception e) {
-                System.out.println(e.getMessage());
-                return null;
-            }
-
-            rs.close();
-            st.close();
-            conn.close();
-            return company;
-
-        } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
-
-        }
-        return null;
-
-    }
-
-    private static boolean checkExistOwnerId(int oId) {
-
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-
-            String query = "SELECT  \"ownerId\"\n" +
-                    "\tFROM public.\"Company\" where \"ownerId\" = '" + oId + "';";
-
-            // create the java statement
-            Statement st = conn.createStatement();
-
-            ResultSet rs = st.executeQuery(query);
-
-            while (rs.next()) {
-                return true;
-
-
-                // print the results
-            }
-
-            rs.close();
-            st.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println(" no user exist");
-            return true;
-
-        }
-        return false;
-
-    }
-
-    public  Company getCompanyById(String id) {
-
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-
-            ArrayList<Branch> bsList = new ArrayList<>();
-            Company company = null;
-            String query = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\",  \"currency\",\"comImg\"  \n" +
-                    "\tFROM public.\"Company\" where \"id\" = " + id + ";";
-
-            // create the java statement
-            Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery(query);
-
-            while (rs.next()) {
-                System.out.println("add  connected to company " + rs.getString(1));
-
-                try {
-                    company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), rs.getString(7), rs.getString(8), null);
-                    System.out.println(company.toString());
-                } catch (Exception e) {
-                    System.out.println(e.getMessage());
-                }
-
-                // print the results
-            }
-
-
-            try {
-                bsList = (ArrayList<Branch>) dbBranch.getBranchByCompanyId(company.getCompanyId());
-                company.setBranchList(bsList);
-            } catch (Exception e) {
-                System.out.println(e.getMessage());
-            }
-
-            rs.close();
-            st.close();
-            conn.close();
-            return company;
-
-        } catch (Exception e) {
-            System.out.println("err : " + e.getMessage());
-
-        }
-        return null;
-
-    }
-
-    public static ArrayList<Company> getAllCompanies() {
-
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-
-            String query = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\"\n" +
-                    "\tFROM public.\"Company\";";
-
-            // create the java statement
-            Statement st = conn.createStatement();
-
-            ResultSet rs = st.executeQuery(query);
-            ArrayList<Company> companies = new ArrayList<>();
-            while (rs.next()) {
-                Company company = new Company(rs.getInt(1), rs.getString(2), rs.getTimestamp(3), rs.getString(5), rs.getInt(6), null, null, null);
-                company.setOwnerId(rs.getInt(4));
-                companies.add(company);
-
-                // print the results
-            }
-
-            rs.close();
-            st.close();
-            conn.close();
-            return companies;
-
-        } catch (Exception e) {
-            System.out.println(" no user exist" + e.getMessage());
+    public Company getCompanyByOwnerId(int ownerId) {
+        String sql = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\", " +
+                "\"currency\", \"comImg\" FROM public.\"Company\" WHERE \"ownerId\" = ?";
+        List<Company> companies = jdbcTemplate.query(sql, COMPANY_ROW_MAPPER, ownerId);
+        if (companies.isEmpty()) {
             return null;
+        }
+        Company company = companies.get(0);
+        company.setBranchList(new ArrayList<>(dbBranch.getBranchByCompanyId(company.getCompanyId())));
+        return company;
+    }
 
+    public Company getCompanyAndBranchesByUserName(String userName) {
+        String sql = "SELECT b.\"companyId\", u.\"branchId\" " +
+                "FROM public.users u " +
+                "JOIN public.\"Branch\" b ON u.\"branchId\" = b.\"branchId\" " +
+                "WHERE u.\"userName\" = ?";
+        List<int[]> mappings = jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> new int[]{rs.getInt("companyId"), rs.getInt("branchId")},
+                userName
+        );
+
+        if (mappings.isEmpty()) {
+            return null;
+        }
+
+        int companyId = mappings.get(0)[0];
+        int branchId = mappings.get(0)[1];
+        Company company = getCompanyById(companyId);
+        if (company == null) {
+            return null;
+        }
+
+        ArrayList<Branch> selectedBranches = new ArrayList<>();
+        for (Branch branch : company.getBranchList()) {
+            if (branch.getBranchID() == branchId) {
+                selectedBranches.add(branch);
+            }
+        }
+        company.setBranchList(selectedBranches);
+        return company;
+    }
+
+    public boolean ownerHasCompany(int ownerId) {
+        String sql = "SELECT COUNT(*) FROM public.\"Company\" WHERE \"ownerId\" = ?";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, ownerId);
+        return count != null && count > 0;
+    }
+
+    public Company getCompanyById(String id) {
+        return getCompanyById(Integer.parseInt(id));
+    }
+
+    public Company getCompanyById(int companyId) {
+        String sql = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\", " +
+                "\"currency\", \"comImg\" FROM public.\"Company\" WHERE id = ?";
+        List<Company> companies = jdbcTemplate.query(sql, COMPANY_ROW_MAPPER, companyId);
+        if (companies.isEmpty()) {
+            return null;
+        }
+        Company company = companies.get(0);
+        company.setBranchList(new ArrayList<>(dbBranch.getBranchByCompanyId(company.getCompanyId())));
+        return company;
+    }
+
+    public ArrayList<Company> getAllCompanies() {
+        String sql = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\", " +
+                "\"currency\", \"comImg\" FROM public.\"Company\"";
+        return new ArrayList<>(jdbcTemplate.query(sql, COMPANY_ROW_MAPPER));
+    }
+
+    public int createCompany(String companyName, String plan, int price, int ownerId, String comImg, String currency) {
+        String sql = "INSERT INTO public.\"Company\" (\"companyName\", \"establishedTime\", \"ownerId\", \"planName\", " +
+                "\"planPrice\", \"comImg\", \"currency\") VALUES (?, ?, ?, ?, ?, ?, ?)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        int rows = jdbcTemplate.update(connection -> {
+            PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            statement.setString(1, companyName);
+            statement.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+            statement.setInt(3, ownerId);
+            statement.setString(4, plan);
+            statement.setInt(5, price);
+            statement.setString(6, comImg);
+            statement.setString(7, currency);
+            return statement;
+        }, keyHolder);
+
+        if (rows != 1 || keyHolder.getKey() == null) {
+            return -1;
+        }
+
+        return keyHolder.getKey().intValue();
+    }
+
+    public int updateCompanyImage(int companyId, String img) {
+        String sql = "UPDATE public.\"Company\" SET \"comImg\" = ? WHERE id = ?";
+        return jdbcTemplate.update(sql, img, companyId);
+    }
+
+    public boolean createCompanySchema(int companyId) {
+        try {
+            jdbcTemplate.execute(buildCompanySchemaSql(companyId));
+            return true;
+        } catch (Exception exception) {
+            return false;
         }
     }
 
-     public String AddCompany(String companyName, String branchName, String plan, int price, String username, String comImg, String currency) {
-        try {
-
-            int ownerId = 0;
-            User u1 = dbUsers.getUser(username);
-            ownerId = u1.getUserId();
-            if (checkExistOwnerId(ownerId)) {
-                return "The Owner already has Company!";
-            }
-
-            Connection conn = ConnectionPostgres.getConnection();
-
-
-            PreparedStatement stmt = conn.prepareStatement("INSERT INTO public.\"Company\"(\n" +
-                    " \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\" , \"comImg\", \"currency\")\n" +
-                    "\tVALUES ( ?, ?, ?, ?, ?,?,?);", Statement.RETURN_GENERATED_KEYS);
-
-            stmt.setString(1, companyName);
-            stmt.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
-            stmt.setInt(3, ownerId);
-            stmt.setString(4, plan);
-            stmt.setInt(5, price);
-            stmt.setString(6, comImg);
-            stmt.setString(7, currency);
-
-            int affectedRows = stmt.executeUpdate();
-            if (affectedRows == 0) {
-                throw new SQLException("Creating Company failed, no rows affected.");
-            }
-            int id = 0;
-            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    id = generatedKeys.getInt(1);
-                    CreateCompanySchema(id);
-                    dbUsers.updateRole("public", ownerId, "Owner");
-                    if (branchName.length() > 2) {
-                        dbBranch.addBranch(branchName, "Egypt", id);
-
-                    }
-                } else {
-                    throw new SQLException("Creating user failed, no ID obtained.");
-                }
-            }
-            stmt.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return "the user not added bs error!";
-
-        }
-
-        return "the user added!";
-    }
-
-    static public ResponseEntity<String> UpdateCompanyImg(int companyId, String img) {
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("UPDATE public.\"Company\"\n" +
-                    "\tSET \"comImg\"= '" + img + "'\n" +
-                    "\tWHERE id = " + companyId + ";");
-
-
-            int i = stmt.executeUpdate();
-            stmt.close();
-            conn.close();
-            System.out.println(stmt);
-
-            if (i == 1) {
-                System.out.println(i + "  UpdateCompanyImg Updated");
-
-                return ResponseEntity.status(HttpStatus.ACCEPTED).body("Image Changed!");
-
-            } else {
-                System.out.println(i + " Not  UpdateCompanyImg Updated");
-
-                return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("Can't Update Company Img ");
-
-            }
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).body("Server Error! ");
-        }
+    private String buildCompanySchemaSql(int companyId) {
+        String schemaName = "C_" + companyId;
+        String dbOwner = ValueinsoftBackendApplication.DatabaseOwner;
+        return "CREATE SCHEMA IF NOT EXISTS " + schemaName + "; " +
+                SQLCompanyUsers(schemaName, dbOwner) + " " +
+                SQLPosShiftPeriod(schemaName, dbOwner) + " " +
+                SQLSupplier(schemaName, dbOwner) + " " +
+                SQLBranch(schemaName, dbOwner) + " " +
+                SQLDamagedList(schemaName, dbOwner) + " " +
+                SQLPosCateJson(schemaName, dbOwner) + " " +
+                SQLMainMajor(schemaName, dbOwner) + " " +
+                SQLClientReceipts(schemaName, dbOwner) + " " +
+                SQLSupplierBProduct(schemaName, dbOwner) + " " +
+                SQLCompanyAnalysis(schemaName, dbOwner) + " " +
+                SQLSupplierReciepts(schemaName, dbOwner) + " " +
+                SQLFixArea(schemaName, dbOwner) + " " +
+                SQLClient(schemaName, dbOwner);
     }
 
     //Statics SQL Queries

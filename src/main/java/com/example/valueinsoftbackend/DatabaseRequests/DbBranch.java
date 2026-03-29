@@ -1,17 +1,17 @@
 package com.example.valueinsoftbackend.DatabaseRequests;
 
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Branch;
-import com.example.valueinsoftbackend.Model.Company;
-import com.example.valueinsoftbackend.Model.User;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
-import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
-import java.sql.*;
-import java.util.ArrayList;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
 
 
@@ -462,26 +462,41 @@ public List<Branch> getAllBranches() {
         return count != null && count > 0;
     }
 
-    public  String addBranch(String branchName, String branchLocation, int companyId) {
+    public int createBranchWithTables(String branchName, String branchLocation, int companyId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         if (checkExistBranchName(branchName)) {
-            return "The Branch Name existed!";
+            throw new ApiException(HttpStatus.CONFLICT, "BRANCH_NAME_EXISTS", "The Branch Name existed!");
         }
 
         String sql = "INSERT INTO public.\"Branch\" (\"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\") " +
                 "VALUES (?, ?, ?, ?)";
         int result = jdbcTemplate.update(sql, branchName, branchLocation, companyId, new Timestamp(System.currentTimeMillis()));
 
-        if (result > 0) {
-            int branchId = getBranchIdByCompanyNameAndBranchName(companyId, branchName);
-            CreatePosProductTable(branchId, companyId);
-            CreateOrderTable(branchId, companyId);
-            CreateOrderDetailsTable(branchId, companyId);
-            CreateSupplierTable(branchId, companyId);
-            CreateTransactionTable(branchId, companyId);
-            return "The Branch added!";
-        } else {
-            return "The branch not added due to error!";
+        if (result <= 0) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_CREATE_FAILED", "The branch not added due to error!");
         }
+
+        int branchId = getBranchIdByCompanyNameAndBranchName(companyId, branchName);
+        if (branchId <= 0) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_ID_RESOLUTION_FAILED", "Branch was inserted but could not be resolved");
+        }
+
+        boolean provisioned = CreatePosProductTable(branchId, companyId)
+                && CreateOrderTable(branchId, companyId)
+                && CreateOrderDetailsTable(branchId, companyId)
+                && CreateSupplierTable(branchId, companyId)
+                && CreateTransactionTable(branchId, companyId);
+
+        if (!provisioned) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_PROVISION_FAILED", "Branch tables could not be provisioned");
+        }
+
+        return branchId;
+    }
+
+    public String addBranch(String branchName, String branchLocation, int companyId) {
+        createBranchWithTables(branchName, branchLocation, companyId);
+        return "The Branch added!";
     }
 
     public boolean deleteBranch(int branchId, String companyId) {

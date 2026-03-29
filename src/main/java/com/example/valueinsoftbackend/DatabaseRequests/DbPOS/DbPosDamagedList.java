@@ -5,31 +5,22 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.DamagedItem;
-import com.example.valueinsoftbackend.Model.InventoryTransaction;
-import com.example.valueinsoftbackend.Model.Supplier;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Repository;
 
-import java.sql.*;
-import java.util.ArrayList;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
 
-@Service
+@Repository
 public class DbPosDamagedList {
 
-    JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    public DbPosDamagedList(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
-
-    public class DbPosDamagedListMapper implements RowMapper<DamagedItem> {
+    private static final RowMapper<DamagedItem> DAMAGED_ITEM_ROW_MAPPER = new RowMapper<>() {
         @Override
         public DamagedItem mapRow(ResultSet rs, int rowNum) throws SQLException {
-            DamagedItem damagedItem = new DamagedItem(
+            return new DamagedItem(
                     rs.getInt("DId"),
                     rs.getInt("ProductId"),
                     rs.getString("ProductName"),
@@ -42,116 +33,77 @@ public class DbPosDamagedList {
                     rs.getInt("branchId"),
                     rs.getInt("quantity")
             );
-            return damagedItem;
         }
+    };
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public DbPosDamagedList(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
-    public  ArrayList<DamagedItem> getDamagedList(int branchId,String companyName) {
-        ArrayList<DamagedItem> damagedItems ;
-        String query = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\",  \"quantity\"\n" +
-                "\tFROM c_"+companyName+".\"DamagedList\" where \"branchId\"  ="+branchId+" ;";
-        try {
-            damagedItems = (ArrayList<DamagedItem>) jdbcTemplate.query(query, new Object[] {}, new DbPosDamagedListMapper());
-            return damagedItems;
-        } catch (Exception e) {
-            System.out.println("err in get DamagedList : " + e.getMessage());
-        }
-        return null;
+    public List<DamagedItem> getDamagedList(int companyId, int branchId) {
+        String sql = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", " +
+                "\"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\", \"quantity\" " +
+                "FROM " + TenantSqlIdentifiers.damagedListTable(companyId) + " WHERE \"branchId\" = ?";
+        return jdbcTemplate.query(sql, DAMAGED_ITEM_ROW_MAPPER, branchId);
     }
 
-
-     public String AddDamagedItem(int branchId,String companyName,DamagedItem damagedItem) {
-        String query = "INSERT INTO c_"+companyName+".\"DamagedList\"(\n" +
-                " \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\" ,  \"quantity\")\n" +
-                "\tVALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?,?);";
-        String updateProductQuantityQuery = "UPDATE c_"+companyName+".\"PosProduct_"+branchId+"\"\n" +
-                "\tSET quantity = quantity - ?\n" +
-                "\tWHERE \"productId\" = ?;";
-        String insertInventoryTransactionQuery = "INSERT INTO c_"+companyName+".\"InventoryTransactions_"+branchId+"\"(\n" +
-                " \"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\")\n" +
-                "\tVALUES (?, ?, COALESCE((SELECT \"supplierId\" FROM c_"+companyName+".\"PosProduct_"+branchId+"\" WHERE \"productId\" = ?), 0), ?, ?, ?, ?, ?, ?);";
-        try {
-            jdbcTemplate.update(query,
-                    damagedItem.getProductId(),
-                    damagedItem.getProductName(),
-                    damagedItem.getTime(),
-                    damagedItem.getReason(),
-                    damagedItem.getDamagedBy(),
-                    damagedItem.getCashierUser(),
-                    damagedItem.getAmountTP(),
-                    damagedItem.isPaid(),
-                    damagedItem.getBranchId(),
-                    damagedItem.getQuantity()
-            );
-            jdbcTemplate.update(
-                    updateProductQuantityQuery,
-                    damagedItem.getQuantity(),
-                    damagedItem.getProductId()
-            );
-            jdbcTemplate.update(
-                    insertInventoryTransactionQuery,
-                    damagedItem.getProductId(),
-                    damagedItem.getCashierUser(),
-                    damagedItem.getProductId(),
-                    "Damaged",
-                    damagedItem.getQuantity() * -1,
-                    damagedItem.getAmountTP(),
-                    damagedItem.isPaid() ? "PaidDamaged" : "Damaged",
-                    damagedItem.getTime(),
-                    damagedItem.isPaid() ? 0 : damagedItem.getAmountTP()
-            );
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return "the DamagedItem not added by error!";
-        }
-        return "the DamagedItem added! ok 200";
+    public Integer getProductQuantity(int companyId, int branchId, int productId) {
+        String sql = "SELECT quantity FROM " + TenantSqlIdentifiers.productTable(companyId, branchId) +
+                " WHERE \"productId\" = ?";
+        List<Integer> quantities = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getInt("quantity"), productId);
+        return quantities.isEmpty() ? null : quantities.get(0);
     }
 
-    //todo Update Not Yet
-    static public String updateSupplier(Supplier supplier, int branchId) {
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("UPDATE public.supplier_" + branchId + "\n" +
-                    "\tSET \"supplierId\"=?, \"SupplierName\"=?, \"supplierPhone1\"=?, \"supplierPhone2\"=?, \"SupplierLocation\"=?, \"suplierMajor\"=?\n" +
-                    "\tWHERE \"supplierId\" = " + supplier.getSupplierId() + ";");
-
-            stmt.setInt(1, supplier.getSupplierId());
-            stmt.setString(2, supplier.getSupplierName());
-            stmt.setString(3, supplier.getSupplierPhone1());
-            stmt.setString(4, supplier.getSupplierPhone2());
-            stmt.setString(5, supplier.getSuplierLocation());
-            stmt.setString(6, supplier.getSuplierMajor());
-            int i = stmt.executeUpdate();
-            System.out.println(i + " supplier update record ");
-            stmt.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            return "the supplier not updates by error!";
-        }
-        return "the supplier updates with (ok 200)";
+    public int insertDamagedItem(int companyId, DamagedItem damagedItem) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.damagedListTable(companyId) + " " +
+                "(\"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", " +
+                "\"AmountTP\", \"Paid\", \"branchId\", \"quantity\") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        return jdbcTemplate.update(
+                sql,
+                damagedItem.getProductId(),
+                damagedItem.getProductName(),
+                damagedItem.getTime(),
+                damagedItem.getReason(),
+                damagedItem.getDamagedBy(),
+                damagedItem.getCashierUser(),
+                damagedItem.getAmountTP(),
+                damagedItem.isPaid(),
+                damagedItem.getBranchId(),
+                damagedItem.getQuantity()
+        );
     }
 
-    //todo -- delete
-    public static boolean deleteDamagedItem( int branchId,String companyName,int DId) {
-        try {
-            Connection conn = ConnectionPostgres.getConnection();
-
-            String query = "DELETE FROM public.\"DamagedList\"\n" +
-                    "\tWHERE \"DId\" = " + DId + ";";
-
-            PreparedStatement pstmt = null;
-            pstmt = conn.prepareStatement(query);
-            pstmt.executeUpdate();
-            // create the java statement
-            pstmt.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println("err in get user : " + e.getMessage());
-            return false;
-        }
-        return true;
+    public int decrementProductQuantity(int companyId, int branchId, int productId, int quantity) {
+        String sql = "UPDATE " + TenantSqlIdentifiers.productTable(companyId, branchId) + " " +
+                "SET quantity = quantity - ? WHERE \"productId\" = ? AND quantity >= ?";
+        return jdbcTemplate.update(sql, quantity, productId, quantity);
     }
 
+    public int insertDamagedInventoryTransaction(int companyId, int branchId, DamagedItem damagedItem) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) + " " +
+                "(\"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", " +
+                "\"payType\", \"time\", \"RemainingAmount\") " +
+                "VALUES (?, ?, COALESCE((SELECT \"supplierId\" FROM " + TenantSqlIdentifiers.productTable(companyId, branchId) +
+                " WHERE \"productId\" = ?), 0), ?, ?, ?, ?, ?, ?)";
+        return jdbcTemplate.update(
+                sql,
+                damagedItem.getProductId(),
+                damagedItem.getCashierUser(),
+                damagedItem.getProductId(),
+                "Damaged",
+                damagedItem.getQuantity() * -1,
+                damagedItem.getAmountTP(),
+                damagedItem.isPaid() ? "PaidDamaged" : "Damaged",
+                damagedItem.getTime(),
+                damagedItem.isPaid() ? 0 : damagedItem.getAmountTP()
+        );
+    }
 
+    public boolean deleteDamagedItem(int companyId, int branchId, int damagedId) {
+        String sql = "DELETE FROM " + TenantSqlIdentifiers.damagedListTable(companyId) +
+                " WHERE \"DId\" = ? AND \"branchId\" = ?";
+        return jdbcTemplate.update(sql, damagedId, branchId) == 1;
+    }
 }

@@ -22,7 +22,11 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
+import com.example.valueinsoftbackend.Model.Request.CreateBranchRequest;
+import com.example.valueinsoftbackend.Service.BranchService;
 import com.example.valueinsoftbackend.Service.SubscriptionService;
+
+import javax.validation.Valid;
 
 @RestController
 @Validated
@@ -32,13 +36,15 @@ public class BranchController {
 
     private final DbCompany dbCompany;
     private final DbBranch dbBranch;
+    private final BranchService branchService;
     private final SubscriptionService subscriptionService;
 
 
     @Autowired
-    public BranchController(DbCompany dbCompany, DbBranch dbBranch, SubscriptionService subscriptionService) {
+    public BranchController(DbCompany dbCompany, DbBranch dbBranch, BranchService branchService, SubscriptionService subscriptionService) {
         this.dbCompany = dbCompany;
         this.dbBranch = dbBranch;
+        this.branchService = branchService;
         this.subscriptionService = subscriptionService;
     }
 
@@ -62,19 +68,8 @@ public class BranchController {
 
 
     @PostMapping("/AddBranch")
-    public ResponseEntity<Object> newUser(@RequestBody Map<String, Object> body) {
-        int branchId = -1;
-        int companyId = (int) body.get("CompanyId");
-        String branchName = body.get("branchName").toString();
-        String branchLocation = body.get("branchLocation").toString();
-
-        try {
-
-            dbBranch.addBranch(branchName, branchLocation, companyId);
-            branchId = dbBranch.getBranchIdByCompanyNameAndBranchName(companyId, branchName);
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
+    public ResponseEntity<Object> newUser(@Valid @RequestBody CreateBranchRequest body) {
+        int branchId = branchService.createBranch(body);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body("{\"title\" : \"the Branched added saved\", \"branchId\" : " + branchId + "}");
 
     }

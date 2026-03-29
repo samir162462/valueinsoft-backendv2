@@ -160,9 +160,16 @@ Completed so far in Phase 2:
 - added validated DTOs for supplier create/update, supplier bought-product, inventory transaction create, and inventory transaction query payloads
 - preserved the existing supplier and inventory route surface while moving the touched stock/finance write logic behind services
 
+10. company provisioning, branch provisioning, and damaged-item stabilization
+- added `CompanyService`, `BranchService`, and `DamagedItemService` so company creation, branch creation, company image update, and damaged-item writes no longer depend on controller-owned orchestration
+- added validated DTOs for company create, company image update, branch create, and damaged-item create payloads
+- refactored `DbCompany` away from the legacy company write path into parameterized Spring JDBC reads and low-level writes, leaving multi-step provisioning in the service layer
+- hardened `DbBranch` so branch creation now fails if branch table provisioning fails instead of silently returning success after a partial setup
+- refactored `DbPosDamagedList` to parameterized Spring JDBC operations with validated tenant identifiers and one transactional damaged-item write boundary for damaged record insert, stock decrement, and inventory-transaction side effects
+
 Current Phase 2 remaining scope:
 
-- continue service extraction and transaction handling in the untouched money and stock flows, especially company provisioning, damaged-item writes, and analytics update paths
+- continue service extraction and transaction handling in the untouched money and stock flows, especially analytics update paths, fix-area writes, and remaining legacy company or inventory side paths
 - expand DTO validation across the remaining controllers that still accept loose maps and mixed payload shapes
 - turn the Flyway scaffold into curated shared-schema and tenant-provisioning migrations when the change set is ready
 - continue repository cleanup in untouched legacy modules so raw JDBC and string-built SQL stop being the default pattern
@@ -269,7 +276,7 @@ Expected outcome:
 
 Continue Phase 2 by finishing the remaining legacy write and validation surface around the now-stabilized core flows:
 
-1. clean the untouched supplier, inventory, company, and analytics repositories that still rely on raw JDBC or string-built SQL
+1. clean the untouched analytics, fix-area, and remaining legacy inventory/company repositories that still rely on raw JDBC or string-built SQL
 2. extend DTO and Bean Validation coverage across the remaining legacy controllers
 3. convert the Flyway scaffold into curated migrations for shared tables and controlled tenant provisioning changes
 4. complete structured logging replacement in the remaining high-risk financial and stock-changing paths

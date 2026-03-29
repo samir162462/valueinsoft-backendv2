@@ -714,7 +714,7 @@ What remains for the next phase:
 Status on 2026-03-29:
 
 - started for the backend foundation phase
-- completed for the order slice and the next finance/subscription write slice
+- completed for the order, finance/subscription, supplier/inventory, and company/damaged-item write slices
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
 Implemented so far in Phase 2:
@@ -739,6 +739,10 @@ Implemented so far in Phase 2:
 - refactored `DbSupplier` to parameterized Spring JDBC with validated tenant identifiers
 - added `InventoryTransactionService` and refactored `DbPosInventoryTransaction` away from string-built multi-statement SQL into service-owned transactional writes
 - added validated DTOs for supplier create/update, supplier bought-product, inventory transaction create, and inventory transaction query payloads
+- added `CompanyService`, `BranchService`, and `DamagedItemService` so company provisioning, branch provisioning, company image updates, and damaged-item writes now run through validated transactional service boundaries
+- refactored `DbCompany` and `DbPosDamagedList` toward parameterized Spring JDBC repository behavior for the touched read/write paths
+- hardened branch provisioning so branch creation now fails if branch table creation fails instead of silently leaving partial tenant state behind
+- added validated DTOs for company create, company image update, branch create, and damaged-item create payloads
 
 Current result:
 
@@ -746,14 +750,15 @@ Current result:
 - order creation and bounce-back are safer against partial-write failure than the old controller/raw-SQL path
 - supplier receipts, expenses, and branch-subscription payment side effects now also run through explicit service boundaries instead of controller-owned orchestration
 - supplier master-data writes and inventory-transaction writes now also run through typed controller payloads and service-owned transaction boundaries
+- company creation, branch creation, company image update, and damaged-item add/delete now also run through typed controller payloads and service-owned transaction boundaries
 - the touched money and payment endpoints reject invalid payloads early instead of failing later inside repository code
 - Flyway structure and repository hygiene are prepared for the next foundation pass
-- and the current roadmap risk is narrowed to company provisioning, damaged-item flows, analytics updates, and the remaining legacy-controller areas
+- and the current roadmap risk is narrowed to analytics updates, fix-area persistence, remaining legacy controller validation, and the broader logging cleanup
 
 Remaining Foundation work:
 
 - service extraction and transaction boundaries in the untouched money and stock paths that still rely on legacy raw JDBC patterns
 - request DTO migration across the remaining controllers that still use loose maps
 - curated Flyway migrations for shared tables and controlled tenant-provisioning changes
-- broader repository cleanup in untouched company, damaged-item, and analytics modules
+- broader repository cleanup in untouched analytics, fix-area, and remaining company/inventory side modules
 - structured logging completion across the remaining legacy write surface

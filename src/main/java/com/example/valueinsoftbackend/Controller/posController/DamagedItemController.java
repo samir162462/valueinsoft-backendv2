@@ -4,49 +4,54 @@
 
 package com.example.valueinsoftbackend.Controller.posController;
 
-import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosDamagedList;
 import com.example.valueinsoftbackend.Model.DamagedItem;
+import com.example.valueinsoftbackend.Model.Request.CreateDamagedItemRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierUpdateRequest;
-import com.example.valueinsoftbackend.Model.Supplier;
+import com.example.valueinsoftbackend.Service.DamagedItemService;
 import com.example.valueinsoftbackend.Service.SupplierService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import javax.validation.Valid;
+import javax.validation.constraints.Positive;
+
 @RestController
+@Validated
 @RequestMapping("/DamagedItem")
 public class DamagedItemController {
 
-    DbPosDamagedList dbPosDamagedList;
+    private final DamagedItemService damagedItemService;
     private final SupplierService supplierService;
 
     @Autowired
-    public DamagedItemController(DbPosDamagedList dbPosDamagedList, SupplierService supplierService) {
-        this.dbPosDamagedList = dbPosDamagedList;
+    public DamagedItemController(DamagedItemService damagedItemService, SupplierService supplierService) {
+        this.damagedItemService = damagedItemService;
         this.supplierService = supplierService;
     }
 
     @RequestMapping(value = "{companyName}/{branchId}/all", method = RequestMethod.GET)
     @ResponseBody
-    public ArrayList<DamagedItem> getDamagesItem(
-            @PathVariable int branchId,
-            @PathVariable String companyName
+    public List<DamagedItem> getDamagesItem(
+            @PathVariable("companyName") @Positive int companyId,
+            @PathVariable @Positive int branchId
     ) {
-        return dbPosDamagedList.getDamagedList(branchId, companyName);
+        return damagedItemService.getDamagedItems(companyId, branchId);
     }
 
     @PostMapping("{companyName}/{branchId}/add")
     public ResponseEntity<Object> newDamagedItem(
-            @RequestBody DamagedItem damagedItem,
-            @PathVariable int branchId,
-            @PathVariable String companyName
+            @Valid @RequestBody CreateDamagedItemRequest damagedItem,
+            @PathVariable("companyName") @Positive int companyId,
+            @PathVariable @Positive int branchId
     ) {
-        String answer = dbPosDamagedList.AddDamagedItem(branchId, companyName, damagedItem);
+        String answer = damagedItemService.addDamagedItem(companyId, branchId, damagedItem);
 
         HashMap<String, String> res = new HashMap<>();
         res.put("Message", answer);
@@ -55,32 +60,25 @@ public class DamagedItemController {
 
     @RequestMapping(value = "{companyId}/{branchId}/update/{id}", method = RequestMethod.PUT)
     public Map<String, String> updateSupplier(
-            @RequestBody Supplier supplier,
-            @PathVariable int branchId,
-            @PathVariable int companyId
+            @Valid @RequestBody SupplierUpdateRequest supplier,
+            @PathVariable @Positive int branchId,
+            @PathVariable @Positive int companyId,
+            @PathVariable("id") @Positive int supplierId
 
     ) {
-        SupplierUpdateRequest request = new SupplierUpdateRequest();
-        request.setSupplierId(supplier.getSupplierId());
-        request.setSupplierName(supplier.getSupplierName());
-        request.setSupplierPhone1(supplier.getSupplierPhone1());
-        request.setSupplierPhone2(supplier.getSupplierPhone2());
-        request.setSuplierLocation(supplier.getSuplierLocation());
-        request.setSuplierMajor(supplier.getSuplierMajor());
-
         Map<String, String> response = new HashMap<>();
-        response.put("Response", supplierService.updateSupplier(companyId, branchId, supplier.getSupplierId(), request));
+        response.put("Response", supplierService.updateSupplier(companyId, branchId, supplierId, supplier));
         return response;
     }
 
     @DeleteMapping("{companyName}/{branchId}/delete/{DId}")
     public Map<String, Boolean> deleteDamagedItem(
-            @PathVariable(value = "DId") int DId,
-            @PathVariable int branchId,
-            @PathVariable String companyName
+            @PathVariable(value = "DId") @Positive int DId,
+            @PathVariable("companyName") @Positive int companyId,
+            @PathVariable @Positive int branchId
     ) throws Exception {
         Map<String, Boolean> response = new HashMap<>();
-        boolean bol = DbPosDamagedList.deleteDamagedItem(branchId, companyName, DId);
+        boolean bol = damagedItemService.deleteDamagedItem(companyId, branchId, DId);
         response.put("deleted", bol);
         return response;
     }

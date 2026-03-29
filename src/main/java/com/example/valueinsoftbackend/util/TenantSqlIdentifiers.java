@@ -55,6 +55,10 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"SupplierBProduct\"";
     }
 
+    public static String damagedListTable(int companyId) {
+        return companySchema(companyId) + ".\"DamagedList\"";
+    }
+
     public static String companySubscriptionTable() {
         return "public.\"CompanySubscription\"";
     }
