@@ -4,46 +4,50 @@
 
 package com.example.valueinsoftbackend.Controller.MoneyController;
 
-import com.example.valueinsoftbackend.DatabaseRequests.DbMoney.DBMClientReceipt;
-import com.example.valueinsoftbackend.Model.DataVisualizationModels.DvSales;
+import com.example.valueinsoftbackend.Model.Request.CreateClientReceiptRequest;
 import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
+import com.example.valueinsoftbackend.Service.ClientReceiptService;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.sql.Timestamp;
+import javax.validation.Valid;
+import javax.validation.constraints.Positive;
 import java.util.ArrayList;
-import java.util.Map;
 
 @RestController
+@Validated
 @RequestMapping("/CR")
 public class ClientReceiptController {
 
+    private final ClientReceiptService clientReceiptService;
 
-
-    @RequestMapping(value = "/{companyId}/{clientId}",method = RequestMethod.GET)
-    public ArrayList<ClientReceipt> clientReceipts(@PathVariable int companyId,@PathVariable int clientId  ) throws Exception
-    {
-
-        System.out.println(clientId);
-        return DBMClientReceipt.getClientReceipts(companyId,clientId);
-
-    }
-    @RequestMapping(value = "/{companyId}/{branchId}/{startTime}/{endTime}",method = RequestMethod.GET)
-    public ArrayList<ClientReceipt> clientReceiptsByTime(@PathVariable int companyId,@PathVariable int branchId,@PathVariable String startTime,@PathVariable String endTime  ) throws Exception
-    {
-        System.out.println("startTime: "+startTime);
-        System.out.println("endTime: "+endTime);
-
-        return DBMClientReceipt.getClientReceiptsByTime(companyId,branchId,startTime,endTime);
-
+    public ClientReceiptController(ClientReceiptService clientReceiptService) {
+        this.clientReceiptService = clientReceiptService;
     }
 
-    @RequestMapping(value = "/{companyId}",method = RequestMethod.POST)
-    public String AddClientReceipts(@RequestBody ClientReceipt clientReceipt ,@PathVariable int companyId  ) throws Exception
-    {
-
-
-        return DBMClientReceipt.AddClientReceipt(companyId,clientReceipt);
-
+    @GetMapping("/{companyId}/{clientId}")
+    public ArrayList<ClientReceipt> clientReceipts(
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int clientId
+    ) {
+        return clientReceiptService.getClientReceipts(companyId, clientId);
     }
 
+    @GetMapping("/{companyId}/{branchId}/{startTime}/{endTime}")
+    public ArrayList<ClientReceipt> clientReceiptsByTime(
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId,
+            @PathVariable String startTime,
+            @PathVariable String endTime
+    ) {
+        return clientReceiptService.getClientReceiptsByTime(companyId, branchId, startTime, endTime);
+    }
+
+    @PostMapping("/{companyId}")
+    public String addClientReceipts(
+            @Valid @RequestBody CreateClientReceiptRequest clientReceipt,
+            @PathVariable @Positive int companyId
+    ) {
+        return clientReceiptService.addClientReceipt(companyId, clientReceipt);
+    }
 }

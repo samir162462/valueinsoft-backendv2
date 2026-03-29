@@ -714,7 +714,7 @@ What remains for the next phase:
 Status on 2026-03-29:
 
 - started for the backend foundation phase
-- completed for the order, finance/subscription, supplier/inventory, company/damaged-item, and analytics/fix-area slices
+- completed for the order, finance/subscription, supplier/inventory, company/damaged-item, analytics/fix-area, and client/category/shift/client-receipt slices
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
 Implemented so far in Phase 2:
@@ -747,6 +747,9 @@ Implemented so far in Phase 2:
 - refactored `DbDVCompanyAnalysis`, `DbDvSales`, `DbDvCompany`, and `DbSlotsFixArea` toward constructor-injected parameterized Spring JDBC operations with validated tenant identifiers
 - added validated DTOs for company-analysis create/update, sales analytics queries, fix-area slot create/update, and user image update payloads
 - replaced the placeholder-only Flyway scaffold with the first curated shared-schema migrations while keeping Flyway disabled by default until rollout is planned
+- added `ClientService`, `ClientReceiptService`, `CategoryService`, and `ShiftPeriodService` so these routes no longer depend on loose map parsing or controller-owned orchestration
+- refactored `DbClient`, `DBMClientReceipt`, `DbPosCategory`, and `DbPosShiftPeriod` toward constructor-injected parameterized Spring JDBC operations with validated tenant identifiers
+- added validated DTOs for client create, client receipt create, current shift, and shift-order lookup payloads while preserving the existing route surface and success contracts
 
 Current result:
 
@@ -756,14 +759,15 @@ Current result:
 - supplier master-data writes and inventory-transaction writes now also run through typed controller payloads and service-owned transaction boundaries
 - company creation, branch creation, company image update, and damaged-item add/delete now also run through typed controller payloads and service-owned transaction boundaries
 - analytics and fix-area flows now also run through typed controller payloads, service-owned orchestration, and Spring-managed repository access
-- the touched money, stock, provisioning, and analytics endpoints reject invalid payloads early instead of failing later inside repository code
+- client create, client receipt, shift-period, and category flows now also run through typed controller payloads, service-owned orchestration, and Spring-managed repository access
+- the touched money, stock, provisioning, analytics, client, shift, and category endpoints reject invalid payloads early instead of failing later inside repository code
 - Flyway now has its first curated shared-schema migrations while rollout remains controlled and disabled by default
-- and the current roadmap risk is narrowed to the remaining legacy controller validation, untouched raw-JDBC repository paths, further curated migrations, and the broader logging cleanup
+- and the current roadmap risk is narrowed to the remaining legacy controller validation, the older untouched inventory/company raw-JDBC side paths, further curated migrations, and the broader logging cleanup
 
 Remaining Foundation work:
 
 - service extraction and transaction boundaries in the remaining untouched legacy write paths that still rely on raw JDBC or string-built SQL
 - request DTO migration across the remaining controllers that still use loose maps
 - curated Flyway migrations for the next shared-table and controlled tenant-provisioning changes
-- broader repository cleanup in untouched client, category, shift, client-receipt, and remaining company/inventory side modules
+- broader repository cleanup in the remaining older company/inventory side modules and any untouched low-traffic legacy paths
 - structured logging completion across the remaining legacy write surface

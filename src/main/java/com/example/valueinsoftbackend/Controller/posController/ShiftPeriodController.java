@@ -1,50 +1,66 @@
 package com.example.valueinsoftbackend.Controller.posController;
 
-
-import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
 import com.example.valueinsoftbackend.Model.Order;
+import com.example.valueinsoftbackend.Model.Request.CurrentShiftRequest;
+import com.example.valueinsoftbackend.Model.Request.ShiftOrdersRequest;
 import com.example.valueinsoftbackend.Model.ShiftPeriod;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.valueinsoftbackend.Service.ShiftPeriodService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
+import javax.validation.constraints.Positive;
 import java.util.ArrayList;
-import java.util.Map;
 
 @RestController
+@Validated
 @RequestMapping("/shiftPeriod")
 public class ShiftPeriodController {
 
-    @Autowired
-    private  DbPosShiftPeriod dbPosShiftPeriod;
+    private final ShiftPeriodService shiftPeriodService;
 
+    public ShiftPeriodController(ShiftPeriodService shiftPeriodService) {
+        this.shiftPeriodService = shiftPeriodService;
+    }
 
     @PostMapping("/{companyId}/{branchId}/startShift")
-    ResponseEntity<Object> startShift(@PathVariable int branchId, @PathVariable int companyId) {
-        System.out.println("in Start Shift");
-        return dbPosShiftPeriod.startShiftPeriod(companyId,branchId);
+    ResponseEntity<Object> startShift(
+            @PathVariable @Positive int branchId,
+            @PathVariable @Positive int companyId
+    ) {
+        return shiftPeriodService.startShift(companyId, branchId);
     }
 
     @PostMapping("/{companyId}/{spId}/endShift")
-    String endShift( @PathVariable int spId,@PathVariable int companyId) {
-        dbPosShiftPeriod.endShiftPeriod(companyId,spId);
-        return "The Shift Ended";
-    }
-    // dealingWithCurrentShiftData
-    @RequestMapping(value = "/{companyId}/currentShift" , method = RequestMethod.POST)
-    ShiftPeriod currentShift( @RequestBody Map<String,Object> data,@PathVariable int companyId) {
-        return dbPosShiftPeriod.dealingWithCurrentShiftData(companyId,(int)data.get("branchId"),(boolean)data.get("getDetails"));
-    }
-    @RequestMapping(value = "/{companyId}/ShiftOrdersById" , method = RequestMethod.POST)
-    ArrayList<Order> ShiftOrdersById(@RequestBody Map<String,Object> data ,@PathVariable int companyId) {
-        System.out.println();
-        return (ArrayList<Order>) dbPosShiftPeriod.ShiftOrdersByPeriod(companyId,(int)data.get("branchId"),(int) data.get("spId"));
+    String endShift(
+            @PathVariable @Positive int spId,
+            @PathVariable @Positive int companyId
+    ) {
+        return shiftPeriodService.endShift(companyId, spId);
     }
 
-    //toDO Branch
-    @RequestMapping(value = "/{companyId}/{branchId}/branchShifts" , method = RequestMethod.GET)
-    ArrayList<ShiftPeriod> ShiftsByBranchId(@PathVariable int branchId,@PathVariable int companyId) {
-        return (ArrayList<ShiftPeriod>) dbPosShiftPeriod.currentBranchShiftData(companyId,branchId);
+    @PostMapping("/{companyId}/currentShift")
+    ShiftPeriod currentShift(
+            @Valid @RequestBody CurrentShiftRequest data,
+            @PathVariable @Positive int companyId
+    ) {
+        return shiftPeriodService.currentShift(companyId, data);
     }
 
+    @PostMapping("/{companyId}/ShiftOrdersById")
+    ArrayList<Order> shiftOrdersById(
+            @Valid @RequestBody ShiftOrdersRequest data,
+            @PathVariable @Positive int companyId
+    ) {
+        return shiftPeriodService.shiftOrdersById(companyId, data);
+    }
+
+    @GetMapping("/{companyId}/{branchId}/branchShifts")
+    ArrayList<ShiftPeriod> shiftsByBranchId(
+            @PathVariable @Positive int branchId,
+            @PathVariable @Positive int companyId
+    ) {
+        return shiftPeriodService.branchShifts(companyId, branchId);
+    }
 }

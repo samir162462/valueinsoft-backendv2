@@ -106,7 +106,7 @@ Remaining risks after Phase 1:
 Status:
 
 - started on 2026-03-29
-- partially completed across the order, finance/payment, supplier/inventory, company/damaged-item, and analytics/fix-area slices
+- partially completed across the order, finance/payment, supplier/inventory, company/damaged-item, analytics/fix-area, and client/category/shift/client-receipt slices
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
 Completed so far in Phase 2:
@@ -173,9 +173,15 @@ Completed so far in Phase 2:
 - added validated DTOs for company analytics, sales analytics, fix-area slot create/update, and user image update payloads
 - replaced the placeholder-only Flyway scaffold with the first curated shared-schema migrations while keeping Flyway disabled by default until rollout is planned
 
+12. client, category, shift, and client-receipt stabilization
+- added `ClientService`, `ClientReceiptService`, `CategoryService`, and `ShiftPeriodService` so these routes no longer depend on loose map parsing or controller-owned orchestration
+- refactored `DbClient`, `DBMClientReceipt`, `DbPosCategory`, and `DbPosShiftPeriod` toward constructor-injected parameterized Spring JDBC operations with validated tenant identifiers
+- added validated DTOs for client create, client receipt create, current shift, and shift-order lookup payloads while preserving the existing route surface and success contracts
+- reduced remaining legacy raw-JDBC exposure in the touched client, category, shift, and client-receipt modules and replaced their console-driven flow with service-owned logging and validation
+
 Current Phase 2 remaining scope:
 
-- continue repository cleanup in the untouched legacy modules, especially remaining client, category, shift, client-receipt, and older inventory/company side paths that still rely on raw JDBC or string-built SQL
+- continue repository cleanup in the untouched legacy modules, especially older inventory/company side paths and any remaining low-traffic modules that still rely on raw JDBC or string-built SQL
 - expand DTO validation across the remaining controllers that still accept loose maps and mixed payload shapes
 - continue the Flyway conversion from scaffolding into curated shared-schema and controlled tenant-provisioning migrations when the next change set is ready
 - complete the broader logging cleanup so business write flows are consistently traceable beyond the touched services

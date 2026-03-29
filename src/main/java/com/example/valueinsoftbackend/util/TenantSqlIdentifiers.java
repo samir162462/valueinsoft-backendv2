@@ -67,6 +67,18 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"Client\"";
     }
 
+    public static String clientReceiptsTable(int companyId) {
+        return companySchema(companyId) + ".\"ClientReceipts\"";
+    }
+
+    public static String categoryJsonTable(int companyId) {
+        return companySchema(companyId) + ".\"PosCateJson\"";
+    }
+
+    public static String mainMajorTable(int companyId) {
+        return companySchema(companyId) + ".\"MainMajor\"";
+    }
+
     public static String companyAnalysisTable(int companyId) {
         return companySchema(companyId) + ".\"CompanyAnalysis\"";
     }
