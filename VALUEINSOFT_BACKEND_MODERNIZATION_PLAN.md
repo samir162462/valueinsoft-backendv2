@@ -106,7 +106,7 @@ Remaining risks after Phase 1:
 Status:
 
 - started on 2026-03-29
-- partially completed across the order, finance/payment, supplier/inventory, company/damaged-item, analytics/fix-area, and client/category/shift/client-receipt slices
+- partially completed across the order, finance/payment, supplier/inventory, company/damaged-item, analytics/fix-area, client/category/shift/client-receipt, company/branch read-provisioning, and final validation/logging cleanup slices
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
 Completed so far in Phase 2:
@@ -179,9 +179,21 @@ Completed so far in Phase 2:
 - added validated DTOs for client create, client receipt create, current shift, and shift-order lookup payloads while preserving the existing route surface and success contracts
 - reduced remaining legacy raw-JDBC exposure in the touched client, category, shift, and client-receipt modules and replaced their console-driven flow with service-owned logging and validation
 
+13. company and branch read-side hardening plus migration refinement
+- extended `CompanyService` and `BranchService` so company lookup, company-by-user resolution, and branch-by-company reads no longer depend on controller-owned repository access
+- refactored `DbBranch` provisioning helpers to use validated tenant identifier utilities for branch table creation and deletion, with structured logging instead of console-driven flow
+- tightened `DbCompany` schema provisioning to execute validated statements step-by-step with explicit logging instead of a single opaque multi-statement execution path
+- added the next curated shared Flyway migration for company and branch lookup indexes and replaced one more scheduled utility plus the product write path’s remaining `System.out` usage with logger-based tracing
+
+14. residual order validation and legacy-helper cleanup
+- replaced the last loose order-period request map with a validated `OrderPeriodRequest` DTO while preserving compatibility for both path-based and query-param company resolution
+- moved order-period parsing behind `OrderService` so timestamp validation now uses the shared request timestamp parser instead of controller-owned conversion logic
+- removed the dead raw-JDBC `DbCompany.CreateCompanySchema(...)` helper that no longer matched the active provisioning path
+- replaced additional remaining console logging in the touched product-command and PayMob order-registration classes with structured logger usage
+
 Current Phase 2 remaining scope:
 
-- continue repository cleanup in the untouched legacy modules, especially older inventory/company side paths and any remaining low-traffic modules that still rely on raw JDBC or string-built SQL
+- continue repository cleanup in the untouched legacy modules, especially older inventory side paths and any remaining low-traffic modules that still rely on raw JDBC or string-built SQL
 - expand DTO validation across the remaining controllers that still accept loose maps and mixed payload shapes
 - continue the Flyway conversion from scaffolding into curated shared-schema and controlled tenant-provisioning migrations when the next change set is ready
 - complete the broader logging cleanup so business write flows are consistently traceable beyond the touched services
@@ -287,7 +299,7 @@ Expected outcome:
 
 Continue Phase 2 by finishing the remaining legacy write and validation surface around the now-stabilized core flows:
 
-1. clean the untouched legacy repositories that still rely on raw JDBC or string-built SQL, especially client receipts, shifts, categories, and remaining inventory/company side paths
+1. clean the untouched legacy repositories that still rely on raw JDBC or string-built SQL, especially remaining inventory side paths and any low-traffic legacy modules not yet moved behind Spring-managed access
 2. extend DTO and Bean Validation coverage across the remaining legacy controllers
 3. continue converting the Flyway foundation into curated migrations for shared tables and controlled tenant provisioning changes
 4. complete structured logging replacement in the remaining high-risk financial and stock-changing paths

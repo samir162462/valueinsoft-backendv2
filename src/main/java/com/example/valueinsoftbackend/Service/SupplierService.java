@@ -1,5 +1,7 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
@@ -11,8 +13,6 @@ import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.example.valueinsoftbackend.util.RequestTimestampParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.google.gson.JsonObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +21,8 @@ import java.sql.Timestamp;
 import java.util.List;
 
 @Service
+@Slf4j
 public class SupplierService {
-
-    private static final Logger log = LoggerFactory.getLogger(SupplierService.class);
 
     private final DbSupplier dbSupplier;
 

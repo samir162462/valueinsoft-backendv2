@@ -1,17 +1,19 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
+import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Request.CreateBranchRequest;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Service
-public class BranchService {
+import java.util.ArrayList;
 
-    private static final Logger log = LoggerFactory.getLogger(BranchService.class);
+@Service
+@Slf4j
+public class BranchService {
 
     private final DbBranch dbBranch;
 
@@ -34,6 +36,11 @@ public class BranchService {
         );
         log.info("Created branch {} for company {}", branchId, companyId);
         return branchId;
+    }
+
+    public ArrayList<Branch> getBranchesByCompanyId(int companyId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        return new ArrayList<>(dbBranch.getBranchByCompanyId(companyId));
     }
 
     private String normalize(String value) {

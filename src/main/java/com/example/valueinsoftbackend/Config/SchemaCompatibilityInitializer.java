@@ -1,8 +1,8 @@
 package com.example.valueinsoftbackend.Config;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,9 +11,8 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
+@Slf4j
 public class SchemaCompatibilityInitializer implements ApplicationRunner {
-
-    private static final Logger log = LoggerFactory.getLogger(SchemaCompatibilityInitializer.class);
     private static final int PASSWORD_COLUMN_LENGTH = 100;
 
     private final JdbcTemplate jdbcTemplate;

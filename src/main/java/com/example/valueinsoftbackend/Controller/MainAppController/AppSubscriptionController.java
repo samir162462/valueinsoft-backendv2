@@ -1,13 +1,14 @@
+package com.example.valueinsoftbackend.Controller.MainAppController;
+
 /*
  * Copyright (c) Samir Filifl
  */
 
-package com.example.valueinsoftbackend.Controller.MainAppController;
+
+import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.Model.Request.CreateSubscriptionRequest;
 import com.example.valueinsoftbackend.Service.SubscriptionService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,9 +19,8 @@ import java.util.Map;
 @RestController
 @Validated
 @RequestMapping("/appSubscription")
+@Slf4j
 public class AppSubscriptionController {
-
-    private static final Logger log = LoggerFactory.getLogger(AppSubscriptionController.class);
 
     private final SubscriptionService subscriptionService;
 

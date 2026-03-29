@@ -1,5 +1,7 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.Model.Product;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;
 
 @Repository
+@Slf4j
 public class DbPosProductCommandRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -41,7 +44,7 @@ public class DbPosProductCommandRepository {
         if (affectedRows == 0 || keyHolder.getKey() == null) {
             throw new IllegalStateException("Creating product failed");
         }
-        System.out.println(sql);
+        log.debug("Created product row for company {} branch {}", companyId, branchId);
 
         return keyHolder.getKey().longValue();
     }

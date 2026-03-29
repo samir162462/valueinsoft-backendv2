@@ -1,9 +1,9 @@
 package com.example.valueinsoftbackend.SecurityPack;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.Model.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,9 +19,8 @@ import java.util.List;
 import java.util.Set;
 
 @Service
+@Slf4j
 public class MyUserDetailsServices implements UserDetailsService, UserDetailsPasswordService {
-
-    private static final Logger log = LoggerFactory.getLogger(MyUserDetailsServices.class);
 
     private final DbUsers dbUsers;
 

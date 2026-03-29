@@ -204,7 +204,7 @@ This pattern is visible in repository code and in the exported database file und
 When a company is created:
 
 - `DbCompany.AddCompany(...)` inserts the company into `public."Company"`
-- `DbCompany.CreateCompanySchema(companyId)` creates the tenant schema
+- `DbCompany.createCompanySchema(companyId)` provisions the tenant schema through the Spring-managed repository path
 - the owner role is promoted to `Owner`
 - an initial branch may be created
 
@@ -714,7 +714,7 @@ What remains for the next phase:
 Status on 2026-03-29:
 
 - started for the backend foundation phase
-- completed for the order, finance/subscription, supplier/inventory, company/damaged-item, analytics/fix-area, and client/category/shift/client-receipt slices
+- completed for the order, finance/subscription, supplier/inventory, company/damaged-item, analytics/fix-area, client/category/shift/client-receipt, company/branch read-provisioning, and final validation/logging cleanup slices
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
 Implemented so far in Phase 2:
@@ -750,6 +750,13 @@ Implemented so far in Phase 2:
 - added `ClientService`, `ClientReceiptService`, `CategoryService`, and `ShiftPeriodService` so these routes no longer depend on loose map parsing or controller-owned orchestration
 - refactored `DbClient`, `DBMClientReceipt`, `DbPosCategory`, and `DbPosShiftPeriod` toward constructor-injected parameterized Spring JDBC operations with validated tenant identifiers
 - added validated DTOs for client create, client receipt create, current shift, and shift-order lookup payloads while preserving the existing route surface and success contracts
+- extended `CompanyService` and `BranchService` so company lookup, company-by-user resolution, and branch-by-company reads no longer depend on controller-owned repository access
+- refactored `DbBranch` provisioning helpers to use validated tenant identifier utilities plus structured logging for branch table creation and deletion behavior
+- tightened `DbCompany` schema provisioning so it executes validated statements step-by-step with explicit logging instead of one opaque multi-statement execution path
+- added the next curated shared Flyway migration for company and branch lookup indexes and replaced more remaining console logging in scheduled cleanup and product write paths
+- replaced the last loose order-period request map with a validated `OrderPeriodRequest` DTO and moved period lookup parsing behind `OrderService`
+- removed the dead raw-JDBC `DbCompany.CreateCompanySchema(...)` helper that no longer matched the active provisioning path
+- replaced additional remaining console logging in the touched product-command and PayMob order-registration classes with structured logger usage
 
 Current result:
 
@@ -760,14 +767,16 @@ Current result:
 - company creation, branch creation, company image update, and damaged-item add/delete now also run through typed controller payloads and service-owned transaction boundaries
 - analytics and fix-area flows now also run through typed controller payloads, service-owned orchestration, and Spring-managed repository access
 - client create, client receipt, shift-period, and category flows now also run through typed controller payloads, service-owned orchestration, and Spring-managed repository access
+- company and branch read-side APIs now also run through service-owned orchestration, and the remaining provisioning helpers use validated identifier utilities plus structured logging
+- the remaining touched order query path now also uses a validated DTO and shared timestamp parsing instead of controller-owned loose payload conversion
 - the touched money, stock, provisioning, analytics, client, shift, and category endpoints reject invalid payloads early instead of failing later inside repository code
-- Flyway now has its first curated shared-schema migrations while rollout remains controlled and disabled by default
-- and the current roadmap risk is narrowed to the remaining legacy controller validation, the older untouched inventory/company raw-JDBC side paths, further curated migrations, and the broader logging cleanup
+- Flyway now has multiple curated shared-schema migrations while rollout remains controlled and disabled by default
+- and the current roadmap risk is narrowed to the remaining legacy controller validation, the older untouched inventory raw-JDBC side paths, further curated migrations, and the broader logging cleanup
 
 Remaining Foundation work:
 
 - service extraction and transaction boundaries in the remaining untouched legacy write paths that still rely on raw JDBC or string-built SQL
 - request DTO migration across the remaining controllers that still use loose maps
 - curated Flyway migrations for the next shared-table and controlled tenant-provisioning changes
-- broader repository cleanup in the remaining older company/inventory side modules and any untouched low-traffic legacy paths
+- broader repository cleanup in the remaining older inventory side modules and any untouched low-traffic legacy paths
 - structured logging completion across the remaining legacy write surface

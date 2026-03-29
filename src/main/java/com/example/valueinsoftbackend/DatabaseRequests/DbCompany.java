@@ -1,8 +1,10 @@
 package com.example.valueinsoftbackend.DatabaseRequests;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,7 +13,6 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
@@ -20,6 +21,7 @@ import java.util.List;
 
 
 @Repository
+@Slf4j
 public class DbCompany {
 
     private static final RowMapper<Company> COMPANY_ROW_MAPPER = (rs, rowNum) -> {
@@ -152,30 +154,37 @@ public class DbCompany {
 
     public boolean createCompanySchema(int companyId) {
         try {
-            jdbcTemplate.execute(buildCompanySchemaSql(companyId));
+            for (String statement : buildCompanySchemaSql(companyId)) {
+                jdbcTemplate.execute(statement);
+            }
+            log.info("Provisioned company schema for company {}", companyId);
             return true;
         } catch (Exception exception) {
+            log.error("Failed to provision company schema for company {}", companyId, exception);
             return false;
         }
     }
 
-    private String buildCompanySchemaSql(int companyId) {
-        String schemaName = "C_" + companyId;
+    private List<String> buildCompanySchemaSql(int companyId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        String schemaName = TenantSqlIdentifiers.companySchema(companyId);
         String dbOwner = ValueinsoftBackendApplication.DatabaseOwner;
-        return "CREATE SCHEMA IF NOT EXISTS " + schemaName + "; " +
-                SQLCompanyUsers(schemaName, dbOwner) + " " +
-                SQLPosShiftPeriod(schemaName, dbOwner) + " " +
-                SQLSupplier(schemaName, dbOwner) + " " +
-                SQLBranch(schemaName, dbOwner) + " " +
-                SQLDamagedList(schemaName, dbOwner) + " " +
-                SQLPosCateJson(schemaName, dbOwner) + " " +
-                SQLMainMajor(schemaName, dbOwner) + " " +
-                SQLClientReceipts(schemaName, dbOwner) + " " +
-                SQLSupplierBProduct(schemaName, dbOwner) + " " +
-                SQLCompanyAnalysis(schemaName, dbOwner) + " " +
-                SQLSupplierReciepts(schemaName, dbOwner) + " " +
-                SQLFixArea(schemaName, dbOwner) + " " +
-                SQLClient(schemaName, dbOwner);
+        return List.of(
+                "CREATE SCHEMA IF NOT EXISTS " + schemaName,
+                SQLCompanyUsers(schemaName, dbOwner),
+                SQLPosShiftPeriod(schemaName, dbOwner),
+                SQLSupplier(schemaName, dbOwner),
+                SQLBranch(schemaName, dbOwner),
+                SQLDamagedList(schemaName, dbOwner),
+                SQLPosCateJson(schemaName, dbOwner),
+                SQLMainMajor(schemaName, dbOwner),
+                SQLClientReceipts(schemaName, dbOwner),
+                SQLSupplierBProduct(schemaName, dbOwner),
+                SQLCompanyAnalysis(schemaName, dbOwner),
+                SQLSupplierReciepts(schemaName, dbOwner),
+                SQLFixArea(schemaName, dbOwner),
+                SQLClient(schemaName, dbOwner)
+        );
     }
 
     //Statics SQL Queries
@@ -461,40 +470,4 @@ public class DbCompany {
 
         return query;
     }
-    //Schema Builder For All
-
-    static public boolean CreateCompanySchema(int companyId) {
-        try {
-
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("" +
-                    "CREATE SCHEMA IF NOT EXISTS C_" + companyId + " ; " +
-                    " " + SQLCompanyUsers("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLPosShiftPeriod("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLSupplier("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLBranch("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLDamagedList("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLPosCateJson("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLMainMajor("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLClientReceipts("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLSupplierBProduct("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLCompanyAnalysis("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLSupplierReciepts("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLFixArea("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " " +
-                    " " + SQLClient("C_" + companyId, ValueinsoftBackendApplication.DatabaseOwner) + " "
-            );
-
-            System.out.println(stmt);
-            int i = stmt.executeUpdate();
-            System.out.println(i + " CreateCompanySchema Established For Company" + companyId);
-            stmt.close();
-            conn.close();
-        } catch (Exception e) {
-            System.out.println("Schema Build Error" + e.getMessage());
-            return false;
-        }
-        return true;
-    }
-
-
 }

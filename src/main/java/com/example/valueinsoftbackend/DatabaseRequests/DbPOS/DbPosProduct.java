@@ -1,16 +1,17 @@
+package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
+
 /*
  * Copyright (c) Samir Filifl
  */
 
-package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
+
+import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ResponsePagination;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.util.PageHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.RowMapper;
@@ -21,9 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Repository
+@Slf4j
 public class DbPosProduct {
-
-    private static final Logger log = LoggerFactory.getLogger(DbPosProduct.class);
 
     private static final RowMapper<Product> PRODUCT_ROW_MAPPER = (rs, rowNum) -> new Product(
             rs.getInt("productId"),

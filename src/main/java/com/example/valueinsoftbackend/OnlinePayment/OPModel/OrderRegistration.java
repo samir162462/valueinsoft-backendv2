@@ -1,8 +1,11 @@
+package com.example.valueinsoftbackend.OnlinePayment.OPModel;
+
 /*
  * Copyright (c) Samir Filifl
  */
 
-package com.example.valueinsoftbackend.OnlinePayment.OPModel;
+
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -15,6 +18,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 public class OrderRegistration {
     String auth_token;
     String delivery_needed;
@@ -54,9 +58,9 @@ public class OrderRegistration {
         // send POST request
         ResponseEntity<String> response = restTemplate.postForEntity(url, orderRegistration, String.class);
         // check response status code
-        System.out.println(response.getStatusCode());
+        log.debug("PayMob order registration status: {}", response.getStatusCode());
         if (response.getStatusCode() == HttpStatus.CREATED) {
-            System.out.println(response.getBody());
+            log.debug("PayMob order registration body received");
             return  Integer.valueOf(response.getBody().split(":")[1].split(",")[0].replaceAll("\"", "")) ;
         } else {
             return 0;

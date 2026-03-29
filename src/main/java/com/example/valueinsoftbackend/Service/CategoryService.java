@@ -1,5 +1,7 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosCategory;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.MainMajor;
@@ -8,8 +10,6 @@ import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -20,9 +20,8 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class CategoryService {
-
-    private static final Logger log = LoggerFactory.getLogger(CategoryService.class);
 
     private final DbPosCategory dbPosCategory;
     private final ObjectMapper objectMapper;

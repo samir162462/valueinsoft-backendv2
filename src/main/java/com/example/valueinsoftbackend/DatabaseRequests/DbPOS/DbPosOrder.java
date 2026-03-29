@@ -1,13 +1,13 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,9 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Repository
+@Slf4j
 public class DbPosOrder {
-
-    private static final Logger log = LoggerFactory.getLogger(DbPosOrder.class);
     private static final Type ORDER_DETAILS_LIST_TYPE = new TypeToken<ArrayList<OrderDetails>>() {
     }.getType();
 

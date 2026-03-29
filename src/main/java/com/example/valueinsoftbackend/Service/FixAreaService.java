@@ -1,5 +1,7 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbSlotsFixArea;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Request.FixAreaSlotCreateRequest;
@@ -7,8 +9,6 @@ import com.example.valueinsoftbackend.Model.Request.FixAreaSlotUpdateRequest;
 import com.example.valueinsoftbackend.Model.Slots.SlotsFixArea;
 import com.example.valueinsoftbackend.util.RequestDateParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 @Service
+@Slf4j
 public class FixAreaService {
-
-    private static final Logger log = LoggerFactory.getLogger(FixAreaService.class);
 
     private final DbSlotsFixArea dbSlotsFixArea;
 

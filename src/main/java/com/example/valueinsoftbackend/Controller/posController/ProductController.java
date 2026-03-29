@@ -91,7 +91,7 @@ public class ProductController {
                                                                @PathVariable String branchId,
                                                                @PathVariable int companyId) {
         ProductOperationResponse response = productService.addProduct(newProProduct, branchId, companyId);
-        System.out.println(newProProduct);
+        log.debug("Created product payload for company {} branch {}", companyId, branchId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

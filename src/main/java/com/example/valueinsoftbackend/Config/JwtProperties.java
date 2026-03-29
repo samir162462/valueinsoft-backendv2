@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.Config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -11,9 +11,8 @@ import java.util.UUID;
 
 @Component
 @ConfigurationProperties(prefix = "vls.jwt")
+@Slf4j
 public class JwtProperties {
-
-    private static final Logger log = LoggerFactory.getLogger(JwtProperties.class);
 
     private String secret;
     private long expirationMs = 259200000L;

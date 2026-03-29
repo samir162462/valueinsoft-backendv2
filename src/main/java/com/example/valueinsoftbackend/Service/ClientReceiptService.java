@@ -1,13 +1,13 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbMoney.DBMClientReceipt;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Request.CreateClientReceiptRequest;
 import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
 import com.example.valueinsoftbackend.util.RequestTimestampParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +16,8 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 
 @Service
+@Slf4j
 public class ClientReceiptService {
-
-    private static final Logger log = LoggerFactory.getLogger(ClientReceiptService.class);
 
     private final DBMClientReceipt clientReceiptRepository;
 

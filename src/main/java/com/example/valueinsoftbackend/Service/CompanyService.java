@@ -1,21 +1,20 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Request.CreateCompanyRequest;
 import com.example.valueinsoftbackend.Model.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 public class CompanyService {
-
-    private static final Logger log = LoggerFactory.getLogger(CompanyService.class);
 
     private final DbCompany dbCompany;
     private final DbUsers dbUsers;
@@ -25,6 +24,34 @@ public class CompanyService {
         this.dbCompany = dbCompany;
         this.dbUsers = dbUsers;
         this.branchService = branchService;
+    }
+
+    public Company getCompanyForOwnerUserName(String userName) {
+        User user = dbUsers.getUser(normalize(userName));
+        if (user == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");
+        }
+        return dbCompany.getCompanyByOwnerId(user.getUserId());
+    }
+
+    public Company getCompanyAndBranchesByUserName(String userName) {
+        Company company = dbCompany.getCompanyAndBranchesByUserName(normalize(userName));
+        if (company == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "COMPANY_NOT_FOUND", "Company not found");
+        }
+        return company;
+    }
+
+    public Company getCompanyById(int companyId) {
+        Company company = dbCompany.getCompanyById(companyId);
+        if (company == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "COMPANY_NOT_FOUND", "Company not found");
+        }
+        return company;
+    }
+
+    public java.util.ArrayList<Company> getAllCompanies() {
+        return dbCompany.getAllCompanies();
     }
 
     @Transactional

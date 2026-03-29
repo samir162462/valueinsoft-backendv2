@@ -1,5 +1,7 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
 import com.example.valueinsoftbackend.Model.Order;
@@ -7,8 +9,6 @@ import com.example.valueinsoftbackend.Model.Request.CurrentShiftRequest;
 import com.example.valueinsoftbackend.Model.Request.ShiftOrdersRequest;
 import com.example.valueinsoftbackend.Model.ShiftPeriod;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -18,9 +18,8 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 
 @Service
+@Slf4j
 public class ShiftPeriodService {
-
-    private static final Logger log = LoggerFactory.getLogger(ShiftPeriodService.class);
 
     private final DbPosShiftPeriod dbPosShiftPeriod;
     private final DbPosOrder dbPosOrder;

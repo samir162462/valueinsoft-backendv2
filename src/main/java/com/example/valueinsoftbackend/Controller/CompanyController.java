@@ -1,15 +1,13 @@
 package com.example.valueinsoftbackend.Controller;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
-import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Request.CreateCompanyRequest;
 import com.example.valueinsoftbackend.Model.Request.UpdateCompanyImageRequest;
-import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.Service.CompanyService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,35 +26,22 @@ import javax.validation.constraints.Positive;
 @Validated
 @RequestMapping("/Company")
 
+@Slf4j
 public class CompanyController {
 
-    private static final Logger log = LoggerFactory.getLogger(CompanyController.class);
-
-    private final DbCompany dbCompany;
-    private final DbUsers dbUsers;
     private final CompanyService companyService;
 
-    public CompanyController(DbCompany dbCompany, DbUsers dbUsers, CompanyService companyService) {
-        this.dbCompany = dbCompany;
-        this.dbUsers = dbUsers;
+    public CompanyController(CompanyService companyService) {
         this.companyService = companyService;
     }
 
     @RequestMapping(value = "/getCompany", method = RequestMethod.GET)
     @ResponseBody
     public Company getPersonsByNames(
-
-
             @RequestParam("id") String id
 
     ) {
-
-        User u1 = dbUsers.getUser(id);
-        if (u1 == null) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");
-        }
-
-        return dbCompany.getCompanyByOwnerId(u1.getUserId());
+        return companyService.getCompanyForOwnerUserName(id);
     }
 
 
@@ -64,8 +49,7 @@ public class CompanyController {
     @ResponseBody
     public ArrayList<Company> getAllCompanies(
     ) {
-
-        return dbCompany.getAllCompanies();
+        return companyService.getAllCompanies();
     }
 
 
@@ -74,27 +58,19 @@ public class CompanyController {
     @RequestMapping(value = "/getCompanyAndBranchesByUserName", method = RequestMethod.GET)
     @ResponseBody
     public Company CompanyAndBranchesByUserName(
-
-
             @RequestParam("id") String id
 
     ) {
-
-
-        return dbCompany.getCompanyAndBranchesByUserName(id);
+        return companyService.getCompanyAndBranchesByUserName(id);
     }
 
     @RequestMapping(value = "/getCompanyById", method = RequestMethod.GET)
     @ResponseBody
     public Company getCompanyById(
-
-
-            @RequestParam("id") String id
+            @RequestParam("id") @Positive int id
 
     ) {
-
-
-        return dbCompany.getCompanyById(id);
+        return companyService.getCompanyById(id);
     }
 
     @PostMapping("/saveCompany")

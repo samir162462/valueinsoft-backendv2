@@ -1,11 +1,11 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbClient;
 import com.example.valueinsoftbackend.Model.Client;
 import com.example.valueinsoftbackend.Model.Request.CreateClientRequest;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -14,9 +14,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class ClientService {
-
-    private static final Logger log = LoggerFactory.getLogger(ClientService.class);
 
     private final DbClient dbClient;
 

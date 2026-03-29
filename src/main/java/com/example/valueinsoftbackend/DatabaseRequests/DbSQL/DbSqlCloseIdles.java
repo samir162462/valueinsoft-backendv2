@@ -1,11 +1,13 @@
+package com.example.valueinsoftbackend.DatabaseRequests.DbSQL;
+
 /*
  * Copyright (c) Samir Filifl
  */
 
-package com.example.valueinsoftbackend.DatabaseRequests.DbSQL;
+
+import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
-import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -16,13 +18,12 @@ import java.sql.PreparedStatement;
 @Configuration
 @EnableScheduling
 @ConditionalOnProperty(name = "Scheduling.enable" , matchIfMissing = true)
-public  class  DbSqlCloseIdles {
+@Slf4j
+public class DbSqlCloseIdles {
 
     static public boolean terminate() {
-        try {
-
-            Connection conn = ConnectionPostgres.getConnection();
-            PreparedStatement stmt = conn.prepareStatement("" +
+        try (Connection conn = ConnectionPostgres.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("" +
                     "WITH inactive_connections AS (\n" +
                     "    SELECT\n" +
                     "        pid\n" +
@@ -46,13 +47,11 @@ public  class  DbSqlCloseIdles {
                     "    pg_terminate_backend(pid)\n" +
                     "FROM\n" +
                     "    inactive_connections ;\n");
-
-            boolean i = stmt.execute();
-            System.out.println("Termination Idles :"+i);
-            stmt.close();
-            conn.close();
+        ) {
+            boolean terminated = stmt.execute();
+            log.debug("Idle connection cleanup executed: {}", terminated);
         } catch (Exception e) {
-            System.out.println("idle terminate error "+e.getMessage());
+            log.warn("Idle connection cleanup failed", e);
             return false;
         }
         return true;

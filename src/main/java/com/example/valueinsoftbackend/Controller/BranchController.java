@@ -5,6 +5,7 @@ import java.util.Map;
 
 import javax.validation.constraints.Positive;
 
+import com.example.valueinsoftbackend.Service.CompanyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,16 +35,14 @@ import javax.validation.Valid;
 public class BranchController {
 
 
-    private final DbCompany dbCompany;
-    private final DbBranch dbBranch;
+    private final CompanyService companyService;
     private final BranchService branchService;
     private final SubscriptionService subscriptionService;
 
 
     @Autowired
-    public BranchController(DbCompany dbCompany, DbBranch dbBranch, BranchService branchService, SubscriptionService subscriptionService) {
-        this.dbCompany = dbCompany;
-        this.dbBranch = dbBranch;
+    public BranchController(CompanyService companyService, BranchService branchService, SubscriptionService subscriptionService) {
+        this.companyService = companyService;
         this.branchService = branchService;
         this.subscriptionService = subscriptionService;
     }
@@ -53,17 +52,17 @@ public class BranchController {
     @RequestMapping(value = "/getBranchById", method = RequestMethod.GET)
     @ResponseBody
     public Company getCompanyById(
-            @RequestParam("id") String id
+            @RequestParam("id") @Positive int id
     ) {
-        return dbCompany.getCompanyById(id);
+        return companyService.getCompanyById(id);
     }
 
     @RequestMapping(value = "{id}/getBranchesByCompanyId", method = RequestMethod.GET)
     @ResponseBody
     public ArrayList<Branch> getBranchesByCompanyId(
-            @PathVariable("id") int id
+            @PathVariable("id") @Positive int id
     ) {
-        return (ArrayList<Branch>) dbBranch.getBranchByCompanyId(id);
+        return branchService.getBranchesByCompanyId(id);
     }
 
 

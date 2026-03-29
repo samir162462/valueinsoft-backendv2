@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.OnlinePayment;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -9,9 +9,8 @@ import javax.annotation.PostConstruct;
 
 @Component
 @ConfigurationProperties(prefix = "vls.paymob")
+@Slf4j
 public class PayMobProperties {
-
-    private static final Logger log = LoggerFactory.getLogger(PayMobProperties.class);
 
     private String authToken;
     private int cardIntegrationId = 1989683;

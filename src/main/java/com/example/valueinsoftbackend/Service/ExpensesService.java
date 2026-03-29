@@ -1,21 +1,20 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbExpenses;
 import com.example.valueinsoftbackend.Model.Expenses;
 import com.example.valueinsoftbackend.Model.Request.ExpenseUpsertRequest;
 import com.example.valueinsoftbackend.Model.Sales.ExpensesSum;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@Slf4j
 public class ExpensesService {
-
-    private static final Logger log = LoggerFactory.getLogger(ExpensesService.class);
 
     private final DbExpenses dbExpenses;
 

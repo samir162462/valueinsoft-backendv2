@@ -1,13 +1,13 @@
 package com.example.valueinsoftbackend.Service;
 
+import lombok.extern.slf4j.Slf4j;
+
 import com.example.valueinsoftbackend.DatabaseRequests.DbDVCompanyAnalysis;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.CompanyAnalysis;
 import com.example.valueinsoftbackend.Model.Request.CompanyAnalysisRequest;
 import com.example.valueinsoftbackend.Model.Request.CompanyAnalysisUpdateRequest;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +16,8 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Service
+@Slf4j
 public class CompanyAnalysisService {
-
-    private static final Logger log = LoggerFactory.getLogger(CompanyAnalysisService.class);
 
     private final DbDVCompanyAnalysis dbDVCompanyAnalysis;
 
