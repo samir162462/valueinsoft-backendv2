@@ -2,12 +2,14 @@ package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
+import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackRequest;
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.Billing_data;
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.PaymentKeyRequest;
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.TransactionProcessedCallback;
 import com.example.valueinsoftbackend.OnlinePayment.PayMobProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -19,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class PayMobService {
 
     private final PayMobProperties payMobProperties;
@@ -100,31 +103,28 @@ public class PayMobService {
         throw new ApiException(HttpStatus.BAD_GATEWAY, "PAYMOB_PAYMENT_KEY_FAILED", "PayMob payment key request failed");
     }
 
-    public TransactionProcessedCallback parseCallback(String body) {
-        try {
-            JsonNode jsonNode = objectMapper.readTree(body);
-            JsonNode transactionNode = jsonNode.get("obj");
-            if (transactionNode == null || transactionNode.get("order") == null) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMOB_CALLBACK_INVALID", "Invalid PayMob callback payload");
-            }
-
-            return new TransactionProcessedCallback(
-                    transactionNode.get("id").asInt(),
-                    transactionNode.get("pending").asBoolean(),
-                    transactionNode.get("amount_cents").asInt(),
-                    transactionNode.get("success").asBoolean(),
-                    transactionNode.get("is_auth").asBoolean(),
-                    transactionNode.get("is_capture").asBoolean(),
-                    transactionNode.get("is_standalone_payment").asBoolean(),
-                    transactionNode.get("is_voided").asBoolean(),
-                    transactionNode.get("is_refunded").asBoolean(),
-                    transactionNode.get("order").get("id").asInt()
-            );
-        } catch (ApiException exception) {
-            throw exception;
-        } catch (Exception exception) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMOB_CALLBACK_INVALID", "Invalid PayMob callback payload");
-        }
+    public TransactionProcessedCallback parseCallback(PayMobTransactionCallbackRequest request) {
+        PayMobTransactionCallbackRequest.TransactionPayload transaction = request.getTransaction();
+        TransactionProcessedCallback callback = new TransactionProcessedCallback(
+                transaction.getId(),
+                transaction.getPending(),
+                transaction.getAmountCents(),
+                transaction.getSuccess(),
+                transaction.getAuth(),
+                transaction.getCapture(),
+                transaction.getStandalonePayment(),
+                transaction.getVoided(),
+                transaction.getRefunded(),
+                transaction.getOrder().getId()
+        );
+        log.info(
+                "Processed PayMob callback order {} subscription {} success={} pending={}",
+                callback.getOrder_id(),
+                callback.getSubId(),
+                callback.isSuccess(),
+                callback.isPending()
+        );
+        return callback;
     }
 
     private String toAmountCents(BigDecimal amount) {

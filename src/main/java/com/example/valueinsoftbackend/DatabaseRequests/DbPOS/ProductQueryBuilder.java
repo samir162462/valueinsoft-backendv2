@@ -18,6 +18,10 @@ final class ProductQueryBuilder {
     private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+");
     private static final Pattern DATE_RANGE_PATTERN = Pattern.compile("'([^']+)'\\s+And\\s+'([^']+)'", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter FRONTEND_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE MMM dd yyyy", Locale.ENGLISH);
+    private static final String PRODUCT_SELECT_COLUMNS =
+            "\"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\", " +
+                    "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", " +
+                    "\"ownerNI\", quantity, \"pState\", \"supplierId\", major, \"imgFile\"";
 
     private ProductQueryBuilder() {
     }
@@ -38,7 +42,7 @@ final class ProductQueryBuilder {
 
         String whereClause = buildWhereClause(conditions);
         String countSql = "SELECT count(*) FROM " + tableName + whereClause;
-        String dataSql = "SELECT * FROM " + tableName + whereClause + appendPaging(pageHandler);
+        String dataSql = "SELECT " + PRODUCT_SELECT_COLUMNS + " FROM " + tableName + whereClause + appendPaging(pageHandler);
         return new ProductQuerySpec(dataSql, countSql, params);
     }
 
@@ -60,7 +64,7 @@ final class ProductQueryBuilder {
 
         String whereClause = buildWhereClause(conditions);
         String countSql = "SELECT count(*) FROM " + tableName + whereClause;
-        String dataSql = "SELECT * FROM " + tableName + whereClause + appendPaging(pageHandler);
+        String dataSql = "SELECT " + PRODUCT_SELECT_COLUMNS + " FROM " + tableName + whereClause + appendPaging(pageHandler);
         return new ProductQuerySpec(dataSql, countSql, params);
     }
 
@@ -73,7 +77,7 @@ final class ProductQueryBuilder {
         conditions.add("\"productId\" > 0");
 
         String whereClause = buildWhereClause(conditions);
-        String sql = "SELECT * FROM " + tableName + whereClause;
+        String sql = "SELECT " + PRODUCT_SELECT_COLUMNS + " FROM " + tableName + whereClause;
         return new ProductQuerySpec(sql, null, params);
     }
 
@@ -85,6 +89,10 @@ final class ProductQueryBuilder {
 
     static String productTable(int companyId, int branchId) {
         return productTable(companyId, String.valueOf(branchId));
+    }
+
+    static String productSelectColumns() {
+        return PRODUCT_SELECT_COLUMNS;
     }
 
     static List<String> normalizeTokens(String[] text) {

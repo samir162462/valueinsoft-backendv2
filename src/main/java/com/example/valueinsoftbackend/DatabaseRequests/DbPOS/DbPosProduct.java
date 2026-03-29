@@ -66,21 +66,22 @@ public class DbPosProduct {
     public ResponsePagination<Product> getProductBySearchText(String[] text, String branchId, int companyId,
                                                               ProductFilter productFilter, PageHandler pageHandler,
                                                               boolean useDefaultInStockFilter) {
-        log.info("Inside Get Product By Search Text : {}", java.util.Arrays.toString(text));
+        log.debug("Searching products by text for company {} branch {} tokens={}", companyId, branchId, java.util.Arrays.toString(text));
         ProductQuerySpec querySpec = ProductQueryBuilder.buildTextSearchQuery(
                 text, branchId, companyId, productFilter, pageHandler, useDefaultInStockFilter);
         return executePagedQuery(querySpec);
     }
 
     public List<Product> getProductsAllRange(String branchId, int companyId, ProductFilter productFilter) {
-        log.info("Inside Get Product By Search Range: {}", productFilter);
+        log.debug("Fetching product range for company {} branch {} filter={}", companyId, branchId, productFilter);
         ProductQuerySpec querySpec = ProductQueryBuilder.buildAllRangeQuery(branchId, companyId, productFilter);
         return jdbcTemplate.query(querySpec.dataSql(), querySpec.params(), PRODUCT_ROW_MAPPER);
     }
 
     public Product getProductById(int productId, int branchId, int companyId) {
-        log.info("Inside getProductById Function");
-        String sql = "SELECT * FROM " + ProductQueryBuilder.productTable(companyId, branchId) + " WHERE \"productId\" = :productId";
+        log.debug("Fetching product {} for company {} branch {}", productId, companyId, branchId);
+        String sql = "SELECT " + ProductQueryBuilder.productSelectColumns() + " FROM " +
+                ProductQueryBuilder.productTable(companyId, branchId) + " WHERE \"productId\" = :productId";
 
         try {
             return jdbcTemplate.queryForObject(
@@ -94,7 +95,7 @@ public class DbPosProduct {
     }
 
     public List<ProductUtilNames> getProductNames(String text, int branchId, int companyId) {
-        log.info("Inside getProductNames Function");
+        log.debug("Fetching product names for company {} branch {} text={}", companyId, branchId, text);
 
         if (text == null || text.trim().isEmpty()) {
             return new ArrayList<>();
@@ -116,16 +117,17 @@ public class DbPosProduct {
 
     public ResponsePagination<Product> getProductBySearchCompanyName(String comName, String branchId, int companyId,
                                                                      ProductFilter productFilter, PageHandler pageHandler) {
-        log.info("Inside getProductBySearchCompanyName Function");
+        log.debug("Searching products by company name for company {} branch {} companyName={}", companyId, branchId, comName);
         ProductQuerySpec querySpec = ProductQueryBuilder.buildCompanySearchQuery(
                 comName, branchId, companyId, productFilter, pageHandler);
         return executePagedQuery(querySpec);
     }
 
     public List<Product> getProductBySearchBarcode(String barcode, String branchId, int companyId) {
-        log.info("Inside getProductBySearchBarcode Function");
+        log.debug("Searching products by barcode for company {} branch {} barcode={}", companyId, branchId, barcode);
 
-        String sql = "SELECT * FROM " + ProductQueryBuilder.productTable(companyId, branchId) + " WHERE serial = :serial";
+        String sql = "SELECT " + ProductQueryBuilder.productSelectColumns() + " FROM " +
+                ProductQueryBuilder.productTable(companyId, branchId) + " WHERE serial = :serial";
         return jdbcTemplate.query(
                 sql,
                 new org.springframework.jdbc.core.namedparam.MapSqlParameterSource("serial", barcode == null ? "" : barcode.trim()),

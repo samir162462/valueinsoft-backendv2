@@ -3,18 +3,22 @@ package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProductCommandRepository;
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
 import com.example.valueinsoftbackend.Model.ResponseModel.ResponsePagination;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.util.PageHandler;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
+@Slf4j
 public class ProductService {
 
     private final DbPosProduct productRepository;
@@ -60,14 +64,24 @@ public class ProductService {
     }
 
     public ProductOperationResponse addProduct(Product product, String branchId, int companyId) {
+        if (product.getQuantity() <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_QUANTITY_REQUIRED", "quantity must be greater than zero when creating a product");
+        }
+
         long id = productCommandRepository.addProduct(product, branchId, companyId);
         Product savedProduct = productRepository.getProductById((int) id, Integer.parseInt(branchId), companyId);
+        log.info("Created product {} for company {} branch {}", id, companyId, branchId);
         return buildOperationResponse("The Product  Saved", id, savedProduct == null ? product : savedProduct, "Add");
     }
 
     public ProductOperationResponse editProduct(Product product, String branchId, int companyId) {
+        if (product.getProductId() <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_ID_REQUIRED", "productId must be greater than zero when editing a product");
+        }
+
         productCommandRepository.updateProduct(product, branchId, companyId);
         Product savedProduct = productRepository.getProductById(product.getProductId(), Integer.parseInt(branchId), companyId);
+        log.info("Updated product {} for company {} branch {}", product.getProductId(), companyId, branchId);
         return buildOperationResponse("The Product Edit Saved", product.getProductId(), savedProduct == null ? product : savedProduct, "Update");
     }
 

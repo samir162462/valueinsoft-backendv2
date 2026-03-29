@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.OnlinePayment.OPController;
 
 import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
+import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackRequest;
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.TransactionProcessedCallback;
 import com.example.valueinsoftbackend.Service.PayMobService;
 import com.example.valueinsoftbackend.Service.SubscriptionService;
@@ -32,7 +33,9 @@ public class PayMobController {
 
     @RequestMapping(value = "/TPC", method = RequestMethod.POST)
     @ResponseBody
-    public ResponseEntity<TransactionProcessedCallback> transactionProcessedCallbackResp(@RequestBody String body) {
+    public ResponseEntity<TransactionProcessedCallback> transactionProcessedCallbackResp(
+            @Valid @RequestBody PayMobTransactionCallbackRequest body
+    ) {
         TransactionProcessedCallback callback = payMobService.parseCallback(body);
         if (callback.isSuccess()) {
             subscriptionService.markBranchSubscriptionStatusSuccess(callback.getSubId());

@@ -6,13 +6,13 @@ import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Date;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,9 +32,11 @@ public class DbSubscription {
     );
 
     private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-    public DbSubscription(JdbcTemplate jdbcTemplate) {
+    public DbSubscription(JdbcTemplate jdbcTemplate, NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
     public List<AppModelSubscription> getBranchSubscription(int branchId) {
@@ -50,19 +52,17 @@ public class DbSubscription {
     public int createBranchSubscription(AppModelSubscription appModelSubscription) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.companySubscriptionTable() +
                 " (\"startTime\", \"endTime\", \"branchId\", \"amountToPay\", \"amountPaid\", order_id, status) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+                "VALUES (:startTime, :endTime, :branchId, :amountToPay, :amountPaid, :orderId, :status)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            PreparedStatement preparedStatement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            preparedStatement.setDate(1, appModelSubscription.getStartTime());
-            preparedStatement.setDate(2, appModelSubscription.getEndTime());
-            preparedStatement.setInt(3, appModelSubscription.getBranchId());
-            preparedStatement.setBigDecimal(4, appModelSubscription.getAmountToPay());
-            preparedStatement.setBigDecimal(5, appModelSubscription.getAmountPaid());
-            preparedStatement.setInt(6, appModelSubscription.getOrder_id());
-            preparedStatement.setString(7, appModelSubscription.getStatus());
-            return preparedStatement;
-        }, keyHolder);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("startTime", appModelSubscription.getStartTime())
+                .addValue("endTime", appModelSubscription.getEndTime())
+                .addValue("branchId", appModelSubscription.getBranchId())
+                .addValue("amountToPay", appModelSubscription.getAmountToPay())
+                .addValue("amountPaid", appModelSubscription.getAmountPaid())
+                .addValue("orderId", appModelSubscription.getOrder_id())
+                .addValue("status", appModelSubscription.getStatus());
+        namedParameterJdbcTemplate.update(sql, params, keyHolder, new String[]{"sId"});
 
         Number key = keyHolder.getKey();
         if (key == null) {

@@ -191,12 +191,24 @@ Completed so far in Phase 2:
 - removed the dead raw-JDBC `DbCompany.CreateCompanySchema(...)` helper that no longer matched the active provisioning path
 - replaced additional remaining console logging in the touched product-command and PayMob order-registration classes with structured logger usage
 
+15. product/payment validation and repository consistency cleanup
+- added Bean Validation on the remaining product write/search request surface by validating `Product`, `ProductFilter`, controller path variables, and the create-vs-edit service preconditions
+- replaced the raw-string PayMob callback body with a validated `PayMobTransactionCallbackRequest` DTO while preserving the existing callback route and success contract
+- refactored `DbCompany` and `DbSubscription` generated-key insert paths onto `NamedParameterJdbcTemplate` so those low-traffic repository writes follow the same Spring-managed access style as the rest of Phase 2
+- added another curated shared Flyway migration for subscription callback and payment-status lookup indexes, and added structured callback logging in `PayMobService`
+
+16. inventory repository and legacy-interface cleanup
+- removed the unused compatibility-only `Crud` controller interface so no active write path still advertises untyped `Object` request bodies
+- replaced the remaining `SELECT *` usage in the touched user and product repositories with explicit column lists in `DbUsers`, `DbPosProduct`, and `ProductQueryBuilder`
+- reduced noisy product-repository trace messages to structured debug logging that includes company and branch context instead of opaque legacy log text
+- added another curated shared Flyway migration for user-admin lookup indexes on public `users`
+
 Current Phase 2 remaining scope:
 
-- continue repository cleanup in the untouched legacy modules, especially older inventory side paths and any remaining low-traffic modules that still rely on raw JDBC or string-built SQL
-- expand DTO validation across the remaining controllers that still accept loose maps and mixed payload shapes
+- continue repository cleanup in the remaining older inventory-side modules and any untouched low-traffic legacy paths that still rely on inconsistent repository patterns
 - continue the Flyway conversion from scaffolding into curated shared-schema and controlled tenant-provisioning migrations when the next change set is ready
 - complete the broader logging cleanup so business write flows are consistently traceable beyond the touched services
+- review and retire any remaining compatibility helpers or payload contracts that are no longer part of the active route surface
 
 Objectives:
 

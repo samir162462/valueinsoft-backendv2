@@ -7,51 +7,54 @@ package com.example.valueinsoftbackend.DatabaseRequests.DbSQL;
 
 import lombok.extern.slf4j.Slf4j;
 
-import com.example.valueinsoftbackend.SqlConnection.ConnectionPostgres;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
+import java.util.List;
+import java.util.Date;
 
-@Configuration
+@Component
 @EnableScheduling
 @ConditionalOnProperty(name = "Scheduling.enable" , matchIfMissing = true)
 @Slf4j
 public class DbSqlCloseIdles {
 
-    static public boolean terminate() {
-        try (Connection conn = ConnectionPostgres.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("" +
-                    "WITH inactive_connections AS (\n" +
-                    "    SELECT\n" +
-                    "        pid\n" +
-                    "    FROM \n" +
-                    "        pg_stat_activity\n" +
-                    "    WHERE\n" +
-                    "        -- Exclude the thread owned connection (ie no auto-kill)\n" +
-                    "        pid <> pg_backend_pid( )\n" +
-                    "    AND\n" +
-                    "        -- Exclude known applications connections\n" +
-                    "        application_name !~ '(?:psql)|(?:pgAdmin.+)'\n" +
-                    "    AND\n" +
-                    "\n" +
-                    "        -- Include inactive connections only\n" +
-                    "        state in ('idle', 'idle in transaction', 'idle in transaction (aborted)', 'disabled') \n" +
-                    "    AND\n" +
-                    "        -- Include old connections (found with the state_change field)\n" +
-                    "        current_timestamp - state_change > interval '9 seconds' \n" +
-                    ")\n" +
-                    "SELECT\n" +
-                    "    pg_terminate_backend(pid)\n" +
-                    "FROM\n" +
-                    "    inactive_connections ;\n");
-        ) {
-            boolean terminated = stmt.execute();
-            log.debug("Idle connection cleanup executed: {}", terminated);
-        } catch (Exception e) {
-            log.warn("Idle connection cleanup failed", e);
+    private static final String TERMINATE_IDLE_SQL =
+            "WITH inactive_connections AS ( " +
+                    "SELECT pid " +
+                    "FROM pg_stat_activity " +
+                    "WHERE pid <> pg_backend_pid() " +
+                    "AND application_name !~ '(?:psql)|(?:pgAdmin.+)' " +
+                    "AND state in ('idle', 'idle in transaction', 'idle in transaction (aborted)', 'disabled') " +
+                    "AND current_timestamp - state_change > interval '9 seconds' " +
+                    ") " +
+                    "SELECT pg_terminate_backend(pid) FROM inactive_connections";
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public DbSqlCloseIdles(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Scheduled(initialDelay = 60_000, fixedDelayString = "${terminate.delay}")
+    public void terminateDatabaseIdleProcess() {
+        log.debug("Running idle connection cleanup at {}", new Date());
+        terminate();
+    }
+
+    public boolean terminate() {
+        try {
+            List<Boolean> terminatedRows = jdbcTemplate.query(
+                    TERMINATE_IDLE_SQL,
+                    (rs, rowNum) -> rs.getBoolean(1)
+            );
+            long terminatedCount = terminatedRows.stream().filter(Boolean.TRUE::equals).count();
+            log.debug("Idle connection cleanup executed, terminated {} backend sessions", terminatedCount);
+        } catch (Exception exception) {
+            log.warn("Idle connection cleanup failed", exception);
             return false;
         }
         return true;

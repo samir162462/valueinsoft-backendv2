@@ -1,12 +1,14 @@
 package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.Model.MainMajor;
+import com.example.valueinsoftbackend.Model.Request.SaveCategoryRequest;
 import com.example.valueinsoftbackend.Service.CategoryService;
 import com.example.valueinsoftbackend.util.CustomPair;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
 import javax.validation.constraints.Positive;
 import java.util.ArrayList;
 
@@ -23,11 +25,11 @@ public class CategoryController {
 
     @PostMapping("/{companyId}/{branchId}/saveCategory")
     ResponseEntity<String> newCategory(
-            @RequestBody String payload,
+            @Valid @RequestBody SaveCategoryRequest request,
             @PathVariable @Positive int branchId,
             @PathVariable @Positive int companyId
     ) {
-        return categoryService.saveCategory(companyId, branchId, payload);
+        return categoryService.saveCategory(companyId, branchId, request);
     }
 
     @GetMapping("/getCategoryJson/{companyId}/{branchId}")

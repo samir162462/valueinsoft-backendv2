@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosCategory;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.MainMajor;
+import com.example.valueinsoftbackend.Model.Request.SaveCategoryRequest;
 import com.example.valueinsoftbackend.util.CustomPair;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -16,7 +17,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 
 @Service
@@ -31,15 +31,15 @@ public class CategoryService {
         this.objectMapper = objectMapper;
     }
 
-    public ResponseEntity<String> saveCategory(int companyId, int branchId, String payload) {
+    public ResponseEntity<String> saveCategory(int companyId, int branchId, SaveCategoryRequest request) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
-        if (payload == null || payload.isBlank()) {
+        if (request == null || request.getCategoryData() == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_PAYLOAD_REQUIRED", "payload is required");
         }
 
-        validateCategoryJson(payload);
-        int rows = dbPosCategory.saveCategoryJson(companyId, branchId, payload.trim());
+        String payload = serializeCategoryJson(request.getCategoryData());
+        int rows = dbPosCategory.saveCategoryJson(companyId, branchId, payload);
         if (rows != 1) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "CATEGORY_SAVE_FAILED", "the Category not added by error!");
         }
@@ -66,9 +66,9 @@ public class CategoryService {
         return dbPosCategory.getMainMajors(companyId);
     }
 
-    private void validateCategoryJson(String payload) {
+    private String serializeCategoryJson(JsonNode payload) {
         try {
-            objectMapper.readTree(payload);
+            return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException ex) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_INVALID_JSON", "Category payload must be valid JSON");
         }

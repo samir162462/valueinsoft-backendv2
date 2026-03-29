@@ -1,7 +1,6 @@
 package com.example.valueinsoftbackend;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
-import com.example.valueinsoftbackend.DatabaseRequests.DbSQL.DbSqlCloseIdles;
 import com.example.valueinsoftbackend.Model.Branch;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
@@ -16,7 +15,6 @@ import java.util.Date;
 @Slf4j
 public class ValueinsoftBackendApplication {
 
-    public static String DatabaseOwner = "";
     public static ArrayList<Branch> branchArrayList = new ArrayList<>();
 
     public static void main(String[] args) {
@@ -24,12 +22,6 @@ public class ValueinsoftBackendApplication {
         DbBranch dbBranch = context.getBean(DbBranch.class);
         branchArrayList = (ArrayList<Branch>) dbBranch.getAllBranches();
         log.info("Loaded {} branches during startup", branchArrayList.size());
-    }
-
-    @Scheduled(initialDelay = 60_000, fixedDelayString = "${terminate.delay}")
-    void terminateDatabaseIdleProcess() {
-        log.debug("Running idle connection cleanup at {}", new Date());
-        DbSqlCloseIdles.terminate();
     }
 
     @Scheduled(cron = "0 5 * * * *", zone = "Europe/Istanbul")

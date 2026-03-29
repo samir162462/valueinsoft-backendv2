@@ -757,6 +757,14 @@ Implemented so far in Phase 2:
 - replaced the last loose order-period request map with a validated `OrderPeriodRequest` DTO and moved period lookup parsing behind `OrderService`
 - removed the dead raw-JDBC `DbCompany.CreateCompanySchema(...)` helper that no longer matched the active provisioning path
 - replaced additional remaining console logging in the touched product-command and PayMob order-registration classes with structured logger usage
+- added Bean Validation on the remaining product write/search request surface by validating `Product`, `ProductFilter`, and product controller path variables
+- replaced the raw-string PayMob callback body with a validated `PayMobTransactionCallbackRequest` DTO while preserving the existing callback route
+- refactored `DbCompany` and `DbSubscription` generated-key insert paths onto `NamedParameterJdbcTemplate` for repository consistency
+- added another curated shared Flyway migration for subscription callback and payment-status lookup indexes and added structured callback logging in `PayMobService`
+- removed the unused compatibility-only `Crud` controller interface so no active write path still advertises untyped `Object` request bodies
+- replaced the remaining `SELECT *` usage in the touched user and product repositories with explicit column lists in `DbUsers`, `DbPosProduct`, and `ProductQueryBuilder`
+- reduced the legacy product-repository trace messages to structured debug logging with company/branch context
+- added another curated shared Flyway migration for user-admin lookup indexes on public `users`
 
 Current result:
 
@@ -769,14 +777,17 @@ Current result:
 - client create, client receipt, shift-period, and category flows now also run through typed controller payloads, service-owned orchestration, and Spring-managed repository access
 - company and branch read-side APIs now also run through service-owned orchestration, and the remaining provisioning helpers use validated identifier utilities plus structured logging
 - the remaining touched order query path now also uses a validated DTO and shared timestamp parsing instead of controller-owned loose payload conversion
+- the remaining product write/search payloads and the PayMob callback payload now also fail early through Bean Validation instead of reaching service/repository code as loose bodies
+- the last low-traffic generated-key insert paths now match the broader Phase 2 Spring-managed repository style instead of using callback-built prepared statements
+- the touched user-admin and inventory product read paths now also avoid `SELECT *`, and the unused compatibility-only controller interface has been retired from the active codebase
 - the touched money, stock, provisioning, analytics, client, shift, and category endpoints reject invalid payloads early instead of failing later inside repository code
 - Flyway now has multiple curated shared-schema migrations while rollout remains controlled and disabled by default
-- and the current roadmap risk is narrowed to the remaining legacy controller validation, the older untouched inventory raw-JDBC side paths, further curated migrations, and the broader logging cleanup
+- and the current roadmap risk is narrowed to the remaining older inventory-side cleanup, further curated migrations, any leftover compatibility helpers, and the broader logging cleanup
 
 Remaining Foundation work:
 
 - service extraction and transaction boundaries in the remaining untouched legacy write paths that still rely on raw JDBC or string-built SQL
-- request DTO migration across the remaining controllers that still use loose maps
 - curated Flyway migrations for the next shared-table and controlled tenant-provisioning changes
 - broader repository cleanup in the remaining older inventory side modules and any untouched low-traffic legacy paths
 - structured logging completion across the remaining legacy write surface
+- cleanup of any remaining compatibility helpers or payload contracts that are no longer part of the active write surface

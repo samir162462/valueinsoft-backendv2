@@ -4,15 +4,30 @@
 
 package com.example.valueinsoftbackend.Model;
 
+import javax.validation.constraints.AssertTrue;
+import javax.validation.constraints.PositiveOrZero;
+import javax.validation.constraints.Size;
+
 public class ProductFilter {
     private boolean outOfStock;
     private boolean bouncedBack;
     private boolean used;
     private boolean toSell;
+
+    @PositiveOrZero(message = "rangeMin must be zero or greater")
     private int rangeMin;
+
+    @PositiveOrZero(message = "rangeMax must be zero or greater")
     private int rangeMax;
+
+    @Size(max = 30, message = "major must be 30 characters or fewer")
     private String major;
+
+    @Size(max = 60, message = "dates must be 60 characters or fewer")
     private String dates;
+
+    public ProductFilter() {
+    }
 
 
     public ProductFilter(boolean outOfStock, boolean bouncedBack, boolean used, boolean toSell, int rangeMin, int rangeMax, String major, String dates) {
@@ -129,5 +144,10 @@ public class ProductFilter {
                 ", major='" + major + '\'' +
                 ", dates='" + dates + '\'' +
                 '}';
+    }
+
+    @AssertTrue(message = "rangeMax must be greater than or equal to rangeMin")
+    public boolean isPriceRangeValid() {
+        return rangeMax >= rangeMin;
     }
 }

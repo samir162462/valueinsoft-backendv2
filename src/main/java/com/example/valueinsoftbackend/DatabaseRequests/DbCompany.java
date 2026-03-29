@@ -5,16 +5,16 @@ import lombok.extern.slf4j.Slf4j;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import com.example.valueinsoftbackend.ValueinsoftBackendApplication;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,12 +40,21 @@ public class DbCompany {
     };
 
     private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final DbBranch dbBranch;
+    private final String databaseOwner;
 
     @Autowired
-    public DbCompany(JdbcTemplate jdbcTemplate, DbBranch dbBranch) {
+    public DbCompany(
+            JdbcTemplate jdbcTemplate,
+            NamedParameterJdbcTemplate namedParameterJdbcTemplate,
+            DbBranch dbBranch,
+            @Value("${vls.database.owner:${spring.datasource.username:postgres}}") String databaseOwner
+    ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
         this.dbBranch = dbBranch;
+        this.databaseOwner = (databaseOwner == null || databaseOwner.isBlank()) ? "postgres" : databaseOwner.trim();
     }
 
     public Company getCompanyByOwnerId(String id) {
@@ -126,19 +135,17 @@ public class DbCompany {
 
     public int createCompany(String companyName, String plan, int price, int ownerId, String comImg, String currency) {
         String sql = "INSERT INTO public.\"Company\" (\"companyName\", \"establishedTime\", \"ownerId\", \"planName\", " +
-                "\"planPrice\", \"comImg\", \"currency\") VALUES (?, ?, ?, ?, ?, ?, ?)";
+                "\"planPrice\", \"comImg\", \"currency\") VALUES (:companyName, :establishedTime, :ownerId, :planName, :planPrice, :comImg, :currency)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
-        int rows = jdbcTemplate.update(connection -> {
-            PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-            statement.setString(1, companyName);
-            statement.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
-            statement.setInt(3, ownerId);
-            statement.setString(4, plan);
-            statement.setInt(5, price);
-            statement.setString(6, comImg);
-            statement.setString(7, currency);
-            return statement;
-        }, keyHolder);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("companyName", companyName)
+                .addValue("establishedTime", new Timestamp(System.currentTimeMillis()))
+                .addValue("ownerId", ownerId)
+                .addValue("planName", plan)
+                .addValue("planPrice", price)
+                .addValue("comImg", comImg)
+                .addValue("currency", currency);
+        int rows = namedParameterJdbcTemplate.update(sql, params, keyHolder, new String[]{"id"});
 
         if (rows != 1 || keyHolder.getKey() == null) {
             return -1;
@@ -168,22 +175,21 @@ public class DbCompany {
     private List<String> buildCompanySchemaSql(int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         String schemaName = TenantSqlIdentifiers.companySchema(companyId);
-        String dbOwner = ValueinsoftBackendApplication.DatabaseOwner;
         return List.of(
                 "CREATE SCHEMA IF NOT EXISTS " + schemaName,
-                SQLCompanyUsers(schemaName, dbOwner),
-                SQLPosShiftPeriod(schemaName, dbOwner),
-                SQLSupplier(schemaName, dbOwner),
-                SQLBranch(schemaName, dbOwner),
-                SQLDamagedList(schemaName, dbOwner),
-                SQLPosCateJson(schemaName, dbOwner),
-                SQLMainMajor(schemaName, dbOwner),
-                SQLClientReceipts(schemaName, dbOwner),
-                SQLSupplierBProduct(schemaName, dbOwner),
-                SQLCompanyAnalysis(schemaName, dbOwner),
-                SQLSupplierReciepts(schemaName, dbOwner),
-                SQLFixArea(schemaName, dbOwner),
-                SQLClient(schemaName, dbOwner)
+                SQLCompanyUsers(schemaName, databaseOwner),
+                SQLPosShiftPeriod(schemaName, databaseOwner),
+                SQLSupplier(schemaName, databaseOwner),
+                SQLBranch(schemaName, databaseOwner),
+                SQLDamagedList(schemaName, databaseOwner),
+                SQLPosCateJson(schemaName, databaseOwner),
+                SQLMainMajor(schemaName, databaseOwner),
+                SQLClientReceipts(schemaName, databaseOwner),
+                SQLSupplierBProduct(schemaName, databaseOwner),
+                SQLCompanyAnalysis(schemaName, databaseOwner),
+                SQLSupplierReciepts(schemaName, databaseOwner),
+                SQLFixArea(schemaName, databaseOwner),
+                SQLClient(schemaName, databaseOwner)
         );
     }
 

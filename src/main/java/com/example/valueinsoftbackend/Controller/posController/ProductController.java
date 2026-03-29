@@ -4,7 +4,6 @@ package com.example.valueinsoftbackend.Controller.posController;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
-import com.example.valueinsoftbackend.Model.ResponseModel.ResponsePagination;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.Service.ProductService;
 import com.example.valueinsoftbackend.util.PageHandler;
@@ -12,12 +11,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
+import javax.validation.constraints.Pattern;
+import javax.validation.constraints.Positive;
 import java.util.List;
 
 @Slf4j
 @RestController
+@Validated
 @RequestMapping("/products")
 public class ProductController {
 
@@ -29,11 +33,11 @@ public class ProductController {
     }
 
     @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/{selectedPageNumber}", method = RequestMethod.GET)
-    public Object getProducts(@PathVariable("companyId") int companyId,
-                              @PathVariable("branchId") String branchId,
+    public Object getProducts(@PathVariable("companyId") @Positive int companyId,
+                              @PathVariable("branchId") @Pattern(regexp = "\\d+", message = "branchId must be numeric") String branchId,
                               @PathVariable("searchType") String searchType,
                               @PathVariable("text") String text,
-                              @PathVariable("selectedPageNumber") int selectedPageNumber) {
+                              @PathVariable("selectedPageNumber") @Positive int selectedPageNumber) {
         log.info("getProducts called with searchType={}, companyId={}, branchId={}, text={}, page={}",
                 searchType, companyId, branchId, text, selectedPageNumber);
 
@@ -54,12 +58,12 @@ public class ProductController {
     }
 
     @PostMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/filter/{pageNumber}")
-    public Object getProductsBySearchFilter(@PathVariable("companyId") int companyId,
-                                            @PathVariable("branchId") String branchId,
+    public Object getProductsBySearchFilter(@PathVariable("companyId") @Positive int companyId,
+                                            @PathVariable("branchId") @Pattern(regexp = "\\d+", message = "branchId must be numeric") String branchId,
                                             @PathVariable("searchType") String searchType,
                                             @PathVariable("text") String text,
-                                            @PathVariable("pageNumber") int pageNumber,
-                                            @RequestBody ProductFilter productFilter) {
+                                            @PathVariable("pageNumber") @Positive int pageNumber,
+                                            @Valid @RequestBody ProductFilter productFilter) {
         log.info("getProductsBySearchFilter called with searchType={}, companyId={}, branchId={}, text={}, page={}",
                 searchType, companyId, branchId, text, pageNumber);
 
@@ -80,32 +84,32 @@ public class ProductController {
     }
 
     @GetMapping("{companyId}/{branchId}/{productId}")
-    public Product productById(@PathVariable("companyId") int companyId,
-                               @PathVariable("branchId") int branchId,
-                               @PathVariable("productId") int productId) {
+    public Product productById(@PathVariable("companyId") @Positive int companyId,
+                               @PathVariable("branchId") @Positive int branchId,
+                               @PathVariable("productId") @Positive int productId) {
         return productService.getProductById(productId, branchId, companyId);
     }
 
     @PostMapping("{companyId}/{branchId}/saveProduct")
-    public ResponseEntity<ProductOperationResponse> newProduct(@RequestBody Product newProProduct,
-                                                               @PathVariable String branchId,
-                                                               @PathVariable int companyId) {
+    public ResponseEntity<ProductOperationResponse> newProduct(@Valid @RequestBody Product newProProduct,
+                                                               @PathVariable @Pattern(regexp = "\\d+", message = "branchId must be numeric") String branchId,
+                                                               @PathVariable @Positive int companyId) {
         ProductOperationResponse response = productService.addProduct(newProProduct, branchId, companyId);
         log.debug("Created product payload for company {} branch {}", companyId, branchId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PutMapping("{companyId}/{branchId}/editProduct")
-    public ResponseEntity<ProductOperationResponse> editProduct(@RequestBody Product editProduct,
-                                                                @PathVariable String branchId,
-                                                                @PathVariable int companyId) {
+    public ResponseEntity<ProductOperationResponse> editProduct(@Valid @RequestBody Product editProduct,
+                                                                @PathVariable @Pattern(regexp = "\\d+", message = "branchId must be numeric") String branchId,
+                                                                @PathVariable @Positive int companyId) {
         ProductOperationResponse response = productService.editProduct(editProduct, branchId, companyId);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/PN/{companyId}/{branchId}/{text}")
-    public ResponseEntity<List<ProductUtilNames>> productNames(@PathVariable("companyId") int companyId,
-                                                               @PathVariable("branchId") int branchId,
+    public ResponseEntity<List<ProductUtilNames>> productNames(@PathVariable("companyId") @Positive int companyId,
+                                                               @PathVariable("branchId") @Positive int branchId,
                                                                @PathVariable("text") String text) {
         return ResponseEntity.ok(productService.getProductNames(text, branchId, companyId));
     }

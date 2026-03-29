@@ -1,0 +1,9 @@
+.git
+.gitignore
+.idea
+.mvn/wrapper/maven-wrapper.jar
+target
+README.md
+VALUEINSOFT_BACKEND_DOCUMENTATION.md
+VALUEINSOFT_BACKEND_MODERNIZATION_PLAN.md
+*.iml

@@ -16,6 +16,10 @@ import java.util.List;
 @Repository
 public class DbUsers {
 
+    private static final String USER_SELECT_COLUMNS =
+            "id, \"userName\", \"userPassword\", \"userEmail\", \"firstName\", \"lastName\", " +
+                    "\"userPhone\", \"userRole\", gender, \"branchId\", \"creationTime\"";
+
     private static final RowMapper<User> userRowMapper = (rs, rowNum) -> new User(
             rs.getInt("id"),
             rs.getString("userName"),
@@ -65,7 +69,7 @@ public class DbUsers {
     }
 
     public User getUser(String userName) {
-        String sql = "SELECT * FROM public.users WHERE \"userName\" = ?";
+        String sql = "SELECT " + USER_SELECT_COLUMNS + " FROM public.users WHERE \"userName\" = ?";
         List<User> users = jdbcTemplate.query(sql, userRowMapper, userName);
         return users.isEmpty() ? null : users.get(0);
     }
@@ -78,7 +82,7 @@ public class DbUsers {
     }
 
     public List<User> getAllUsers(int branchId) {
-        String sql = "SELECT * FROM public.users";
+        String sql = "SELECT " + USER_SELECT_COLUMNS + " FROM public.users";
         if (branchId != 0) {
             sql += " WHERE \"branchId\" = ?";
             return jdbcTemplate.query(sql, userRowMapper, branchId);
