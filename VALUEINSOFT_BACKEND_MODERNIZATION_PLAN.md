@@ -103,6 +103,42 @@ Remaining risks after Phase 1:
 
 ## Phase 2: Foundation Architecture and Data Safety
 
+Status:
+
+- started on 2026-03-29
+- partially completed for the highest-risk write slice
+- verified with `.\mvnw.cmd -q -DskipTests compile`
+
+Completed in the current Phase 2 slice:
+
+1. service-layer and transaction boundary for the order write path
+- added `OrderService` to own order creation and bounce-back orchestration
+- moved the critical order write path behind Spring `@Transactional`
+- added explicit transaction-manager wiring in Spring config instead of relying on implicit behavior
+
+2. safer repository cleanup for the touched order module
+- refactored `DbPosOrder` away from the old string-built multi-statement order save path
+- replaced the touched order and bounce-back writes with parameterized Spring JDBC operations
+- extended tenant SQL identifier helpers for order, order-detail, product, and shift tables
+
+3. request DTO validation for the touched critical endpoints
+- added validated request DTOs for authentication, order creation, order bounce-back, user creation, and password reset
+- updated controllers to use `@Valid` request models instead of manual `Map<String, Object>` parsing in the touched write endpoints
+- improved the global exception handler so validation failures return structured field-level details
+
+4. structured logging and repository hygiene improvements
+- added service/repository logging around the touched order flow
+- reduced stale JWT noise from `WARN` to `DEBUG`
+- added `target/` to `.gitignore` so new build output is not reintroduced by default
+
+Current Phase 2 remaining scope:
+
+- continue service extraction and transaction handling for supplier payments, expenses, and subscription/payment side effects
+- expand DTO validation across the older controllers that still accept loose maps and mixed payload shapes
+- prepare Flyway or equivalent migration structure
+- continue repository cleanup in supplier, company, and analytics flows
+- perform a one-time tracked `target/` cleanup from the git index once it is safe to do so
+
 Objectives:
 
 1. introduce a clear service layer across the major modules
@@ -202,12 +238,12 @@ Expected outcome:
 
 ## Recommended Next Step
 
-Start Phase 2 with service-layer extraction and transaction management for the most critical write flows first:
+Continue Phase 2 with the next critical write slices after order stabilization:
 
-1. order creation
-2. inventory mutation
-3. supplier receipt and payment handling
-4. expenses
-5. payment and subscription side effects
+1. supplier receipt and payment handling
+2. expenses and other multi-step finance writes
+3. subscription and payment side effects
+4. broader controller DTO validation
+5. tracked `target/` cleanup and migration scaffolding
 
-That sequencing preserves the roadmap priority: stabilize business correctness before expanding accounting and reporting features.
+That sequencing preserves the roadmap priority: stabilize business correctness and rollback safety across the remaining money/stock flows before expanding accounting and reporting features.

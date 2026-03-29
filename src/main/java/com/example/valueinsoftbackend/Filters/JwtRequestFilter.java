@@ -44,7 +44,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             try {
                 username = jwtUtil.extractUsername(jwt);
             } catch (JwtException | IllegalArgumentException exception) {
-                log.warn("Ignoring invalid JWT for request {} {}", request.getMethod(), request.getRequestURI());
+                log.debug("Ignoring invalid JWT for request {} {}", request.getMethod(), request.getRequestURI());
                 SecurityContextHolder.clearContext();
             }
         }
@@ -62,7 +62,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
                 }
             } catch (JwtException | IllegalArgumentException | UsernameNotFoundException exception) {
-                log.warn("Ignoring unauthenticated JWT context for request {} {}", request.getMethod(), request.getRequestURI());
+                log.debug("Ignoring unauthenticated JWT context for request {} {}", request.getMethod(), request.getRequestURI());
                 SecurityContextHolder.clearContext();
             }
         }

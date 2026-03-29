@@ -1,0 +1,133 @@
+package com.example.valueinsoftbackend.Service;
+
+import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Order;
+import com.example.valueinsoftbackend.Model.OrderDetails;
+import com.example.valueinsoftbackend.Model.Request.BounceBackOrderRequest;
+import com.example.valueinsoftbackend.Model.Request.CreateOrderRequest;
+import com.example.valueinsoftbackend.Model.Request.OrderItemRequest;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
+
+    private final DbPosOrder dbPosOrder;
+
+    public OrderService(DbPosOrder dbPosOrder) {
+        this.dbPosOrder = dbPosOrder;
+    }
+
+    @Transactional
+    public int createOrder(CreateOrderRequest request, int companyId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        Order order = toOrder(request);
+        int orderId = dbPosOrder.addOrder(order, companyId);
+        log.info("Saved order {} for company {} branch {} with {} items", orderId, companyId, order.getBranchId(), order.getOrderDetails().size());
+        return orderId;
+    }
+
+    @Transactional
+    public String bounceBackProduct(BounceBackOrderRequest request, int companyId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+
+        DbPosOrder.OrderBounceBackContext context = dbPosOrder.getBounceBackContext(
+                request.getOdId(),
+                request.getBranchId(),
+                companyId
+        );
+
+        if (context == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_DETAIL_NOT_FOUND", "Order detail not found");
+        }
+        if (context.getBouncedBack() != 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "ORDER_DETAIL_ALREADY_BOUNCED", "Order detail already bounced back");
+        }
+
+        int fullBounceDiscount = context.getOrderDiscount() > 0 && !context.hasOtherActiveItems()
+                ? context.getOrderDiscount()
+                : 0;
+        int incomeReduction = (context.getTotal() - (context.getBuyingPrice() * context.getQuantity())) + fullBounceDiscount;
+
+        int markedRows = dbPosOrder.markOrderDetailBouncedBack(request.getOdId(), request.getBranchId(), companyId, request.getToWho());
+        if (markedRows != 1) {
+            throw new ApiException(HttpStatus.CONFLICT, "ORDER_DETAIL_ALREADY_BOUNCED", "Order detail already bounced back");
+        }
+
+        if (request.getToWho() == 1) {
+            int restoredRows = dbPosOrder.restoreInventoryQuantity(
+                    context.getProductId(),
+                    context.getQuantity(),
+                    request.getBranchId(),
+                    companyId
+            );
+            if (restoredRows != 1) {
+                throw new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found for bounce back");
+            }
+            dbPosOrder.insertBounceBackInventoryTransaction(context, request.getBranchId(), companyId);
+        }
+
+        int updatedOrderRows = dbPosOrder.updateOrderBounceBackTotals(
+                context.getOrderId(),
+                request.getBranchId(),
+                companyId,
+                context.getTotal() + fullBounceDiscount,
+                incomeReduction
+        );
+        if (updatedOrderRows != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Order not found for bounce back");
+        }
+
+        log.info(
+                "Bounced back order detail {} for company {} branch {} to {}",
+                request.getOdId(),
+                companyId,
+                request.getBranchId(),
+                request.getToWho()
+        );
+        return "The Shift Ended";
+    }
+
+    private Order toOrder(CreateOrderRequest request) {
+        ArrayList<OrderDetails> details = new ArrayList<>();
+        List<OrderItemRequest> requestDetails = request.getOrderDetails();
+        for (OrderItemRequest itemRequest : requestDetails) {
+            details.add(new OrderDetails(
+                    0,
+                    itemRequest.getItemId(),
+                    itemRequest.getItemName().trim(),
+                    itemRequest.getQuantity(),
+                    itemRequest.getPrice(),
+                    itemRequest.getTotal(),
+                    itemRequest.getProductId(),
+                    0
+            ));
+        }
+
+        return new Order(
+                request.getOrderId(),
+                new Timestamp(System.currentTimeMillis()),
+                request.getClientName() == null ? "" : request.getClientName().trim(),
+                request.getOrderType().trim(),
+                request.getOrderDiscount(),
+                request.getOrderTotal(),
+                request.getSalesUser().trim(),
+                request.getBranchId(),
+                request.getClientId(),
+                request.getOrderIncome(),
+                0,
+                details
+        );
+    }
+}

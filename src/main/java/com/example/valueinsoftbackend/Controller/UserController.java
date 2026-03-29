@@ -2,11 +2,14 @@ package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Request.ResetPasswordRequest;
+import com.example.valueinsoftbackend.Model.Request.SaveUserRequest;
 import com.example.valueinsoftbackend.Model.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.validation.Valid;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -65,45 +68,24 @@ public class UserController {
     }
 
     @PostMapping("/saveNewUser")
-    public ResponseEntity<Object> saveNewUser(@RequestBody Map<String, String> requestBody) {
-        String answer = dbUsers.addUser(
-                requireField(requestBody, "userName"),
-                requireField(requestBody, "userPassword"),
-                requireField(requestBody, "email"),
-                requireField(requestBody, "userRole"),
-                requireField(requestBody, "firstName"),
-                requireField(requestBody, "lastName"),
-                Integer.parseInt(requireField(requestBody, "gender")),
-                requireField(requestBody, "userPhone"),
-                Integer.parseInt(requireField(requestBody, "branchId")),
-                requestBody.get("imgFile")
-        );
+    public ResponseEntity<Object> saveNewUser(@Valid @RequestBody SaveUserRequest requestBody) {
+        String answer = saveUserInternal(requestBody);
         return ResponseEntity.status(HttpStatus.CREATED).body(answer);
     }
 
     @PostMapping("/saveUser")
-    public ResponseEntity<Object> newUser(@RequestBody Map<String, String> requestBody) {
-        String answer = dbUsers.addUser(
-                requireField(requestBody, "userName"),
-                requireField(requestBody, "userPassword"),
-                requireField(requestBody, "email"),
-                requireField(requestBody, "role"),
-                requireField(requestBody, "firstName"),
-                requireField(requestBody, "lastName"),
-                Integer.parseInt(requireField(requestBody, "gender")),
-                requireField(requestBody, "userPhone"),
-                Integer.parseInt(requireField(requestBody, "branchId")),
-                requestBody.get("imgFile")
-        );
+    public ResponseEntity<Object> newUser(@Valid @RequestBody SaveUserRequest requestBody) {
+        String answer = saveUserInternal(requestBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
     }
 
     @PutMapping("/resetPassword/{userName}")
-    public ResponseEntity<String> resetPassword(@PathVariable String userName, @RequestBody Map<String, String> requestBody) {
+    public ResponseEntity<String> resetPassword(@PathVariable String userName,
+                                                @Valid @RequestBody ResetPasswordRequest requestBody) {
         String answer = dbUsers.updateUserPassword(
                 userName,
-                requireField(requestBody, "oldPassword"),
-                requireField(requestBody, "password")
+                requestBody.getOldPassword(),
+                requestBody.getPassword()
         );
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
     }
@@ -112,6 +94,21 @@ public class UserController {
     public ResponseEntity<String> updateImg(@PathVariable String userName, @RequestBody Map<String, String> requestBody) {
         String answer = dbUsers.updateUserImg(userName, requireField(requestBody, "imgFile"));
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
+    }
+
+    private String saveUserInternal(SaveUserRequest requestBody) {
+        return dbUsers.addUser(
+                requestBody.getUserName(),
+                requestBody.getUserPassword(),
+                requestBody.getEmail(),
+                requestBody.getUserRole(),
+                requestBody.getFirstName(),
+                requestBody.getLastName(),
+                requestBody.getGender(),
+                requestBody.getUserPhone(),
+                requestBody.getBranchId(),
+                requestBody.getImgFile()
+        );
     }
 
     private String requireField(Map<String, String> requestBody, String fieldName) {

@@ -28,6 +28,25 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"InventoryTransactions_" + branchId + "\"";
     }
 
+    public static String orderTable(int companyId, int branchId) {
+        requirePositive(branchId, "branchId");
+        return companySchema(companyId) + ".\"PosOrder_" + branchId + "\"";
+    }
+
+    public static String orderDetailTable(int companyId, int branchId) {
+        requirePositive(branchId, "branchId");
+        return companySchema(companyId) + ".\"PosOrderDetail_" + branchId + "\"";
+    }
+
+    public static String productTable(int companyId, int branchId) {
+        requirePositive(branchId, "branchId");
+        return companySchema(companyId) + ".\"PosProduct_" + branchId + "\"";
+    }
+
+    public static String shiftPeriodTable(int companyId) {
+        return companySchema(companyId) + ".\"PosShiftPeriod\"";
+    }
+
     public static String supplierTable(int companyId, int branchId) {
         requirePositive(branchId, "branchId");
         return companySchema(companyId) + ".supplier_" + branchId;

@@ -708,3 +708,37 @@ What remains for the next phase:
 - request DTO validation
 - migration tooling
 - broader repository cleanup beyond the touched Phase 1 modules
+
+## 16. Phase 2 Foundation Status Update
+
+Status on 2026-03-29:
+
+- started for the backend foundation phase
+- completed for the first high-risk slice around order writes and controller validation
+- verified with `.\mvnw.cmd -q -DskipTests compile`
+
+Implemented in the current Phase 2 slice:
+
+- added `OrderService` so order creation and order-item bounce-back no longer live directly in the controller path
+- added Spring transaction management for the touched order write path
+- refactored `DbPosOrder` away from the old string-built multi-statement order save flow into validated parameterized Spring JDBC operations
+- expanded `TenantSqlIdentifiers` so the order module uses centralized validated dynamic schema/table naming
+- added request DTO validation for authentication, order save, order bounce-back, user creation, and password reset
+- extended the global exception handler so validation failures return structured field-level details
+- reduced JWT stale-token noise to debug level in the request filter
+- added `target/` to `.gitignore` so new build output is ignored by default
+
+Current result:
+
+- the backend now has a real transactional service boundary for the most critical POS write flow
+- order creation and bounce-back are safer against partial-write failure than the old controller/raw-SQL path
+- the touched write endpoints reject invalid payloads early instead of failing later inside repository code
+- and the current roadmap risk is narrowed from the whole order module to the untouched supplier, company, finance, and analytics areas
+
+Remaining Foundation work:
+
+- service extraction and transaction boundaries for supplier payments, expenses, and subscription/payment side effects
+- request DTO migration across the older controllers that still use loose maps
+- Flyway or equivalent migration structure
+- broader repository cleanup in untouched legacy modules
+- one-time cleanup of already tracked `target/` artifacts from the repository index
