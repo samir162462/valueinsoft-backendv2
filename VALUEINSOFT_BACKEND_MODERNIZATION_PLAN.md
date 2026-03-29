@@ -106,7 +106,7 @@ Remaining risks after Phase 1:
 Status:
 
 - started on 2026-03-29
-- partially completed for the order and finance/payment write slices
+- partially completed across the order, finance/payment, supplier/inventory, company/damaged-item, and analytics/fix-area slices
 - verified with `.\mvnw.cmd -q -DskipTests compile`
 
 Completed so far in Phase 2:
@@ -167,12 +167,17 @@ Completed so far in Phase 2:
 - hardened `DbBranch` so branch creation now fails if branch table provisioning fails instead of silently returning success after a partial setup
 - refactored `DbPosDamagedList` to parameterized Spring JDBC operations with validated tenant identifiers and one transactional damaged-item write boundary for damaged record insert, stock decrement, and inventory-transaction side effects
 
+11. analytics, fix-area, and migration refinement
+- added `CompanyAnalysisService`, `SalesAnalyticsService`, and `FixAreaService` so analytics writes/reads and fix-area slot writes no longer depend on controller-owned loose payload parsing
+- refactored `DbDVCompanyAnalysis`, `DbDvSales`, `DbDvCompany`, and `DbSlotsFixArea` to constructor-injected parameterized Spring JDBC operations with validated tenant identifiers
+- added validated DTOs for company analytics, sales analytics, fix-area slot create/update, and user image update payloads
+- replaced the placeholder-only Flyway scaffold with the first curated shared-schema migrations while keeping Flyway disabled by default until rollout is planned
+
 Current Phase 2 remaining scope:
 
-- continue service extraction and transaction handling in the untouched money and stock flows, especially analytics update paths, fix-area writes, and remaining legacy company or inventory side paths
+- continue repository cleanup in the untouched legacy modules, especially remaining client, category, shift, client-receipt, and older inventory/company side paths that still rely on raw JDBC or string-built SQL
 - expand DTO validation across the remaining controllers that still accept loose maps and mixed payload shapes
-- turn the Flyway scaffold into curated shared-schema and tenant-provisioning migrations when the change set is ready
-- continue repository cleanup in untouched legacy modules so raw JDBC and string-built SQL stop being the default pattern
+- continue the Flyway conversion from scaffolding into curated shared-schema and controlled tenant-provisioning migrations when the next change set is ready
 - complete the broader logging cleanup so business write flows are consistently traceable beyond the touched services
 
 Objectives:
@@ -276,9 +281,9 @@ Expected outcome:
 
 Continue Phase 2 by finishing the remaining legacy write and validation surface around the now-stabilized core flows:
 
-1. clean the untouched analytics, fix-area, and remaining legacy inventory/company repositories that still rely on raw JDBC or string-built SQL
+1. clean the untouched legacy repositories that still rely on raw JDBC or string-built SQL, especially client receipts, shifts, categories, and remaining inventory/company side paths
 2. extend DTO and Bean Validation coverage across the remaining legacy controllers
-3. convert the Flyway scaffold into curated migrations for shared tables and controlled tenant provisioning changes
+3. continue converting the Flyway foundation into curated migrations for shared tables and controlled tenant provisioning changes
 4. complete structured logging replacement in the remaining high-risk financial and stock-changing paths
 
-That sequencing keeps the roadmap aligned with business correctness first: finish rollback safety, validation, and repository consistency across the remaining legacy write surface before moving on to accounting and reporting expansion.
+That sequencing keeps the roadmap aligned with business correctness first: finish rollback safety, validation, migration discipline, and repository consistency across the remaining legacy write surface before moving on to accounting and reporting expansion.

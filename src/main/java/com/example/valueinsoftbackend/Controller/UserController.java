@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Request.ResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.SaveUserRequest;
+import com.example.valueinsoftbackend.Model.Request.UpdateUserImageRequest;
 import com.example.valueinsoftbackend.Model.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import java.util.ArrayList;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/users")
@@ -91,8 +91,8 @@ public class UserController {
     }
 
     @PutMapping("/updateImg/{userName}")
-    public ResponseEntity<String> updateImg(@PathVariable String userName, @RequestBody Map<String, String> requestBody) {
-        String answer = dbUsers.updateUserImg(userName, requireField(requestBody, "imgFile"));
+    public ResponseEntity<String> updateImg(@PathVariable String userName, @Valid @RequestBody UpdateUserImageRequest requestBody) {
+        String answer = dbUsers.updateUserImg(userName, requestBody.getImgFile());
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
     }
 
@@ -111,11 +111,4 @@ public class UserController {
         );
     }
 
-    private String requireField(Map<String, String> requestBody, String fieldName) {
-        String value = requestBody.get(fieldName);
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " is required");
-        }
-        return value;
-    }
 }

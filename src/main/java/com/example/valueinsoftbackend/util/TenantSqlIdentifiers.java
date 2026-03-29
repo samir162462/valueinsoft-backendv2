@@ -59,6 +59,18 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"DamagedList\"";
     }
 
+    public static String fixAreaTable(int companyId) {
+        return companySchema(companyId) + ".\"FixArea\"";
+    }
+
+    public static String clientTable(int companyId) {
+        return companySchema(companyId) + ".\"Client\"";
+    }
+
+    public static String companyAnalysisTable(int companyId) {
+        return companySchema(companyId) + ".\"CompanyAnalysis\"";
+    }
+
     public static String companySubscriptionTable() {
         return "public.\"CompanySubscription\"";
     }
