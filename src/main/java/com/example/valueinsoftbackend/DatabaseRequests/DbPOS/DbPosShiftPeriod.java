@@ -1,7 +1,9 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.ShiftPeriod;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -43,6 +45,16 @@ public class DbPosShiftPeriod {
         String sql = "UPDATE " + TenantSqlIdentifiers.shiftPeriodTable(companyId) +
                 " SET \"ShiftEndTime\" = ? WHERE \"PosSOID\" = ?";
         return jdbcTemplate.update(sql, endTime, shiftPeriodId);
+    }
+
+    public int getShiftBranchId(int companyId, int shiftPeriodId) {
+        String sql = "SELECT \"branchId\" FROM " + TenantSqlIdentifiers.shiftPeriodTable(companyId) +
+                " WHERE \"PosSOID\" = ?";
+        List<Integer> branchIds = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getInt("branchId"), shiftPeriodId);
+        if (branchIds.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "SHIFT_NOT_FOUND", "Shift was not found");
+        }
+        return branchIds.get(0);
     }
 
     public ShiftPeriod getCurrentShift(int companyId, int branchId) {

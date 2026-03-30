@@ -45,6 +45,17 @@ public class DbBranch {
         return jdbcTemplate.query(sql, BRANCH_ROW_MAPPER, companyId);
     }
 
+    public Branch getBranchById(int branchId) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        String sql = "SELECT \"branchId\", \"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\" " +
+                "FROM public.\"Branch\" WHERE \"branchId\" = ?";
+        List<Branch> branches = jdbcTemplate.query(sql, BRANCH_ROW_MAPPER, branchId);
+        if (branches.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "BRANCH_NOT_FOUND", "Branch was not found");
+        }
+        return branches.get(0);
+    }
+
     public List<Branch> getAllBranches() {
         String sql = "SELECT \"branchId\", \"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\" " +
                 "FROM public.\"Branch\"";

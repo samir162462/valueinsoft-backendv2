@@ -6,6 +6,7 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Configuration.EffectiveConfiguration;
+import com.example.valueinsoftbackend.Model.Configuration.NavigationItemConfig;
 import com.example.valueinsoftbackend.Model.Configuration.ResolvedCapabilityConfig;
 import com.example.valueinsoftbackend.Model.User;
 import org.springframework.http.HttpStatus;
@@ -68,6 +69,22 @@ public class AuthenticatedEffectiveConfigurationService {
 
         ResolvedTenantContext context = resolveTenantContext(user, requestedTenantId, requestedBranchId);
         return effectiveConfigurationService.getEffectiveCapabilities(context.tenantId, user.getUserId(), context.activeBranchId);
+    }
+
+    /**
+     * Resolves the navigation projection for the authenticated user.
+     */
+    public ArrayList<NavigationItemConfig> getNavigationForAuthenticatedUser(String authenticatedName,
+                                                                             Integer requestedTenantId,
+                                                                             Integer requestedBranchId) {
+        String userName = extractBaseUserName(authenticatedName);
+        User user = dbUsers.getUser(userName);
+        if (user == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");
+        }
+
+        ResolvedTenantContext context = resolveTenantContext(user, requestedTenantId, requestedBranchId);
+        return effectiveConfigurationService.getNavigationItems(context.tenantId, user.getUserId(), context.activeBranchId);
     }
 
     /**

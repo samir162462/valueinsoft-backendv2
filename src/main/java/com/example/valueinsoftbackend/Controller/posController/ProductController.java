@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
+import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.Service.ProductService;
 import com.example.valueinsoftbackend.util.PageHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
 import javax.validation.constraints.Pattern;
 import javax.validation.constraints.Positive;
+import java.security.Principal;
 import java.util.List;
 
 @Slf4j
@@ -26,10 +28,12 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+    private final AuthorizationService authorizationService;
 
     @Autowired
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService, AuthorizationService authorizationService) {
         this.productService = productService;
+        this.authorizationService = authorizationService;
     }
 
     @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/{selectedPageNumber}", method = RequestMethod.GET)
@@ -37,7 +41,14 @@ public class ProductController {
                               @PathVariable("branchId") @Pattern(regexp = "\\d+", message = "branchId must be numeric") String branchId,
                               @PathVariable("searchType") String searchType,
                               @PathVariable("text") String text,
-                              @PathVariable("selectedPageNumber") @Positive int selectedPageNumber) {
+                              @PathVariable("selectedPageNumber") @Positive int selectedPageNumber,
+                              Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                Integer.parseInt(branchId),
+                "inventory.item.read"
+        );
         log.info("getProducts called with searchType={}, companyId={}, branchId={}, text={}, page={}",
                 searchType, companyId, branchId, text, selectedPageNumber);
 
@@ -63,7 +74,14 @@ public class ProductController {
                                             @PathVariable("searchType") String searchType,
                                             @PathVariable("text") String text,
                                             @PathVariable("pageNumber") @Positive int pageNumber,
-                                            @Valid @RequestBody ProductFilter productFilter) {
+                                            @Valid @RequestBody ProductFilter productFilter,
+                                            Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                Integer.parseInt(branchId),
+                "inventory.item.read"
+        );
         log.info("getProductsBySearchFilter called with searchType={}, companyId={}, branchId={}, text={}, page={}",
                 searchType, companyId, branchId, text, pageNumber);
 
@@ -86,14 +104,28 @@ public class ProductController {
     @GetMapping("{companyId}/{branchId}/{productId}")
     public Product productById(@PathVariable("companyId") @Positive int companyId,
                                @PathVariable("branchId") @Positive int branchId,
-                               @PathVariable("productId") @Positive int productId) {
+                               @PathVariable("productId") @Positive int productId,
+                               Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.item.read"
+        );
         return productService.getProductById(productId, branchId, companyId);
     }
 
     @PostMapping("{companyId}/{branchId}/saveProduct")
     public ResponseEntity<ProductOperationResponse> newProduct(@Valid @RequestBody Product newProProduct,
                                                                @PathVariable @Pattern(regexp = "\\d+", message = "branchId must be numeric") String branchId,
-                                                               @PathVariable @Positive int companyId) {
+                                                               @PathVariable @Positive int companyId,
+                                                               Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                Integer.parseInt(branchId),
+                "inventory.item.create"
+        );
         ProductOperationResponse response = productService.addProduct(newProProduct, branchId, companyId);
         log.debug("Created product payload for company {} branch {}", companyId, branchId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -102,7 +134,14 @@ public class ProductController {
     @PutMapping("{companyId}/{branchId}/editProduct")
     public ResponseEntity<ProductOperationResponse> editProduct(@Valid @RequestBody Product editProduct,
                                                                 @PathVariable @Pattern(regexp = "\\d+", message = "branchId must be numeric") String branchId,
-                                                                @PathVariable @Positive int companyId) {
+                                                                @PathVariable @Positive int companyId,
+                                                                Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                Integer.parseInt(branchId),
+                "inventory.item.edit"
+        );
         ProductOperationResponse response = productService.editProduct(editProduct, branchId, companyId);
         return ResponseEntity.ok(response);
     }
@@ -110,7 +149,14 @@ public class ProductController {
     @GetMapping("/PN/{companyId}/{branchId}/{text}")
     public ResponseEntity<List<ProductUtilNames>> productNames(@PathVariable("companyId") @Positive int companyId,
                                                                @PathVariable("branchId") @Positive int branchId,
-                                                               @PathVariable("text") String text) {
+                                                               @PathVariable("text") String text,
+                                                               Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.item.read"
+        );
         return ResponseEntity.ok(productService.getProductNames(text, branchId, companyId));
     }
 }

@@ -57,6 +57,12 @@ public class ShiftPeriodService {
         return "The Shift Ended";
     }
 
+    public int getShiftBranchId(int companyId, int shiftPeriodId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(shiftPeriodId, "spId");
+        return dbPosShiftPeriod.getShiftBranchId(companyId, shiftPeriodId);
+    }
+
     public ShiftPeriod currentShift(int companyId, CurrentShiftRequest request) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         ShiftPeriod shiftPeriod = dbPosShiftPeriod.getCurrentShift(companyId, request.getBranchId());

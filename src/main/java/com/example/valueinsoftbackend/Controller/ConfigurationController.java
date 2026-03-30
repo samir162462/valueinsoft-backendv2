@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.Configuration.EffectiveConfiguration;
+import com.example.valueinsoftbackend.Model.Configuration.NavigationItemConfig;
 import com.example.valueinsoftbackend.Model.Configuration.ResolvedCapabilityConfig;
 import com.example.valueinsoftbackend.Service.AuthenticatedEffectiveConfigurationService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,6 +52,20 @@ public class ConfigurationController {
                                                                         @RequestParam(value = "tenantId", required = false) Integer tenantId,
                                                                         @RequestParam(value = "branchId", required = false) Integer branchId) {
         return authenticatedEffectiveConfigurationService.getEffectiveCapabilitiesForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                branchId
+        );
+    }
+
+    /**
+     * Returns a navigation-focused projection of the enabled modules for the authenticated user.
+     */
+    @GetMapping("/navigation")
+    public ArrayList<NavigationItemConfig> getNavigation(Principal principal,
+                                                         @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                         @RequestParam(value = "branchId", required = false) Integer branchId) {
+        return authenticatedEffectiveConfigurationService.getNavigationForAuthenticatedUser(
                 principal.getName(),
                 tenantId,
                 branchId

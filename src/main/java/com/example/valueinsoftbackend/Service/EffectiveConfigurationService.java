@@ -13,6 +13,7 @@ import com.example.valueinsoftbackend.Model.Configuration.CompanyTemplateModuleD
 import com.example.valueinsoftbackend.Model.Configuration.CompanyTemplateWorkflowDefault;
 import com.example.valueinsoftbackend.Model.Configuration.EffectiveConfiguration;
 import com.example.valueinsoftbackend.Model.Configuration.EffectiveModuleConfig;
+import com.example.valueinsoftbackend.Model.Configuration.NavigationItemConfig;
 import com.example.valueinsoftbackend.Model.Configuration.OnboardingStateConfig;
 import com.example.valueinsoftbackend.Model.Configuration.PackageModulePolicy;
 import com.example.valueinsoftbackend.Model.Configuration.PackagePlanConfig;
@@ -120,6 +121,31 @@ public class EffectiveConfigurationService {
         List<TenantUserGrantOverrideConfig> userGrantOverrides = dbTenantUserGrantOverrides.getUserGrantOverrides(tenant.getTenantId(), userId);
         List<RoleGrantConfig> roleGrants = dbRoleGrants.getGrantsForRoleIds(extractRoleIds(roleAssignments));
         return resolveCapabilities(roleAssignments, roleGrants, userGrantOverrides, activeBranchId);
+    }
+
+    /**
+     * Projects enabled modules into a lightweight navigation response for the frontend shell.
+     */
+    public ArrayList<NavigationItemConfig> getNavigationItems(int tenantId, int userId, Integer activeBranchId) {
+        EffectiveConfiguration configuration = getEffectiveConfiguration(tenantId, userId, activeBranchId);
+        ArrayList<NavigationItemConfig> navigationItems = new ArrayList<>();
+
+        for (EffectiveModuleConfig module : configuration.getModules()) {
+            if (!module.isEnabled()) {
+                continue;
+            }
+            navigationItems.add(
+                    new NavigationItemConfig(
+                            module.getModuleId(),
+                            module.getDisplayName(),
+                            module.getCategory(),
+                            module.getMode(),
+                            module.getSource()
+                    )
+            );
+        }
+
+        return navigationItems;
     }
 
     private TenantConfig requireTenant(int tenantId) {

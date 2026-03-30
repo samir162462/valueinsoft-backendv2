@@ -43,6 +43,11 @@ public class BranchService {
         return new ArrayList<>(dbBranch.getBranchByCompanyId(companyId));
     }
 
+    public Branch getBranchById(int branchId) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        return dbBranch.getBranchById(branchId);
+    }
+
     private String normalize(String value) {
         return value == null ? "" : value.trim();
     }

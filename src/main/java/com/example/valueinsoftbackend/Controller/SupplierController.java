@@ -10,6 +10,7 @@ import com.example.valueinsoftbackend.Model.Request.SupplierProductCreateRequest
 import com.example.valueinsoftbackend.Model.Request.SupplierUpdateRequest;
 import com.example.valueinsoftbackend.Model.Supplier;
 import com.example.valueinsoftbackend.Model.SupplierBProduct;
+import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.Service.SupplierService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Positive;
+import java.security.Principal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,16 +30,25 @@ import java.util.Map;
 public class SupplierController {
 
     private final SupplierService supplierService;
+    private final AuthorizationService authorizationService;
 
-    public SupplierController(SupplierService supplierService) {
+    public SupplierController(SupplierService supplierService, AuthorizationService authorizationService) {
         this.supplierService = supplierService;
+        this.authorizationService = authorizationService;
     }
 
     @GetMapping("/all/{companyId}/{branchId}")
     public List<Supplier> getsuppliers(
             @PathVariable @Positive int companyId,
-            @PathVariable @Positive int branchId
+            @PathVariable @Positive int branchId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.read"
+        );
         return supplierService.getSuppliers(companyId, branchId);
     }
 
@@ -45,13 +56,27 @@ public class SupplierController {
     public String getRemaining(
             @PathVariable @Positive int productId,
             @PathVariable @Positive int companyId,
-            @PathVariable @Positive int branchId
+            @PathVariable @Positive int branchId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.read"
+        );
         return supplierService.getRemainingAmountByProductId(companyId, branchId, productId).toString();
     }
 
     @PostMapping("/saveSupplier")
-    public ResponseEntity<Object> newSupplier(@Valid @RequestBody SupplierCreateRequest requestBody) {
+    public ResponseEntity<Object> newSupplier(@Valid @RequestBody SupplierCreateRequest requestBody,
+                                              Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                requestBody.getCompanyId(),
+                requestBody.getBranchId(),
+                "suppliers.account.create"
+        );
         String answer = supplierService.createSupplier(requestBody);
         return ResponseEntity.status(HttpStatus.CREATED).body(answer);
     }
@@ -61,8 +86,15 @@ public class SupplierController {
             @Valid @RequestBody SupplierUpdateRequest supplier,
             @PathVariable @Positive int branchId,
             @PathVariable @Positive int companyId,
-            @PathVariable("id") @Positive int supplierId
+            @PathVariable("id") @Positive int supplierId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.edit"
+        );
         Map<String, String> response = new HashMap<>();
         response.put("Response", supplierService.updateSupplier(companyId, branchId, supplierId, supplier));
         return response;
@@ -72,8 +104,15 @@ public class SupplierController {
     public Map<String, Boolean> deleteUser(
             @PathVariable(value = "id") @Positive int supplierId,
             @PathVariable @Positive int branchId,
-            @PathVariable @Positive int companyId
+            @PathVariable @Positive int companyId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.delete"
+        );
         Map<String, Boolean> response = new HashMap<>();
         response.put("deleted", supplierService.deleteSupplier(companyId, branchId, supplierId));
         return response;
@@ -83,8 +122,15 @@ public class SupplierController {
     public List<InventoryTransaction> getSupplierSales(
             @PathVariable @Positive int supplierId,
             @PathVariable @Positive int companyId,
-            @PathVariable @Positive int branchId
+            @PathVariable @Positive int branchId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.read"
+        );
         return supplierService.getSupplierSales(companyId, branchId, supplierId);
     }
 
@@ -92,8 +138,15 @@ public class SupplierController {
     public List<SupplierBProduct> getSupplierBProduct(
             @PathVariable @Positive int supplierId,
             @PathVariable @Positive int companyId,
-            @PathVariable @Positive int branchId
+            @PathVariable @Positive int branchId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.read"
+        );
         return supplierService.getSupplierBoughtProducts(companyId, branchId, supplierId);
     }
 
