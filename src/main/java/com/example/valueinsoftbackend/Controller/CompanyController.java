@@ -59,9 +59,15 @@ public class CompanyController {
     @RequestMapping(value = "/getCompanyAndBranchesByUserName", method = RequestMethod.GET)
     @ResponseBody
     public Company CompanyAndBranchesByUserName(
-            @RequestParam("id") String id
+            @RequestParam("id") String id,
+            Principal principal
 
     ) {
+        authorizationService.assertSelfCapability(
+                principal.getName(),
+                id,
+                "profile.self.read"
+        );
         return companyService.getCompanyAndBranchesByUserName(id);
     }
 

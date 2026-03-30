@@ -155,8 +155,15 @@ public class SupplierController {
             @PathVariable @Positive int productId,
             @PathVariable @Positive int companyId,
             @PathVariable @Positive int branchId,
-            @Valid @RequestBody SupplierProductCreateRequest requestBody
+            @Valid @RequestBody SupplierProductCreateRequest requestBody,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.edit"
+        );
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(supplierService.createSupplierBoughtProduct(companyId, branchId, productId, requestBody));
     }

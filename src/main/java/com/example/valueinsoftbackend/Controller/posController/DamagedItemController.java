@@ -7,6 +7,7 @@ package com.example.valueinsoftbackend.Controller.posController;
 import com.example.valueinsoftbackend.Model.DamagedItem;
 import com.example.valueinsoftbackend.Model.Request.CreateDamagedItemRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierUpdateRequest;
+import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.Service.DamagedItemService;
 import com.example.valueinsoftbackend.Service.SupplierService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.security.Principal;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Positive;
@@ -29,19 +31,30 @@ public class DamagedItemController {
 
     private final DamagedItemService damagedItemService;
     private final SupplierService supplierService;
+    private final AuthorizationService authorizationService;
 
     @Autowired
-    public DamagedItemController(DamagedItemService damagedItemService, SupplierService supplierService) {
+    public DamagedItemController(DamagedItemService damagedItemService,
+                                 SupplierService supplierService,
+                                 AuthorizationService authorizationService) {
         this.damagedItemService = damagedItemService;
         this.supplierService = supplierService;
+        this.authorizationService = authorizationService;
     }
 
     @RequestMapping(value = "{companyName}/{branchId}/all", method = RequestMethod.GET)
     @ResponseBody
     public List<DamagedItem> getDamagesItem(
             @PathVariable("companyName") @Positive int companyId,
-            @PathVariable @Positive int branchId
+            @PathVariable @Positive int branchId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.item.read"
+        );
         return damagedItemService.getDamagedItems(companyId, branchId);
     }
 
@@ -49,8 +62,15 @@ public class DamagedItemController {
     public ResponseEntity<Object> newDamagedItem(
             @Valid @RequestBody CreateDamagedItemRequest damagedItem,
             @PathVariable("companyName") @Positive int companyId,
-            @PathVariable @Positive int branchId
+            @PathVariable @Positive int branchId,
+            Principal principal
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.adjustment.create"
+        );
         String answer = damagedItemService.addDamagedItem(companyId, branchId, damagedItem);
 
         HashMap<String, String> res = new HashMap<>();
@@ -63,9 +83,16 @@ public class DamagedItemController {
             @Valid @RequestBody SupplierUpdateRequest supplier,
             @PathVariable @Positive int branchId,
             @PathVariable @Positive int companyId,
-            @PathVariable("id") @Positive int supplierId
+            @PathVariable("id") @Positive int supplierId,
+            Principal principal
 
     ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.edit"
+        );
         Map<String, String> response = new HashMap<>();
         response.put("Response", supplierService.updateSupplier(companyId, branchId, supplierId, supplier));
         return response;
@@ -75,8 +102,15 @@ public class DamagedItemController {
     public Map<String, Boolean> deleteDamagedItem(
             @PathVariable(value = "DId") @Positive int DId,
             @PathVariable("companyName") @Positive int companyId,
-            @PathVariable @Positive int branchId
+            @PathVariable @Positive int branchId,
+            Principal principal
     ) throws Exception {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.adjustment.edit"
+        );
         Map<String, Boolean> response = new HashMap<>();
         boolean bol = damagedItemService.deleteDamagedItem(companyId, branchId, DId);
         response.put("deleted", bol);

@@ -44,7 +44,14 @@ public class DVCompanyAnalysisController {
     }
 
     @RequestMapping(value = "/CompanyAnalysisUpdate", method = RequestMethod.PUT)
-    public String CompanyAnalysisUpdate(@Valid @RequestBody CompanyAnalysisUpdateRequest body) {
+    public String CompanyAnalysisUpdate(@Valid @RequestBody CompanyAnalysisUpdateRequest body,
+                                        Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                body.getCompanyId(),
+                body.getBranchId(),
+                "finance.entry.edit"
+        );
         return companyAnalysisService.incrementCurrentDay(body);
     }
 }

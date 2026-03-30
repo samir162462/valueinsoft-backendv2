@@ -29,7 +29,12 @@ public class UserController {
 
     @RequestMapping(value = "/getUser", method = RequestMethod.GET)
     @ResponseBody
-    public User getPersonsByNames(@RequestParam("id") String id) {
+    public User getPersonsByNames(@RequestParam("id") String id, Principal principal) {
+        authorizationService.assertSelfCapability(
+                principal.getName(),
+                id,
+                "profile.self.read"
+        );
         User user = dbUsers.getUser(id);
         if (user == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found!");

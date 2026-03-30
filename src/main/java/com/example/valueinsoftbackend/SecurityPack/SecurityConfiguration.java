@@ -56,6 +56,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
                         "/users/saveNewUser",
                         "/Company/getCompany",
                         "/Company/getCompanyById",
+                        "/appSubscription/Res",
                         "/OP/TPC",
                         "/users/checkUserEmail/**",
                         "/users/checkUserUserName/**"
