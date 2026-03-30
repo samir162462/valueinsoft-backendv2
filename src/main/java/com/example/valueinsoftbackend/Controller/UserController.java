@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
+import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Request.ResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.SaveUserRequest;
@@ -11,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
+import java.security.Principal;
 import java.util.ArrayList;
 
 @RestController
@@ -18,9 +20,11 @@ import java.util.ArrayList;
 public class UserController {
 
     private final DbUsers dbUsers;
+    private final AuthorizationService authorizationService;
 
-    public UserController(DbUsers dbUsers) {
+    public UserController(DbUsers dbUsers, AuthorizationService authorizationService) {
         this.dbUsers = dbUsers;
+        this.authorizationService = authorizationService;
     }
 
     @RequestMapping(value = "/getUser", method = RequestMethod.GET)
@@ -35,7 +39,12 @@ public class UserController {
 
     @RequestMapping(value = "/getUserDetails/{userName}", method = RequestMethod.GET)
     @ResponseBody
-    public User getUserByName(@PathVariable("userName") String userName) {
+    public User getUserByName(@PathVariable("userName") String userName, Principal principal) {
+        authorizationService.assertSelfCapability(
+                principal.getName(),
+                userName,
+                "profile.self.read"
+        );
         User user = dbUsers.getUserDetails(userName);
         if (user == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found!");
@@ -45,7 +54,15 @@ public class UserController {
 
     @RequestMapping(value = "/{companyId}/{branchId}/getAllUsers", method = RequestMethod.GET)
     @ResponseBody
-    public ArrayList<User> getAllUsers(@PathVariable("branchId") int branchId, @PathVariable("companyId") int companyId) {
+    public ArrayList<User> getAllUsers(@PathVariable("branchId") int branchId,
+                                       @PathVariable("companyId") int companyId,
+                                       Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "users.account.read"
+        );
         return (ArrayList<User>) dbUsers.getAllUsers(branchId);
     }
 
@@ -63,7 +80,12 @@ public class UserController {
 
     @RequestMapping(value = "/getUserImg", method = RequestMethod.GET)
     @ResponseBody
-    public String getUserImgByUserName(@RequestParam("id") String id) {
+    public String getUserImgByUserName(@RequestParam("id") String id, Principal principal) {
+        authorizationService.assertSelfCapability(
+                principal.getName(),
+                id,
+                "profile.self.read"
+        );
         return dbUsers.getUserImg(id);
     }
 
@@ -74,14 +96,26 @@ public class UserController {
     }
 
     @PostMapping("/saveUser")
-    public ResponseEntity<Object> newUser(@Valid @RequestBody SaveUserRequest requestBody) {
+    public ResponseEntity<Object> newUser(@Valid @RequestBody SaveUserRequest requestBody, Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                null,
+                requestBody.getBranchId() > 0 ? requestBody.getBranchId() : null,
+                "users.account.create"
+        );
         String answer = saveUserInternal(requestBody);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
     }
 
     @PutMapping("/resetPassword/{userName}")
     public ResponseEntity<String> resetPassword(@PathVariable String userName,
+                                                Principal principal,
                                                 @Valid @RequestBody ResetPasswordRequest requestBody) {
+        authorizationService.assertSelfCapability(
+                principal.getName(),
+                userName,
+                "profile.self.edit"
+        );
         String answer = dbUsers.updateUserPassword(
                 userName,
                 requestBody.getOldPassword(),
@@ -91,7 +125,14 @@ public class UserController {
     }
 
     @PutMapping("/updateImg/{userName}")
-    public ResponseEntity<String> updateImg(@PathVariable String userName, @Valid @RequestBody UpdateUserImageRequest requestBody) {
+    public ResponseEntity<String> updateImg(@PathVariable String userName,
+                                            Principal principal,
+                                            @Valid @RequestBody UpdateUserImageRequest requestBody) {
+        authorizationService.assertSelfCapability(
+                principal.getName(),
+                userName,
+                "profile.self.edit"
+        );
         String answer = dbUsers.updateUserImg(userName, requestBody.getImgFile());
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
     }

@@ -60,7 +60,6 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
                         "/users/checkUserEmail/**",
                         "/users/checkUserUserName/**"
                 ).permitAll()
-                .antMatchers("/users/saveUser").hasAnyAuthority("Admin", "Owner")
                 .anyRequest().authenticated()
                 .and()
                 .sessionManagement()
