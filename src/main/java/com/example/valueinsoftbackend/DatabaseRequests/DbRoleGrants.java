@@ -10,7 +10,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Read-only access to role-to-capability grants.
+ * Read and write access to role-to-capability grants.
  */
 @Repository
 public class DbRoleGrants {
@@ -52,5 +52,21 @@ public class DbRoleGrants {
                 "FROM public.role_grants WHERE role_id IN (" + placeholders + ") " +
                 "ORDER BY role_id ASC, capability_key ASC, scope_type ASC";
         return jdbcTemplate.query(sql, ROLE_GRANT_ROW_MAPPER, normalizedRoleIds.toArray());
+    }
+
+    public void upsertRoleGrant(String roleId,
+                                String capabilityKey,
+                                String scopeType,
+                                String grantMode,
+                                String grantVersion) {
+        String sql = "INSERT INTO public.role_grants (role_id, capability_key, scope_type, grant_mode, grant_version) " +
+                "VALUES (?, ?, ?, ?, ?) " +
+                "ON CONFLICT (role_id, capability_key, scope_type) DO UPDATE SET grant_mode = EXCLUDED.grant_mode, grant_version = EXCLUDED.grant_version";
+        jdbcTemplate.update(sql, roleId, capabilityKey, scopeType, grantMode, grantVersion);
+    }
+
+    public void deleteRoleGrant(String roleId, String capabilityKey, String scopeType) {
+        String sql = "DELETE FROM public.role_grants WHERE role_id = ? AND capability_key = ? AND scope_type = ?";
+        jdbcTemplate.update(sql, roleId, capabilityKey, scopeType);
     }
 }

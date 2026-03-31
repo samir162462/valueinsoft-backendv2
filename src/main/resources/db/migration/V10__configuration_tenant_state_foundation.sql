@@ -51,7 +51,7 @@ ON public.tenants;
 CREATE TRIGGER trg_tenants_set_updated_at
 BEFORE UPDATE ON public.tenants
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.tenant_module_overrides (
     tenant_id INTEGER NOT NULL,
@@ -96,7 +96,7 @@ ON public.tenant_module_overrides;
 CREATE TRIGGER trg_tenant_module_overrides_set_updated_at
 BEFORE UPDATE ON public.tenant_module_overrides
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.tenant_workflow_overrides (
     tenant_id INTEGER NOT NULL,
@@ -134,7 +134,7 @@ ON public.tenant_workflow_overrides;
 CREATE TRIGGER trg_tenant_workflow_overrides_set_updated_at
 BEFORE UPDATE ON public.tenant_workflow_overrides
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.tenant_role_assignments (
     tenant_id INTEGER NOT NULL,
@@ -231,7 +231,7 @@ ON public.tenant_user_grant_overrides;
 CREATE TRIGGER trg_tenant_user_grant_overrides_set_updated_at
 BEFORE UPDATE ON public.tenant_user_grant_overrides
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.onboarding_states (
     tenant_id INTEGER PRIMARY KEY,
@@ -271,4 +271,4 @@ ON public.onboarding_states;
 CREATE TRIGGER trg_onboarding_states_set_updated_at
 BEFORE UPDATE ON public.onboarding_states
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();

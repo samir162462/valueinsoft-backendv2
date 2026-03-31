@@ -16,7 +16,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Map;
 
 @Service
@@ -84,16 +83,46 @@ public class CategoryService {
         if (node == null || node.isNull()) {
             return customPairs;
         }
-        if (!node.isObject()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_PAYLOAD_UNSUPPORTED", "Category payload must be a JSON object");
-        }
-
-        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-        while (fields.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fields.next();
-            customPairs.add(new CustomPair(entry.getKey(), toStringList(entry.getValue())));
+        appendCategoryPairs(customPairs, node);
+        if (customPairs.isEmpty() && !node.isObject() && !node.isArray()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_PAYLOAD_UNSUPPORTED", "Category payload must be a JSON object or array of category objects");
         }
         return customPairs;
+    }
+
+    private void appendCategoryPairs(ArrayList<CustomPair> customPairs, JsonNode node) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+
+        if (node.isObject()) {
+            if (node.hasNonNull("key") && node.has("value")) {
+                customPairs.add(new CustomPair(node.get("key").asText(), toStringList(node.get("value"))));
+                return;
+            }
+
+            node.fields().forEachRemaining(entry ->
+                    customPairs.add(new CustomPair(entry.getKey(), toStringList(entry.getValue()))));
+            return;
+        }
+
+        if (node.isArray()) {
+            for (JsonNode entryNode : node) {
+                if (entryNode == null || entryNode.isNull()) {
+                    continue;
+                }
+
+                if (entryNode.isTextual()) {
+                    appendCategoryPairs(customPairs, normalizeCategoryNode(entryNode.asText()));
+                    continue;
+                }
+
+                appendCategoryPairs(customPairs, entryNode);
+            }
+            return;
+        }
+
+        throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_PAYLOAD_UNSUPPORTED", "Category payload must be a JSON object or array of category objects");
     }
 
     private JsonNode normalizeCategoryNode(String payload) {

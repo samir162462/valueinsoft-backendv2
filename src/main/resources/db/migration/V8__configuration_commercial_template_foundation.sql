@@ -30,7 +30,7 @@ ON public.package_plans;
 CREATE TRIGGER trg_package_plans_set_updated_at
 BEFORE UPDATE ON public.package_plans
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.package_module_policies (
     package_id TEXT NOT NULL,
@@ -72,7 +72,7 @@ ON public.package_module_policies;
 CREATE TRIGGER trg_package_module_policies_set_updated_at
 BEFORE UPDATE ON public.package_module_policies
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.company_templates (
     template_id TEXT PRIMARY KEY,
@@ -106,7 +106,7 @@ ON public.company_templates;
 CREATE TRIGGER trg_company_templates_set_updated_at
 BEFORE UPDATE ON public.company_templates
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.company_template_module_defaults (
     template_id TEXT NOT NULL,
@@ -144,7 +144,7 @@ ON public.company_template_module_defaults;
 CREATE TRIGGER trg_company_template_module_defaults_set_updated_at
 BEFORE UPDATE ON public.company_template_module_defaults
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.company_template_workflow_defaults (
     template_id TEXT NOT NULL,
@@ -174,4 +174,4 @@ ON public.company_template_workflow_defaults;
 CREATE TRIGGER trg_company_template_workflow_defaults_set_updated_at
 BEFORE UPDATE ON public.company_template_workflow_defaults
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();

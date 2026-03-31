@@ -32,6 +32,24 @@ public class AuthorizationService {
                                              Integer tenantId,
                                              Integer branchId,
                                              String capabilityKey) {
+        if (hasAuthenticatedCapability(authenticatedName, tenantId, branchId, capabilityKey)) {
+            return;
+        }
+
+        throw new ApiException(
+                HttpStatus.FORBIDDEN,
+                "CAPABILITY_DENIED",
+                "Missing required capability: " + capabilityKey
+        );
+    }
+
+    /**
+     * Returns whether the authenticated user currently has the requested capability.
+     */
+    public boolean hasAuthenticatedCapability(String authenticatedName,
+                                             Integer tenantId,
+                                             Integer branchId,
+                                             String capabilityKey) {
         ArrayList<ResolvedCapabilityConfig> capabilities =
                 authenticatedEffectiveConfigurationService.getEffectiveCapabilitiesForAuthenticatedUser(
                         authenticatedName,
@@ -42,15 +60,11 @@ public class AuthorizationService {
         for (ResolvedCapabilityConfig capability : capabilities) {
             if (capabilityKey.equals(capability.getCapabilityKey())
                     && "allow".equalsIgnoreCase(capability.getGrantMode())) {
-                return;
+                return true;
             }
         }
 
-        throw new ApiException(
-                HttpStatus.FORBIDDEN,
-                "CAPABILITY_DENIED",
-                "Missing required capability: " + capabilityKey
-        );
+        return false;
     }
 
     /**

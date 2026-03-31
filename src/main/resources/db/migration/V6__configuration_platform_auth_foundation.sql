@@ -41,7 +41,7 @@ ON public.platform_modules;
 CREATE TRIGGER trg_platform_modules_set_updated_at
 BEFORE UPDATE ON public.platform_modules
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.platform_capabilities (
     capability_key TEXT PRIMARY KEY,
@@ -89,7 +89,7 @@ ON public.platform_capabilities;
 CREATE TRIGGER trg_platform_capabilities_set_updated_at
 BEFORE UPDATE ON public.platform_capabilities
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.role_definitions (
     role_id TEXT PRIMARY KEY,
@@ -120,7 +120,7 @@ ON public.role_definitions;
 CREATE TRIGGER trg_role_definitions_set_updated_at
 BEFORE UPDATE ON public.role_definitions
 FOR EACH ROW
-EXECUTE FUNCTION valueinsoft_set_updated_at();
+EXECUTE PROCEDURE valueinsoft_set_updated_at();
 
 CREATE TABLE IF NOT EXISTS public.role_grants (
     role_id TEXT NOT NULL,
