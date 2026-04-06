@@ -27,5 +27,6 @@ public class PlatformCompany360Response {
     private int lockedBranchCount;
     private int userCount;
     private int unpaidBranchSubscriptions;
+    private PlatformBillingHealthSnapshotResponse billingHealthSnapshot;
     private ArrayList<PlatformCompanyBranchSummary> branches;
 }

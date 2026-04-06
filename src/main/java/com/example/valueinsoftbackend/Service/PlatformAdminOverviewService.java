@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminAudit;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminDailyMetrics;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminReadModels;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAuditEventItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingHealthSnapshotResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformMetricsStatusResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformOverviewAlertItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformOverviewMetricsSnapshot;
@@ -24,6 +25,7 @@ public class PlatformAdminOverviewService {
     private final DbPlatformAdminReadModels dbPlatformAdminReadModels;
     private final DbPlatformAdminDailyMetrics dbPlatformAdminDailyMetrics;
     private final PlatformAdminAlertService platformAdminAlertService;
+    private final BillingSchedulerService billingSchedulerService;
     private final PlatformAdminMetricsService platformAdminMetricsService;
     private final PlatformAuthorizationService platformAuthorizationService;
 
@@ -31,12 +33,14 @@ public class PlatformAdminOverviewService {
                                         DbPlatformAdminReadModels dbPlatformAdminReadModels,
                                         DbPlatformAdminDailyMetrics dbPlatformAdminDailyMetrics,
                                         PlatformAdminAlertService platformAdminAlertService,
+                                        BillingSchedulerService billingSchedulerService,
                                         PlatformAdminMetricsService platformAdminMetricsService,
                                         PlatformAuthorizationService platformAuthorizationService) {
         this.dbPlatformAdminAudit = dbPlatformAdminAudit;
         this.dbPlatformAdminReadModels = dbPlatformAdminReadModels;
         this.dbPlatformAdminDailyMetrics = dbPlatformAdminDailyMetrics;
         this.platformAdminAlertService = platformAdminAlertService;
+        this.billingSchedulerService = billingSchedulerService;
         this.platformAdminMetricsService = platformAdminMetricsService;
         this.platformAuthorizationService = platformAuthorizationService;
     }
@@ -46,7 +50,9 @@ public class PlatformAdminOverviewService {
         PlatformOverviewResponse overview = dbPlatformAdminReadModels.getOverview();
         PlatformOverviewMetricsSnapshot snapshot = dbPlatformAdminDailyMetrics.getLatestOverviewSnapshot();
         PlatformMetricsStatusResponse metricsStatus = platformAdminMetricsService.getMetricsStatusSnapshot();
+        PlatformBillingHealthSnapshotResponse billingHealthSnapshot = billingSchedulerService.getBillingHealthSnapshot(null);
         Set<String> acknowledgedAlertKeys = platformAdminAlertService.getActiveAcknowledgedAlertKeysSnapshot();
+        overview.setBillingHealthSnapshot(billingHealthSnapshot);
 
         if (snapshot == null) {
             overview.setMetricsSnapshotDate(null);
@@ -56,7 +62,7 @@ public class PlatformAdminOverviewService {
             overview.setMetricsCollectedAmount(BigDecimal.ZERO);
             overview.setMetricsNetAmount(BigDecimal.ZERO);
             overview.setMetricsStatus(metricsStatus);
-            overview.setAlerts(filterAcknowledgedAlerts(buildAlerts(overview, metricsStatus), acknowledgedAlertKeys));
+            overview.setAlerts(filterAcknowledgedAlerts(buildAlerts(overview, metricsStatus, billingHealthSnapshot), acknowledgedAlertKeys));
             overview.setRecentAdminActions(dbPlatformAdminAudit.getRecentAuditEvents(platformAdminAlertService.getRecentAdminActionsLimit()));
             return overview;
         }
@@ -68,7 +74,7 @@ public class PlatformAdminOverviewService {
         overview.setMetricsCollectedAmount(defaultAmount(snapshot.getCollectedAmount()));
         overview.setMetricsNetAmount(defaultAmount(snapshot.getNetAmount()));
         overview.setMetricsStatus(metricsStatus);
-        overview.setAlerts(filterAcknowledgedAlerts(buildAlerts(overview, metricsStatus), acknowledgedAlertKeys));
+        overview.setAlerts(filterAcknowledgedAlerts(buildAlerts(overview, metricsStatus, billingHealthSnapshot), acknowledgedAlertKeys));
         overview.setRecentAdminActions(dbPlatformAdminAudit.getRecentAuditEvents(platformAdminAlertService.getRecentAdminActionsLimit()));
         return overview;
     }
@@ -78,7 +84,8 @@ public class PlatformAdminOverviewService {
     }
 
     private ArrayList<PlatformOverviewAlertItem> buildAlerts(PlatformOverviewResponse overview,
-                                                             PlatformMetricsStatusResponse metricsStatus) {
+                                                             PlatformMetricsStatusResponse metricsStatus,
+                                                             PlatformBillingHealthSnapshotResponse billingHealthSnapshot) {
         ArrayList<PlatformOverviewAlertItem> alerts = new ArrayList<>();
 
         if (overview.getSuspendedCompanies() > 0) {
@@ -192,6 +199,46 @@ public class PlatformAdminOverviewService {
                         overview.getUnpaidSubscriptions()
                 ));
             }
+        }
+
+        if (billingHealthSnapshot != null && billingHealthSnapshot.getOverdueInvoices() > 0) {
+            alerts.add(new PlatformOverviewAlertItem(
+                    "billing_overdue_invoices",
+                    "warning",
+                    "Overdue billing invoices",
+                    "One or more modern billing invoices are overdue and need collections follow-up.",
+                    billingHealthSnapshot.getOverdueInvoices()
+            ));
+        }
+
+        if (billingHealthSnapshot != null && billingHealthSnapshot.getPastDueEntitlements() > 0) {
+            alerts.add(new PlatformOverviewAlertItem(
+                    "billing_past_due_entitlements",
+                    "warning",
+                    "Past-due branch entitlements",
+                    "One or more branches are currently marked as past due in the billing entitlement model.",
+                    billingHealthSnapshot.getPastDueEntitlements()
+            ));
+        }
+
+        if (billingHealthSnapshot != null && billingHealthSnapshot.getRenewalBacklogCount() > 0) {
+            alerts.add(new PlatformOverviewAlertItem(
+                    "billing_renewal_backlog",
+                    "info",
+                    "Renewal backlog pending",
+                    "One or more branch subscriptions are approaching renewal without a future billing period generated yet.",
+                    billingHealthSnapshot.getRenewalBacklogCount()
+            ));
+        }
+
+        if (billingHealthSnapshot != null && billingHealthSnapshot.getRetryBlockedInvoices() > 0) {
+            alerts.add(new PlatformOverviewAlertItem(
+                    "billing_retry_blocked_invoices",
+                    "info",
+                    "Retry-governed invoices",
+                    "Some open invoices are currently blocked from manual retry by cooldown or retry-attempt policy.",
+                    billingHealthSnapshot.getRetryBlockedInvoices()
+            ));
         }
 
         return alerts;

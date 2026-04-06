@@ -17,8 +17,19 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchS
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanySubscriptionItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformConfigAssignmentsResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAuditEventsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformTenantBillingWorkflowSummaryResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingDunningRunsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingEntitlementsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingHealthSnapshotResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingOperationResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRenewalBacklogPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRetryInvoiceResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSubscriptionsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSummaryResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingInvoicesPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentAttemptsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationRepairResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformClientReceiptsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformExpensesPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformLifecycleActionResponse;
@@ -267,6 +278,143 @@ public class PlatformAdminController {
         );
     }
 
+    @GetMapping("/billing/invoices")
+    public PlatformBillingInvoicesPageResponse getBillingInvoices(Principal principal,
+                                                                  @RequestParam(value = "search", required = false) String search,
+                                                                  @RequestParam(value = "status", required = false) String status,
+                                                                  @RequestParam(value = "providerCode", required = false) String providerCode,
+                                                                  @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                  @RequestParam(defaultValue = "1") int page,
+                                                                  @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getInvoicesForAuthenticatedUser(
+                principal.getName(),
+                search,
+                status,
+                providerCode,
+                tenantId,
+                page,
+                size
+        );
+    }
+
+    @GetMapping("/billing/payment-attempts")
+    public PlatformBillingPaymentAttemptsPageResponse getBillingPaymentAttempts(Principal principal,
+                                                                                @RequestParam(value = "search", required = false) String search,
+                                                                                @RequestParam(value = "status", required = false) String status,
+                                                                                @RequestParam(value = "providerCode", required = false) String providerCode,
+                                                                                @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                                @RequestParam(defaultValue = "1") int page,
+                                                                                @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getPaymentAttemptsForAuthenticatedUser(
+                principal.getName(),
+                search,
+                status,
+                providerCode,
+                tenantId,
+                page,
+                size
+        );
+    }
+
+    @GetMapping("/billing/dunning-runs")
+    public PlatformBillingDunningRunsPageResponse getBillingDunningRuns(Principal principal,
+                                                                        @RequestParam(value = "status", required = false) String status,
+                                                                        @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                        @RequestParam(defaultValue = "1") int page,
+                                                                        @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getDunningRunsForAuthenticatedUser(
+                principal.getName(),
+                status,
+                tenantId,
+                page,
+                size
+        );
+    }
+
+    @GetMapping("/billing/renewals/backlog")
+    public PlatformBillingRenewalBacklogPageResponse getBillingRenewalBacklog(Principal principal,
+                                                                              @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                              @RequestParam(defaultValue = "1") int page,
+                                                                              @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getRenewalBacklogForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                page,
+                size
+        );
+    }
+
+    @GetMapping("/billing/entitlements")
+    public PlatformBillingEntitlementsPageResponse getBillingEntitlements(Principal principal,
+                                                                          @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                          @RequestParam(value = "branchId", required = false) Integer branchId,
+                                                                          @RequestParam(value = "currentState", required = false) String currentState,
+                                                                          @RequestParam(defaultValue = "1") int page,
+                                                                          @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getEntitlementsForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                branchId,
+                currentState,
+                page,
+                size
+        );
+    }
+
+    @GetMapping("/billing/health")
+    public PlatformBillingHealthSnapshotResponse getBillingHealthSnapshot(Principal principal,
+                                                                          @RequestParam(value = "tenantId", required = false) Integer tenantId) {
+        return platformAdminBillingService.getBillingHealthSnapshotForAuthenticatedUser(
+                principal.getName(),
+                tenantId
+        );
+    }
+
+    @GetMapping("/billing/reconciliation")
+    public PlatformBillingReconciliationPageResponse getBillingReconciliation(Principal principal,
+                                                                              @RequestParam(value = "status", required = false) String status,
+                                                                              @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                              @RequestParam(defaultValue = "1") int page,
+                                                                              @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getReconciliationForAuthenticatedUser(
+                principal.getName(),
+                status,
+                tenantId,
+                page,
+                size
+        );
+    }
+
+    @PostMapping("/billing/reconciliation/repair")
+    public PlatformBillingReconciliationRepairResponse repairBillingReconciliation(Principal principal,
+                                                                                   @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                                   @RequestParam(value = "limit", defaultValue = "50") int limit) {
+        return platformAdminBillingService.repairReconciliationForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                limit
+        );
+    }
+
+    @PostMapping("/billing/renewals/run")
+    public PlatformBillingOperationResponse runBillingRenewals(Principal principal) {
+        return platformAdminBillingService.runRenewalCycleForAuthenticatedUser(principal.getName());
+    }
+
+    @PostMapping("/billing/dunning/run")
+    public PlatformBillingOperationResponse runBillingDunning(Principal principal) {
+        return platformAdminBillingService.runDunningCycleForAuthenticatedUser(principal.getName());
+    }
+
+    @PostMapping("/billing/invoices/{billingInvoiceId}/retry")
+    public PlatformBillingRetryInvoiceResponse retryBillingInvoice(Principal principal,
+                                                                   @PathVariable long billingInvoiceId) {
+        return platformAdminBillingService.retryInvoiceForAuthenticatedUser(
+                principal.getName(),
+                billingInvoiceId
+        );
+    }
+
     @GetMapping("/billing/revenue-trend")
     public PlatformRevenueTrendResponse getRevenueTrend(Principal principal,
                                                         @RequestParam(value = "days", defaultValue = "30") int days,
@@ -468,6 +616,15 @@ public class PlatformAdminController {
                 tenantId,
                 page,
                 size
+        );
+    }
+
+    @GetMapping("/companies/{tenantId}/billing/workflow")
+    public PlatformTenantBillingWorkflowSummaryResponse getCompanyBillingWorkflowSummary(Principal principal,
+                                                                                         @PathVariable int tenantId) {
+        return platformAdminCompanyService.getTenantBillingWorkflowSummaryForAuthenticatedUser(
+                principal.getName(),
+                tenantId
         );
     }
 

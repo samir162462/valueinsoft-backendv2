@@ -30,6 +30,7 @@ public class PlatformOverviewResponse {
     private BigDecimal metricsCollectedAmount;
     private BigDecimal metricsNetAmount;
     private PlatformMetricsStatusResponse metricsStatus;
+    private PlatformBillingHealthSnapshotResponse billingHealthSnapshot;
     private ArrayList<PlatformOverviewAlertItem> alerts;
     private ArrayList<PlatformAuditEventItem> recentAdminActions;
     private Timestamp generatedAt;

@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.DatabaseRequests;
 
+import com.example.valueinsoftbackend.Config.BillingProperties;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanySubscriptionItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompaniesPageResponse;
@@ -58,7 +59,10 @@ public class DbPlatformAdminReadModels {
                     rs.getTimestamp("branch_established_time"),
                     rs.getString("runtime_status"),
                     rs.getInt("user_count"),
-                    rs.getString("latest_subscription_status")
+                    rs.getString("latest_subscription_status"),
+                    rs.getString("current_entitlement_state"),
+                    rs.getInt("overdue_invoice_count"),
+                    rs.getBoolean("retry_blocked")
             );
 
     private static final RowMapper<PlatformCompanySubscriptionItem> COMPANY_SUBSCRIPTION_ROW_MAPPER = (rs, rowNum) ->
@@ -76,19 +80,18 @@ public class DbPlatformAdminReadModels {
 
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final BillingProperties billingProperties;
 
     public DbPlatformAdminReadModels(JdbcTemplate jdbcTemplate,
-                                     NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
+                                     NamedParameterJdbcTemplate namedParameterJdbcTemplate,
+                                     BillingProperties billingProperties) {
         this.jdbcTemplate = jdbcTemplate;
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
+        this.billingProperties = billingProperties;
     }
 
     public PlatformOverviewResponse getOverview() {
-        String sql = "WITH latest_subscriptions AS (" +
-                " SELECT DISTINCT ON (\"branchId\") \"branchId\", status, \"endTime\" " +
-                " FROM public.\"CompanySubscription\" " +
-                " ORDER BY \"branchId\", \"sId\" DESC" +
-                ") " +
+        String sql = latestBranchSubscriptionContextSql() +
                 "SELECT " +
                 " (SELECT COUNT(*) FROM public.\"Company\") AS total_companies, " +
                 " (SELECT COUNT(*) FROM public.tenants WHERE status = 'active') AS active_companies, " +
@@ -97,8 +100,8 @@ public class DbPlatformAdminReadModels {
                 " (SELECT COUNT(*) FROM public.branch_runtime_states WHERE status = 'active') AS active_branches, " +
                 " (SELECT COUNT(*) FROM public.branch_runtime_states WHERE status = 'locked') AS locked_branches, " +
                 " (SELECT COUNT(*) FROM public.onboarding_states WHERE status IN ('in_progress', 'blocked', 'failed_recovery_required')) AS tenants_in_onboarding, " +
-                " (SELECT COUNT(*) FROM latest_subscriptions WHERE COALESCE(status, 'NP') <> 'PD') AS unpaid_subscriptions, " +
-                " (SELECT COUNT(*) FROM latest_subscriptions WHERE status = 'PD' AND \"endTime\" >= CURRENT_DATE) AS active_subscriptions";
+                " (SELECT COUNT(*) FROM branch_billing_context WHERE status <> 'PD') AS unpaid_subscriptions, " +
+                " (SELECT COUNT(*) FROM branch_billing_context WHERE status = 'PD' AND end_time >= CURRENT_DATE) AS active_subscriptions";
 
         Map<String, Object> row = jdbcTemplate.queryForMap(sql);
 
@@ -119,6 +122,7 @@ public class DbPlatformAdminReadModels {
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
+                null,
                 null,
                 new ArrayList<>(),
                 new ArrayList<>(),
@@ -165,15 +169,10 @@ public class DbPlatformAdminReadModels {
                 " GROUP BY b.\"companyId\"" +
                 ") users ON users.company_id = t.tenant_id " +
                 "LEFT JOIN (" +
-                " WITH latest_subscriptions AS (" +
-                "   SELECT DISTINCT ON (\"branchId\") \"branchId\", status " +
-                "   FROM public.\"CompanySubscription\" " +
-                "   ORDER BY \"branchId\", \"sId\" DESC" +
-                " ) " +
-                " SELECT b.\"companyId\" AS company_id, COUNT(*) FILTER (WHERE COALESCE(ls.status, 'NP') <> 'PD') AS unpaid_branch_subscriptions " +
-                " FROM public.\"Branch\" b " +
-                " LEFT JOIN latest_subscriptions ls ON ls.\"branchId\" = b.\"branchId\" " +
-                " GROUP BY b.\"companyId\"" +
+                latestBranchSubscriptionContextSql() +
+                " SELECT tenant_id AS company_id, COUNT(*) FILTER (WHERE status <> 'PD') AS unpaid_branch_subscriptions " +
+                " FROM branch_billing_context " +
+                " GROUP BY tenant_id" +
                 ") subscriptions ON subscriptions.company_id = t.tenant_id " +
                 whereClause;
 
@@ -230,15 +229,10 @@ public class DbPlatformAdminReadModels {
                 " GROUP BY b.\"companyId\"" +
                 ") user_stats ON user_stats.company_id = t.tenant_id " +
                 "LEFT JOIN (" +
-                " WITH latest_subscriptions AS (" +
-                "   SELECT DISTINCT ON (\"branchId\") \"branchId\", status " +
-                "   FROM public.\"CompanySubscription\" " +
-                "   ORDER BY \"branchId\", \"sId\" DESC" +
-                " ) " +
-                " SELECT b.\"companyId\" AS company_id, COUNT(*) FILTER (WHERE COALESCE(ls.status, 'NP') <> 'PD') AS unpaid_branch_subscriptions " +
-                " FROM public.\"Branch\" b " +
-                " LEFT JOIN latest_subscriptions ls ON ls.\"branchId\" = b.\"branchId\" " +
-                " GROUP BY b.\"companyId\"" +
+                latestBranchSubscriptionContextSql() +
+                " SELECT tenant_id AS company_id, COUNT(*) FILTER (WHERE status <> 'PD') AS unpaid_branch_subscriptions " +
+                " FROM branch_billing_context " +
+                " GROUP BY tenant_id" +
                 ") subscription_stats ON subscription_stats.company_id = t.tenant_id " +
                 "WHERE t.tenant_id = ?";
 
@@ -265,47 +259,46 @@ public class DbPlatformAdminReadModels {
                 toInt(row.get("locked_branch_count")),
                 toInt(row.get("user_count")),
                 toInt(row.get("unpaid_branch_subscriptions")),
+                null,
                 getCompanyBranches(tenantId)
         );
     }
 
     public ArrayList<PlatformCompanyBranchSummary> getCompanyBranches(int tenantId) {
-        String sql = "WITH latest_subscriptions AS (" +
-                " SELECT DISTINCT ON (\"branchId\") \"branchId\", status " +
-                " FROM public.\"CompanySubscription\" " +
-                " ORDER BY \"branchId\", \"sId\" DESC" +
-                "), user_counts AS (" +
-                " SELECT \"branchId\", COUNT(*) AS user_count FROM public.users GROUP BY \"branchId\"" +
-                ") " +
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("manualRetryMaxAttempts", Math.max(1, billingProperties.getManualRetryMaxAttempts()))
+                .addValue("retryCooldownThreshold", Timestamp.valueOf(java.time.LocalDateTime.now().minusMinutes(Math.max(0, billingProperties.getManualRetryCooldownMinutes()))));
+        String sql = companyBranchBillingContextSql() +
                 "SELECT " +
                 " b.\"branchId\" AS branch_id, b.\"companyId\" AS tenant_id, b.\"branchName\" AS branch_name, " +
                 " b.\"branchLocation\" AS branch_location, b.\"branchEstTime\" AS branch_established_time, " +
                 " COALESCE(brs.status, 'active') AS runtime_status, COALESCE(uc.user_count, 0) AS user_count, " +
-                " COALESCE(ls.status, 'NONE') AS latest_subscription_status " +
+                " COALESCE(bbc.status, 'UP') AS latest_subscription_status, " +
+                " COALESCE(le.current_state, 'unknown') AS current_entitlement_state, " +
+                " COALESCE(ias.overdue_invoice_count, 0) AS overdue_invoice_count, " +
+                " COALESCE(ias.retry_blocked, FALSE) AS retry_blocked " +
                 "FROM public.\"Branch\" b " +
                 "LEFT JOIN public.branch_runtime_states brs ON brs.branch_id = b.\"branchId\" " +
-                "LEFT JOIN user_counts uc ON uc.\"branchId\" = b.\"branchId\" " +
-                "LEFT JOIN latest_subscriptions ls ON ls.\"branchId\" = b.\"branchId\" " +
-                "WHERE b.\"companyId\" = ? ORDER BY b.\"branchName\" ASC";
-        return new ArrayList<>(jdbcTemplate.query(sql, COMPANY_BRANCH_ROW_MAPPER, tenantId));
+                "LEFT JOIN (" +
+                " SELECT \"branchId\", COUNT(*) AS user_count FROM public.users GROUP BY \"branchId\"" +
+                ") uc ON uc.\"branchId\" = b.\"branchId\" " +
+                "LEFT JOIN branch_billing_context bbc ON bbc.branch_id = b.\"branchId\" " +
+                "LEFT JOIN latest_entitlements le ON le.branch_id = b.\"branchId\" " +
+                "LEFT JOIN invoice_attempt_summary ias ON ias.branch_id = b.\"branchId\" " +
+                "WHERE b.\"companyId\" = :tenantId ORDER BY b.\"branchName\" ASC";
+        return new ArrayList<>(namedParameterJdbcTemplate.query(sql, params, COMPANY_BRANCH_ROW_MAPPER));
     }
 
     public ArrayList<PlatformCompanySubscriptionItem> getCompanySubscriptions(int tenantId) {
-        String sql = "WITH latest_subscriptions AS (" +
-                " SELECT DISTINCT ON (cs.\"branchId\") " +
-                " cs.\"sId\" AS subscription_id, cs.\"branchId\" AS branch_id, cs.\"startTime\" AS start_time, " +
-                " cs.\"endTime\" AS end_time, cs.\"amountToPay\"::money::numeric AS amount_to_pay, " +
-                " cs.\"amountPaid\"::money::numeric AS amount_paid, cs.order_id, cs.status " +
-                " FROM public.\"CompanySubscription\" cs " +
-                " JOIN public.\"Branch\" b ON b.\"branchId\" = cs.\"branchId\" " +
-                " WHERE b.\"companyId\" = ? " +
-                " ORDER BY cs.\"branchId\", cs.\"sId\" DESC" +
-                ") " +
-                "SELECT ls.subscription_id, ls.branch_id, b.\"branchName\" AS branch_name, ls.start_time, ls.end_time, " +
-                "ls.amount_to_pay, ls.amount_paid, ls.order_id, ls.status " +
-                "FROM latest_subscriptions ls " +
-                "JOIN public.\"Branch\" b ON b.\"branchId\" = ls.branch_id " +
-                "ORDER BY b.\"branchName\" ASC";
+        String sql = latestBranchSubscriptionContextSql() +
+                "SELECT bbc.subscription_id, bbc.branch_id, bbc.branch_name, bbc.start_time, bbc.end_time, " +
+                "bbc.amount_to_pay, bbc.amount_paid, " +
+                "CASE WHEN bbc.external_order_id ~ '^[0-9]+$' THEN CAST(bbc.external_order_id AS INTEGER) ELSE 0 END AS order_id, " +
+                "bbc.status " +
+                "FROM branch_billing_context bbc " +
+                "WHERE bbc.tenant_id = ? " +
+                "ORDER BY bbc.branch_name ASC";
         return new ArrayList<>(jdbcTemplate.query(sql, COMPANY_SUBSCRIPTION_ROW_MAPPER, tenantId));
     }
 
@@ -325,6 +318,69 @@ public class DbPlatformAdminReadModels {
                 branchId
         );
         return results.isEmpty() ? null : results.get(0);
+    }
+
+    private String latestBranchSubscriptionContextSql() {
+        return "WITH latest_payment_attempts AS (" +
+                " SELECT DISTINCT ON (bpa.billing_invoice_id) " +
+                " bpa.billing_invoice_id, bpa.provider_code, bpa.external_order_id " +
+                " FROM public.billing_payment_attempts bpa " +
+                " ORDER BY bpa.billing_invoice_id, bpa.billing_payment_attempt_id DESC" +
+                "), latest_invoice_per_subscription AS (" +
+                " SELECT DISTINCT ON (bi.source_id) " +
+                " bi.source_id, bi.billing_invoice_id, bi.status AS invoice_status, bi.total_amount, bi.due_amount, " +
+                " lpa.provider_code, lpa.external_order_id " +
+                " FROM public.billing_invoices bi " +
+                " LEFT JOIN latest_payment_attempts lpa ON lpa.billing_invoice_id = bi.billing_invoice_id " +
+                " WHERE bi.source_type = 'branch_subscription' " +
+                " ORDER BY bi.source_id, bi.billing_invoice_id DESC" +
+                "), branch_billing_context AS (" +
+                " SELECT DISTINCT ON (b.\"branchId\") " +
+                " t.tenant_id, c.id AS company_id, c.\"companyName\" AS company_name, " +
+                " b.\"branchId\" AS branch_id, b.\"branchName\" AS branch_name, " +
+                " COALESCE(bs.branch_subscription_id, 0) AS subscription_id, " +
+                " bs.current_period_start AS start_time, bs.current_period_end AS end_time, " +
+                " COALESCE(lis.total_amount, bs.unit_amount, 0) AS amount_to_pay, " +
+                " GREATEST(COALESCE(lis.total_amount, bs.unit_amount, 0) - COALESCE(lis.due_amount, 0), 0) AS amount_paid, " +
+                " COALESCE(lis.external_order_id, '') AS external_order_id, " +
+                " CASE " +
+                "   WHEN bs.branch_subscription_id IS NOT NULL " +
+                "    AND LOWER(COALESCE(bs.status, '')) = 'active' " +
+                "    AND LOWER(COALESCE(lis.invoice_status, '')) = 'paid' THEN 'PD' " +
+                "   ELSE 'UP' " +
+                " END AS status " +
+                " FROM public.\"Branch\" b " +
+                " JOIN public.tenants t ON t.tenant_id = b.\"companyId\" " +
+                " JOIN public.\"Company\" c ON c.id = b.\"companyId\" " +
+                " LEFT JOIN public.branch_subscriptions bs ON bs.branch_id = b.\"branchId\" " +
+                " LEFT JOIN latest_invoice_per_subscription lis ON lis.source_id = bs.branch_subscription_id::text " +
+                " ORDER BY b.\"branchId\", bs.branch_subscription_id DESC NULLS LAST, lis.billing_invoice_id DESC NULLS LAST" +
+                ") ";
+    }
+
+    private String companyBranchBillingContextSql() {
+        return latestBranchSubscriptionContextSql() +
+                ", latest_entitlements AS (" +
+                " SELECT DISTINCT ON (bee.branch_id) bee.branch_id, bee.to_state AS current_state " +
+                " FROM public.billing_entitlement_events bee " +
+                " ORDER BY bee.branch_id, bee.effective_at DESC, bee.billing_entitlement_event_id DESC" +
+                "), invoice_attempt_summary AS (" +
+                " SELECT bs.branch_id, " +
+                " COUNT(*) FILTER (WHERE LOWER(bi.status) = 'open' AND bi.due_at IS NOT NULL AND bi.due_at < NOW()) AS overdue_invoice_count, " +
+                " BOOL_OR( " +
+                "   LOWER(bi.status) = 'open' AND COALESCE(bi.due_amount, 0) > 0 AND (" +
+                "     COALESCE(pa.attempt_count, 0) >= :manualRetryMaxAttempts OR " +
+                "     (pa.latest_attempt_at IS NOT NULL AND pa.latest_attempt_at > :retryCooldownThreshold)" +
+                "   )" +
+                " ) AS retry_blocked " +
+                " FROM public.branch_subscriptions bs " +
+                " LEFT JOIN public.billing_invoices bi ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
+                " LEFT JOIN (" +
+                "   SELECT billing_invoice_id, COUNT(*) AS attempt_count, MAX(COALESCE(completed_at, attempted_at)) AS latest_attempt_at " +
+                "   FROM public.billing_payment_attempts GROUP BY billing_invoice_id" +
+                " ) pa ON pa.billing_invoice_id = bi.billing_invoice_id " +
+                " GROUP BY bs.branch_id" +
+                ") ";
     }
 
     private String buildCompanyWhereClause(String search,

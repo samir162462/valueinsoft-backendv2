@@ -1,8 +1,11 @@
 package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminAudit;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAuditEventItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAuditEventsPageResponse;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
 
 @Service
 public class PlatformAdminAuditService {
@@ -34,5 +37,12 @@ public class PlatformAdminAuditService {
                 page,
                 size
         );
+    }
+
+    public ArrayList<PlatformAuditEventItem> getRecentBillingAuditEventsForAuthenticatedUser(String authenticatedName,
+                                                                                              int tenantId,
+                                                                                              int limit) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.audit.read");
+        return dbPlatformAdminAudit.getRecentBillingAuditEvents(tenantId, limit);
     }
 }

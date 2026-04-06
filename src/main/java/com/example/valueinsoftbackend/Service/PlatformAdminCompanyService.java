@@ -11,8 +11,12 @@ import com.example.valueinsoftbackend.Model.Client;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingHealthSnapshotResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformTenantBillingWorkflowSummaryResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchSummary;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanySubscriptionItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAuditEventItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupportNoteItem;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminReadModels;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompaniesPageResponse;
@@ -39,6 +43,9 @@ public class PlatformAdminCompanyService {
     private final DbClient dbClient;
     private final DbPosProduct dbPosProduct;
     private final PlatformAuthorizationService platformAuthorizationService;
+    private final BillingSchedulerService billingSchedulerService;
+    private final PlatformAdminAuditService platformAdminAuditService;
+    private final PlatformSupportService platformSupportService;
 
     public PlatformAdminCompanyService(DbPlatformAdminReadModels dbPlatformAdminReadModels,
                                        DbCompany dbCompany,
@@ -46,7 +53,10 @@ public class PlatformAdminCompanyService {
                                        DbConfigurationAdmin dbConfigurationAdmin,
                                        DbClient dbClient,
                                        DbPosProduct dbPosProduct,
-                                       PlatformAuthorizationService platformAuthorizationService) {
+                                       PlatformAuthorizationService platformAuthorizationService,
+                                       BillingSchedulerService billingSchedulerService,
+                                       PlatformAdminAuditService platformAdminAuditService,
+                                       PlatformSupportService platformSupportService) {
         this.dbPlatformAdminReadModels = dbPlatformAdminReadModels;
         this.dbCompany = dbCompany;
         this.dbBranch = dbBranch;
@@ -54,6 +64,9 @@ public class PlatformAdminCompanyService {
         this.dbClient = dbClient;
         this.dbPosProduct = dbPosProduct;
         this.platformAuthorizationService = platformAuthorizationService;
+        this.billingSchedulerService = billingSchedulerService;
+        this.platformAdminAuditService = platformAdminAuditService;
+        this.platformSupportService = platformSupportService;
     }
 
     public PlatformCompaniesPageResponse getCompaniesForAuthenticatedUser(String authenticatedName,
@@ -70,7 +83,10 @@ public class PlatformAdminCompanyService {
     public PlatformCompany360Response getCompany360ForAuthenticatedUser(String authenticatedName, int tenantId) {
         platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.company.read");
         requireCompany(tenantId);
-        return dbPlatformAdminReadModels.getCompany360(tenantId);
+        PlatformCompany360Response response = dbPlatformAdminReadModels.getCompany360(tenantId);
+        PlatformBillingHealthSnapshotResponse billingHealthSnapshot = billingSchedulerService.getBillingHealthSnapshot(tenantId);
+        response.setBillingHealthSnapshot(billingHealthSnapshot);
+        return response;
     }
 
     public ArrayList<PlatformCompanyBranchSummary> getCompanyBranchesForAuthenticatedUser(String authenticatedName, int tenantId) {
@@ -95,6 +111,28 @@ public class PlatformAdminCompanyService {
         platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.company.read");
         requireCompany(tenantId);
         return dbPlatformAdminReadModels.getCompanySubscriptions(tenantId);
+    }
+
+    public PlatformTenantBillingWorkflowSummaryResponse getTenantBillingWorkflowSummaryForAuthenticatedUser(String authenticatedName,
+                                                                                                            int tenantId) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.company.read");
+        requireCompany(tenantId);
+
+        PlatformBillingHealthSnapshotResponse billingHealthSnapshot = billingSchedulerService.getBillingHealthSnapshot(tenantId);
+        ArrayList<PlatformAuditEventItem> recentBillingAuditEvents =
+                platformAdminAuditService.getRecentBillingAuditEventsForAuthenticatedUser(authenticatedName, tenantId, 10);
+        ArrayList<PlatformSupportNoteItem> recentBillingSupportNotes =
+                platformSupportService.getRecentBillingNotesForAuthenticatedUser(authenticatedName, tenantId, 10);
+
+        return new PlatformTenantBillingWorkflowSummaryResponse(
+                tenantId,
+                billingHealthSnapshot,
+                platformSupportService.countBillingNotesForAuthenticatedUser(authenticatedName, tenantId, null),
+                platformSupportService.countBillingNotesForAuthenticatedUser(authenticatedName, tenantId, "restricted"),
+                recentBillingAuditEvents,
+                recentBillingSupportNotes,
+                new java.sql.Timestamp(System.currentTimeMillis())
+        );
     }
 
     public ArrayList<Client> getCompanyClientsForAuthenticatedUser(String authenticatedName,

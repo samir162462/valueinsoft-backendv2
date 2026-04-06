@@ -129,6 +129,41 @@ public class DbPlatformSupportNotes {
         return items.get(0);
     }
 
+    public ArrayList<PlatformSupportNoteItem> getRecentBillingNotes(int tenantId, int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 20);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("tenantId", tenantId)
+                .addValue("limit", safeLimit);
+
+        String sql = "SELECT psn.note_id, psn.tenant_id, c.\"companyName\" AS company_name, psn.branch_id, " +
+                "b.\"branchName\" AS branch_name, psn.note_type, psn.subject, psn.body, psn.visibility, " +
+                "psn.created_by_user_id, psn.created_by_user_name, psn.created_at, psn.updated_at " +
+                "FROM public.platform_support_notes psn " +
+                "JOIN public.\"Company\" c ON c.id = psn.tenant_id " +
+                "LEFT JOIN public.\"Branch\" b ON b.\"branchId\" = psn.branch_id " +
+                "WHERE psn.tenant_id = :tenantId AND LOWER(psn.note_type) = 'billing' " +
+                "ORDER BY psn.created_at DESC, psn.note_id DESC LIMIT :limit";
+
+        return new ArrayList<>(namedParameterJdbcTemplate.query(sql, params, SUPPORT_NOTE_ROW_MAPPER));
+    }
+
+    public int countBillingNotes(int tenantId, String visibility) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("tenantId", tenantId);
+
+        StringBuilder sql = new StringBuilder(
+                "SELECT COUNT(*) FROM public.platform_support_notes psn " +
+                        "WHERE psn.tenant_id = :tenantId AND LOWER(psn.note_type) = 'billing' "
+        );
+        if (visibility != null && !visibility.trim().isEmpty()) {
+            params.addValue("visibility", visibility.trim().toLowerCase());
+            sql.append("AND LOWER(psn.visibility) = :visibility ");
+        }
+
+        Integer count = namedParameterJdbcTemplate.queryForObject(sql.toString(), params, Integer.class);
+        return count == null ? 0 : count;
+    }
+
     private String buildWhereClause(Integer tenantId,
                                     Integer branchId,
                                     String noteType,

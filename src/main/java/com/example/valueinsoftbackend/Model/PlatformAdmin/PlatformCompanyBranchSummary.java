@@ -18,4 +18,7 @@ public class PlatformCompanyBranchSummary {
     private String runtimeStatus;
     private int userCount;
     private String latestSubscriptionStatus;
+    private String currentEntitlementState;
+    private int overdueInvoiceCount;
+    private boolean retryBlocked;
 }

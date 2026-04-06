@@ -102,20 +102,46 @@ public class DbPlatformAdminAudit {
         return new ArrayList<>(namedParameterJdbcTemplate.query(sql, params, AUDIT_EVENT_ROW_MAPPER));
     }
 
+    public ArrayList<PlatformAuditEventItem> getRecentBillingAuditEvents(Integer targetTenantId, int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 20);
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("limit", safeLimit);
+
+        StringBuilder sql = new StringBuilder(
+                "SELECT pal.event_id, pal.actor_user_id, pal.actor_user_name, pal.capability_key, pal.action_type, " +
+                        "pal.target_tenant_id, pal.target_branch_id, pal.request_summary::text AS request_summary_json, " +
+                        "pal.context_summary::text AS context_summary_json, pal.result_status, pal.correlation_id, pal.created_at " +
+                        "FROM public.platform_admin_audit_log pal " +
+                        "WHERE LOWER(pal.action_type) LIKE 'platform.billing.%' "
+        );
+
+        if (targetTenantId != null) {
+            params.addValue("targetTenantId", targetTenantId);
+            sql.append("AND pal.target_tenant_id = :targetTenantId ");
+        }
+
+        sql.append("ORDER BY pal.created_at DESC, pal.event_id DESC LIMIT :limit");
+        return new ArrayList<>(namedParameterJdbcTemplate.query(sql.toString(), params, AUDIT_EVENT_ROW_MAPPER));
+    }
+
     private PlatformAuditEventItem getLatestAuditEventByActionTypes(List<String> actionTypes, String resultStatus) {
         MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("actionTypes", actionTypes)
-                .addValue("resultStatus", resultStatus);
+                .addValue("actionTypes", actionTypes);
 
-        String sql = "SELECT pal.event_id, pal.actor_user_id, pal.actor_user_name, pal.capability_key, pal.action_type, " +
+        StringBuilder sql = new StringBuilder("SELECT pal.event_id, pal.actor_user_id, pal.actor_user_name, pal.capability_key, pal.action_type, " +
                 "pal.target_tenant_id, pal.target_branch_id, pal.request_summary::text AS request_summary_json, " +
                 "pal.context_summary::text AS context_summary_json, pal.result_status, pal.correlation_id, pal.created_at " +
                 "FROM public.platform_admin_audit_log pal " +
-                "WHERE pal.action_type IN (:actionTypes) " +
-                "AND (:resultStatus IS NULL OR LOWER(pal.result_status) = LOWER(:resultStatus)) " +
-                "ORDER BY pal.created_at DESC, pal.event_id DESC LIMIT 1";
+                "WHERE pal.action_type IN (:actionTypes) ");
 
-        List<PlatformAuditEventItem> results = namedParameterJdbcTemplate.query(sql, params, AUDIT_EVENT_ROW_MAPPER);
+        if (resultStatus != null && !resultStatus.trim().isEmpty()) {
+            params.addValue("resultStatus", resultStatus.trim().toLowerCase());
+            sql.append("AND LOWER(pal.result_status) = :resultStatus ");
+        }
+
+        sql.append("ORDER BY pal.created_at DESC, pal.event_id DESC LIMIT 1");
+
+        List<PlatformAuditEventItem> results = namedParameterJdbcTemplate.query(sql.toString(), params, AUDIT_EVENT_ROW_MAPPER);
         return results.isEmpty() ? null : results.get(0);
     }
 

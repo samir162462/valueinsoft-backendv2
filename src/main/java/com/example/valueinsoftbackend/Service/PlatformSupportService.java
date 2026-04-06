@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
 
 @Service
 public class PlatformSupportService {
@@ -90,6 +91,22 @@ public class PlatformSupportService {
         platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.support.read");
         requireTenant(tenantId);
         return dbPlatformSupportNotes.getSupportNotes(tenantId, null, null, null, page, size);
+    }
+
+    public ArrayList<PlatformSupportNoteItem> getRecentBillingNotesForAuthenticatedUser(String authenticatedName,
+                                                                                         int tenantId,
+                                                                                         int limit) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.support.read");
+        requireTenant(tenantId);
+        return dbPlatformSupportNotes.getRecentBillingNotes(tenantId, limit);
+    }
+
+    public int countBillingNotesForAuthenticatedUser(String authenticatedName,
+                                                     int tenantId,
+                                                     String visibility) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.support.read");
+        requireTenant(tenantId);
+        return dbPlatformSupportNotes.countBillingNotes(tenantId, visibility);
     }
 
     @Transactional
