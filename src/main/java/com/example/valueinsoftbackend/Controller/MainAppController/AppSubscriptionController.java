@@ -8,12 +8,15 @@ package com.example.valueinsoftbackend.Controller.MainAppController;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.Model.Branch;
+import com.example.valueinsoftbackend.Model.AppModel.BranchBillingCheckoutResponse;
 import com.example.valueinsoftbackend.Model.Request.CreateSubscriptionRequest;
 import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.Service.BranchService;
 import com.example.valueinsoftbackend.Service.SubscriptionService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import javax.validation.Valid;
 import javax.validation.constraints.Positive;
@@ -62,6 +65,19 @@ public class AppSubscriptionController {
                 "company.settings.edit"
         );
         return subscriptionService.addBranchSubscription(appModelSubscription);
+    }
+
+    @PostMapping("/{branchId}/checkout")
+    public ResponseEntity<BranchBillingCheckoutResponse> createBranchCheckout(@PathVariable @Positive int branchId,
+                                                                              Principal principal) {
+        Branch branch = branchService.getBranchById(branchId);
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                branch.getBranchOfCompanyId(),
+                branchId,
+                "company.settings.edit"
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(subscriptionService.createBranchCheckout(branchId));
     }
 
     @GetMapping(path = {"/Res"})

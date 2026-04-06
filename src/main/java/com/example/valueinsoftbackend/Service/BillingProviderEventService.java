@@ -44,4 +44,10 @@ public class BillingProviderEventService {
                 errorMessage
         );
     }
+
+    public boolean isProcessedEvent(String providerCode, String providerEventId) {
+        return "processed".equalsIgnoreCase(
+                dbBillingWriteModels.findProviderEventStatus(providerCode, providerEventId)
+        );
+    }
 }

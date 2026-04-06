@@ -11,6 +11,10 @@ import javax.validation.constraints.PositiveOrZero;
 @Data
 public class PayMobTransactionCallbackRequest {
 
+    private String hmac;
+
+    private String type;
+
     @Valid
     @NotNull(message = "obj is required")
     @JsonProperty("obj")
@@ -30,6 +34,23 @@ public class PayMobTransactionCallbackRequest {
         @NotNull(message = "obj.amount_cents is required")
         @PositiveOrZero(message = "obj.amount_cents must be zero or greater")
         private Integer amountCents;
+
+        @JsonProperty("created_at")
+        private String createdAt;
+
+        private String currency;
+
+        @JsonProperty("error_occured")
+        private Boolean errorOccured;
+
+        @JsonProperty("has_parent_transaction")
+        private Boolean hasParentTransaction;
+
+        @JsonProperty("integration_id")
+        private Integer integrationId;
+
+        @JsonProperty("is_3d_secure")
+        private Boolean secure3d;
 
         @NotNull(message = "obj.success is required")
         private Boolean success;
@@ -54,9 +75,15 @@ public class PayMobTransactionCallbackRequest {
         @NotNull(message = "obj.is_refunded is required")
         private Boolean refunded;
 
+        private Integer owner;
+
         @Valid
         @NotNull(message = "obj.order is required")
         private OrderPayload order;
+
+        @Valid
+        @JsonProperty("source_data")
+        private SourceDataPayload sourceData;
     }
 
     @Data
@@ -65,5 +92,16 @@ public class PayMobTransactionCallbackRequest {
         @NotNull(message = "obj.order.id is required")
         @Positive(message = "obj.order.id must be positive")
         private Integer id;
+    }
+
+    @Data
+    public static class SourceDataPayload {
+
+        private String pan;
+
+        @JsonProperty("sub_type")
+        private String subType;
+
+        private String type;
     }
 }

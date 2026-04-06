@@ -1,8 +1,10 @@
 package com.example.valueinsoftbackend.DatabaseRequests;
 
 import com.example.valueinsoftbackend.Model.Billing.BillingOverdueInvoiceCandidate;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptValidationContext;
 import com.example.valueinsoftbackend.Model.Billing.BillingRenewalCandidate;
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceRetryCandidate;
+import com.example.valueinsoftbackend.Model.Billing.BranchBillingCheckoutCandidate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -70,6 +72,21 @@ public class DbBillingWriteModels {
                     rs.getString("invoice_status"),
                     rs.getInt("attempt_count"),
                     rs.getTimestamp("latest_attempt_at")
+            );
+
+    private static final RowMapper<BranchBillingCheckoutCandidate> BRANCH_CHECKOUT_CANDIDATE_ROW_MAPPER = (rs, rowNum) ->
+            new BranchBillingCheckoutCandidate(
+                    rs.getLong("billing_invoice_id"),
+                    rs.getLong("branch_subscription_id"),
+                    rs.getLong("billing_account_id"),
+                    rs.getInt("tenant_id"),
+                    rs.getInt("company_id"),
+                    rs.getInt("branch_id"),
+                    rs.getString("currency_code"),
+                    rs.getBigDecimal("due_amount"),
+                    rs.getString("invoice_status"),
+                    rs.getString("latest_attempt_status"),
+                    rs.getString("latest_external_order_id")
             );
 
     private final JdbcTemplate jdbcTemplate;
@@ -329,6 +346,27 @@ public class DbBillingWriteModels {
         return ids.isEmpty() ? null : ids.get(0);
     }
 
+    public BillingPaymentAttemptValidationContext findPaymentAttemptValidationContext(String providerCode, String externalOrderId) {
+        List<BillingPaymentAttemptValidationContext> items = namedParameterJdbcTemplate.query(
+                "SELECT billing_payment_attempt_id, billing_invoice_id, requested_amount, currency_code, status, external_payment_reference " +
+                        "FROM public.billing_payment_attempts " +
+                        "WHERE LOWER(provider_code) = LOWER(:providerCode) AND external_order_id = :externalOrderId " +
+                        "ORDER BY billing_payment_attempt_id DESC",
+                new MapSqlParameterSource()
+                        .addValue("providerCode", providerCode)
+                        .addValue("externalOrderId", externalOrderId),
+                (rs, rowNum) -> new BillingPaymentAttemptValidationContext(
+                        rs.getLong("billing_payment_attempt_id"),
+                        rs.getLong("billing_invoice_id"),
+                        rs.getBigDecimal("requested_amount"),
+                        rs.getString("currency_code"),
+                        rs.getString("status"),
+                        rs.getString("external_payment_reference")
+                )
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
     public long createPaymentAttempt(long invoiceId,
                                      String providerCode,
                                      String externalOrderId,
@@ -463,6 +501,18 @@ public class DbBillingWriteModels {
                         .addValue("processingStatus", processingStatus)
                         .addValue("errorMessage", errorMessage)
         );
+    }
+
+    public String findProviderEventStatus(String providerCode, String providerEventId) {
+        List<String> items = namedParameterJdbcTemplate.query(
+                "SELECT processing_status FROM public.billing_provider_events " +
+                        "WHERE LOWER(provider_code) = LOWER(:providerCode) AND provider_event_id = :providerEventId",
+                new MapSqlParameterSource()
+                        .addValue("providerCode", providerCode)
+                        .addValue("providerEventId", providerEventId),
+                (rs, rowNum) -> rs.getString("processing_status")
+        );
+        return items.isEmpty() ? null : items.get(0);
     }
 
     public void createEntitlementEvent(int branchId,
@@ -602,6 +652,30 @@ public class DbBillingWriteModels {
                         "WHERE bi.billing_invoice_id = :billingInvoiceId",
                 new MapSqlParameterSource().addValue("billingInvoiceId", billingInvoiceId),
                 INVOICE_RETRY_CANDIDATE_ROW_MAPPER
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public BranchBillingCheckoutCandidate findBranchCheckoutCandidate(int branchId) {
+        List<BranchBillingCheckoutCandidate> items = namedParameterJdbcTemplate.query(
+                "WITH latest_attempt AS (" +
+                        " SELECT DISTINCT ON (bpa.billing_invoice_id) " +
+                        " bpa.billing_invoice_id, bpa.status AS latest_attempt_status, bpa.external_order_id AS latest_external_order_id " +
+                        " FROM public.billing_payment_attempts bpa " +
+                        " ORDER BY bpa.billing_invoice_id, bpa.billing_payment_attempt_id DESC" +
+                        ") " +
+                        "SELECT bi.billing_invoice_id, bs.branch_subscription_id, bi.billing_account_id, ba.tenant_id, ba.company_id, bs.branch_id, " +
+                        " bi.currency_code, bi.due_amount, bi.status AS invoice_status, la.latest_attempt_status, la.latest_external_order_id " +
+                        "FROM public.branch_subscriptions bs " +
+                        "JOIN public.billing_invoices bi ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
+                        "JOIN public.billing_accounts ba ON ba.billing_account_id = bi.billing_account_id " +
+                        "LEFT JOIN latest_attempt la ON la.billing_invoice_id = bi.billing_invoice_id " +
+                        "WHERE bs.branch_id = :branchId " +
+                        "AND COALESCE(bi.due_amount, 0) > 0 " +
+                        "ORDER BY bs.branch_subscription_id DESC " +
+                        "LIMIT 1",
+                new MapSqlParameterSource().addValue("branchId", branchId),
+                BRANCH_CHECKOUT_CANDIDATE_ROW_MAPPER
         );
         return items.isEmpty() ? null : items.get(0);
     }

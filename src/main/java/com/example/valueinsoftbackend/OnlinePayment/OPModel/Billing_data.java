@@ -31,7 +31,7 @@ public class Billing_data {
         this.shipping_method = "NA";
         this.postal_code = "NA";
         this.city = "NA";
-        this.country = "NA";
+        this.country = "EG";
         this.floor = "NA";
         this.state = "NA";
     }
