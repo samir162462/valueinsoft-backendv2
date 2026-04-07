@@ -6,12 +6,14 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbBillingWriteModels;
 import com.example.valueinsoftbackend.DatabaseRequests.DbModernSubscription;
+import com.example.valueinsoftbackend.DatabaseRequests.DbTenants;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.AppModel.AppModelSubscription;
 import com.example.valueinsoftbackend.Model.AppModel.BranchBillingCheckoutResponse;
 import com.example.valueinsoftbackend.Model.Billing.BranchBillingCheckoutCandidate;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
+import com.example.valueinsoftbackend.Model.Configuration.TenantConfig;
 import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Model.Request.CreateSubscriptionRequest;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +35,7 @@ public class SubscriptionService {
     private final DbBillingWriteModels dbBillingWriteModels;
     private final DbCompany dbCompany;
     private final DbBranch dbBranch;
+    private final DbTenants dbTenants;
     private final BillingAccountService billingAccountService;
     private final InvoiceService invoiceService;
     private final PaymentAttemptService paymentAttemptService;
@@ -43,6 +47,7 @@ public class SubscriptionService {
                                DbBillingWriteModels dbBillingWriteModels,
                                DbCompany dbCompany,
                                DbBranch dbBranch,
+                               DbTenants dbTenants,
                                BillingAccountService billingAccountService,
                                InvoiceService invoiceService,
                                PaymentAttemptService paymentAttemptService,
@@ -53,6 +58,7 @@ public class SubscriptionService {
         this.dbBillingWriteModels = dbBillingWriteModels;
         this.dbCompany = dbCompany;
         this.dbBranch = dbBranch;
+        this.dbTenants = dbTenants;
         this.billingAccountService = billingAccountService;
         this.invoiceService = invoiceService;
         this.paymentAttemptService = paymentAttemptService;
@@ -133,13 +139,38 @@ public class SubscriptionService {
     }
 
     public Map<String, Object> isActive(int branchId) {
-        return dbModernSubscription.getBranchActiveState(branchId);
+        Branch branch = dbBranch.getBranchById(branchId);
+        TenantConfig tenant = dbTenants.getTenantById(branch.getBranchOfCompanyId());
+        if (tenant != null && "suspended".equalsIgnoreCase(tenant.getStatus())) {
+            Map<String, Object> details = dbModernSubscription.getBranchActiveState(branchId);
+            if (details == null) {
+                details = new java.util.HashMap<>();
+            }
+            details.put("active", false);
+            details.put("status", "SUSPENDED");
+            details.put("tenantStatus", "suspended");
+            details.put("blockReason", "tenant_suspended");
+            details.put("message", "Company is suspended by platform admin");
+            return details;
+        }
+
+        Map<String, Object> details = dbModernSubscription.getBranchActiveState(branchId);
+        if (details != null && tenant != null) {
+            details.put("tenantStatus", tenant.getStatus());
+        }
+        return details;
     }
 
     @Transactional
     public BranchBillingCheckoutResponse createBranchCheckout(int branchId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         BranchBillingCheckoutCandidate candidate = dbBillingWriteModels.findBranchCheckoutCandidate(branchId);
+        if (candidate == null) {
+            if (!dbModernSubscription.hasBranchSubscriptionRecords(branchId)) {
+                createDefaultPayableBranchSubscription(branchId);
+                candidate = dbBillingWriteModels.findBranchCheckoutCandidate(branchId);
+            }
+        }
         if (candidate == null) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
@@ -205,6 +236,48 @@ public class SubscriptionService {
                 candidate.getDueAmount(),
                 normalizeCurrency(candidate.getCurrencyCode())
         );
+    }
+
+    private long createDefaultPayableBranchSubscription(int branchId) {
+        Branch branch = dbBranch.getBranchById(branchId);
+        Company company = requireCompany(branch.getBranchOfCompanyId());
+        long billingAccountId = billingAccountService.ensureBillingAccount(company);
+        BigDecimal amountToPay = resolveDefaultBranchSubscriptionAmount(company);
+        LocalDate startDate = LocalDate.now();
+        LocalDate endDate = startDate.plusDays(30);
+
+        long branchSubscriptionId = dbModernSubscription.createBranchSubscription(
+                billingAccountId,
+                company.getCompanyId(),
+                branchId,
+                company.getPlan(),
+                amountToPay,
+                Date.valueOf(startDate),
+                Date.valueOf(endDate)
+        );
+        long invoiceId = invoiceService.ensureBranchSubscriptionInvoice(
+                billingAccountId,
+                branchSubscriptionId,
+                normalizeCurrency(company.getCurrency()),
+                amountToPay,
+                BigDecimal.ZERO,
+                "Branch subscription for " + branch.getBranchName()
+        );
+        billingEntitlementService.recordPendingPayment(branchId, branchSubscriptionId, invoiceId, 0);
+
+        log.info(
+                "Created default payable branch subscription {} for branch {} during checkout recovery",
+                branchSubscriptionId,
+                branchId
+        );
+        return branchSubscriptionId;
+    }
+
+    private BigDecimal resolveDefaultBranchSubscriptionAmount(Company company) {
+        if (company.getEstablishPrice() > 0) {
+            return BigDecimal.valueOf(company.getEstablishPrice());
+        }
+        return BigDecimal.valueOf(500L);
     }
 
     private boolean shouldCreateNewProviderOrder(BranchBillingCheckoutCandidate candidate, String externalOrderId) {

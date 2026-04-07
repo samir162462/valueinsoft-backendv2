@@ -294,7 +294,11 @@ public class DbPlatformAdminReadModels {
         String sql = latestBranchSubscriptionContextSql() +
                 "SELECT bbc.subscription_id, bbc.branch_id, bbc.branch_name, bbc.start_time, bbc.end_time, " +
                 "bbc.amount_to_pay, bbc.amount_paid, " +
-                "CASE WHEN bbc.external_order_id ~ '^[0-9]+$' THEN CAST(bbc.external_order_id AS INTEGER) ELSE 0 END AS order_id, " +
+                "CASE " +
+                " WHEN bbc.external_order_id ~ '^[0-9]{1,9}$' THEN CAST(bbc.external_order_id AS INTEGER) " +
+                " WHEN bbc.external_order_id ~ '^[0-9]{10}$' AND bbc.external_order_id <= '2147483647' THEN CAST(bbc.external_order_id AS INTEGER) " +
+                " ELSE 0 " +
+                "END AS order_id, " +
                 "bbc.status " +
                 "FROM branch_billing_context bbc " +
                 "WHERE bbc.tenant_id = ? " +

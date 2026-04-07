@@ -69,4 +69,23 @@ public class BillingEntitlementService {
                 "{\"attemptNumber\":" + attemptNumber + "}"
         );
     }
+
+    public void recordManualStateChange(int branchId,
+                                        Long branchSubscriptionId,
+                                        Long billingInvoiceId,
+                                        String fromState,
+                                        String toState,
+                                        String reasonCode,
+                                        String metadataJson) {
+        dbBillingWriteModels.createEntitlementEvent(
+                branchId,
+                branchSubscriptionId,
+                billingInvoiceId,
+                "subscription_manual_billing_adjustment",
+                fromState,
+                toState,
+                reasonCode,
+                metadataJson
+        );
+    }
 }

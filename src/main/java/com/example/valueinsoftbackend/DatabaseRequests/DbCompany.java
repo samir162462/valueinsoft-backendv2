@@ -36,6 +36,7 @@ public class DbCompany {
                 null
         );
         company.setOwnerId(rs.getInt("ownerId"));
+        company.setTenantStatus(rs.getString("tenantStatus"));
         return company;
     };
 
@@ -62,8 +63,11 @@ public class DbCompany {
     }
 
     public Company getCompanyByOwnerId(int ownerId) {
-        String sql = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\", " +
-                "\"currency\", \"comImg\" FROM public.\"Company\" WHERE \"ownerId\" = ?";
+        String sql = "SELECT c.id, c.\"companyName\", c.\"establishedTime\", c.\"ownerId\", c.\"planName\", c.\"planPrice\", " +
+                "c.\"currency\", c.\"comImg\", COALESCE(t.status, 'active') AS \"tenantStatus\" " +
+                "FROM public.\"Company\" c " +
+                "LEFT JOIN public.tenants t ON t.tenant_id = c.id " +
+                "WHERE c.\"ownerId\" = ?";
         List<Company> companies = jdbcTemplate.query(sql, COMPANY_ROW_MAPPER, ownerId);
         if (companies.isEmpty()) {
             return null;
@@ -116,8 +120,11 @@ public class DbCompany {
     }
 
     public Company getCompanyById(int companyId) {
-        String sql = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\", " +
-                "\"currency\", \"comImg\" FROM public.\"Company\" WHERE id = ?";
+        String sql = "SELECT c.id, c.\"companyName\", c.\"establishedTime\", c.\"ownerId\", c.\"planName\", c.\"planPrice\", " +
+                "c.\"currency\", c.\"comImg\", COALESCE(t.status, 'active') AS \"tenantStatus\" " +
+                "FROM public.\"Company\" c " +
+                "LEFT JOIN public.tenants t ON t.tenant_id = c.id " +
+                "WHERE c.id = ?";
         List<Company> companies = jdbcTemplate.query(sql, COMPANY_ROW_MAPPER, companyId);
         if (companies.isEmpty()) {
             return null;
@@ -128,8 +135,10 @@ public class DbCompany {
     }
 
     public ArrayList<Company> getAllCompanies() {
-        String sql = "SELECT id, \"companyName\", \"establishedTime\", \"ownerId\", \"planName\", \"planPrice\", " +
-                "\"currency\", \"comImg\" FROM public.\"Company\"";
+        String sql = "SELECT c.id, c.\"companyName\", c.\"establishedTime\", c.\"ownerId\", c.\"planName\", c.\"planPrice\", " +
+                "c.\"currency\", c.\"comImg\", COALESCE(t.status, 'active') AS \"tenantStatus\" " +
+                "FROM public.\"Company\" c " +
+                "LEFT JOIN public.tenants t ON t.tenant_id = c.id";
         return new ArrayList<>(jdbcTemplate.query(sql, COMPANY_ROW_MAPPER));
     }
 

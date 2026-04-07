@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.DatabaseRequests;
 
 import com.example.valueinsoftbackend.Model.Billing.BillingOverdueInvoiceCandidate;
+import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceMutationContext;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptValidationContext;
 import com.example.valueinsoftbackend.Model.Billing.BillingRenewalCandidate;
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceRetryCandidate;
@@ -394,6 +395,93 @@ public class DbBillingWriteModels {
                 new String[]{"billing_payment_attempt_id"}
         );
         return keyHolder.getKey().longValue();
+    }
+
+    public BillingInvoiceMutationContext findInvoiceMutationContext(long billingInvoiceId) {
+        List<BillingInvoiceMutationContext> items = namedParameterJdbcTemplate.query(
+                "SELECT bi.billing_invoice_id, bs.branch_subscription_id, ba.tenant_id, ba.company_id, bs.branch_id, " +
+                        "bi.status, bi.total_amount, bi.due_amount, bi.currency_code " +
+                        "FROM public.billing_invoices bi " +
+                        "JOIN public.billing_accounts ba ON ba.billing_account_id = bi.billing_account_id " +
+                        "LEFT JOIN public.branch_subscriptions bs ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
+                        "WHERE bi.billing_invoice_id = :billingInvoiceId",
+                new MapSqlParameterSource().addValue("billingInvoiceId", billingInvoiceId),
+                (rs, rowNum) -> new BillingInvoiceMutationContext(
+                        rs.getLong("billing_invoice_id"),
+                        (Long) rs.getObject("branch_subscription_id"),
+                        rs.getInt("tenant_id"),
+                        rs.getInt("company_id"),
+                        (Integer) rs.getObject("branch_id"),
+                        rs.getString("status"),
+                        rs.getBigDecimal("total_amount"),
+                        rs.getBigDecimal("due_amount"),
+                        rs.getString("currency_code")
+                )
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public long createCompletedPaymentAttempt(long invoiceId,
+                                              String providerCode,
+                                              String externalOrderId,
+                                              String externalPaymentReference,
+                                              String status,
+                                              BigDecimal requestedAmount,
+                                              String currencyCode,
+                                              String requestPayloadJson,
+                                              String providerResponseJson) {
+        String sql = "INSERT INTO public.billing_payment_attempts " +
+                "(billing_invoice_id, provider_code, external_order_id, external_payment_reference, status, requested_amount, currency_code, request_payload_json, provider_response_json, completed_at) " +
+                "VALUES (:invoiceId, :providerCode, :externalOrderId, :externalPaymentReference, :status, :requestedAmount, :currencyCode, CAST(:requestPayloadJson AS jsonb), CAST(:providerResponseJson AS jsonb), NOW())";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("invoiceId", invoiceId)
+                        .addValue("providerCode", providerCode)
+                        .addValue("externalOrderId", externalOrderId)
+                        .addValue("externalPaymentReference", externalPaymentReference)
+                        .addValue("status", status)
+                        .addValue("requestedAmount", requestedAmount)
+                        .addValue("currencyCode", currencyCode)
+                        .addValue("requestPayloadJson", requestPayloadJson)
+                        .addValue("providerResponseJson", providerResponseJson),
+                keyHolder,
+                new String[]{"billing_payment_attempt_id"}
+        );
+        return keyHolder.getKey().longValue();
+    }
+
+    public int updateInvoiceManualState(long billingInvoiceId,
+                                        String status,
+                                        BigDecimal dueAmount,
+                                        Instant paidAt,
+                                        String metadataJson) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_invoices " +
+                        "SET status = :status, due_amount = :dueAmount, paid_at = :paidAt, metadata_json = metadata_json || CAST(:metadataJson AS jsonb), updated_at = NOW() " +
+                        "WHERE billing_invoice_id = :billingInvoiceId",
+                new MapSqlParameterSource()
+                        .addValue("billingInvoiceId", billingInvoiceId)
+                        .addValue("status", status)
+                        .addValue("dueAmount", dueAmount)
+                        .addValue("paidAt", paidAt == null ? null : Timestamp.from(paidAt))
+                        .addValue("metadataJson", metadataJson)
+        );
+    }
+
+    public int updateBranchSubscriptionStatusById(long branchSubscriptionId,
+                                                  String status,
+                                                  String metadataJson) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.branch_subscriptions " +
+                        "SET status = :status, metadata_json = metadata_json || CAST(:metadataJson AS jsonb), updated_at = NOW() " +
+                        "WHERE branch_subscription_id = :branchSubscriptionId",
+                new MapSqlParameterSource()
+                        .addValue("branchSubscriptionId", branchSubscriptionId)
+                        .addValue("status", status)
+                        .addValue("metadataJson", metadataJson)
+        );
     }
 
     public int updatePaymentAttemptCheckoutRequest(String providerCode,

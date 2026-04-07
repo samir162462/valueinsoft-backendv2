@@ -12,6 +12,7 @@ public class Company {
     int ownerId;
     String currency;
     String comImg;
+    String tenantStatus;
     ArrayList<Branch> branchList;
 
     public Company(int companyId, String companyName, Timestamp establishedTime, String plan, int establishPrice, String currency, String comImg, ArrayList<Branch> branchList) {
@@ -23,6 +24,14 @@ public class Company {
         this.currency = currency;
         this.comImg = comImg;
         this.branchList = branchList;
+    }
+
+    public String getTenantStatus() {
+        return tenantStatus;
+    }
+
+    public void setTenantStatus(String tenantStatus) {
+        this.tenantStatus = tenantStatus;
     }
 
     public String getCurrency() {
@@ -108,6 +117,7 @@ public class Company {
                 ", ownerId=" + ownerId +
                 ", currency='" + currency + '\'' +
                 ", comImg='" + comImg + '\'' +
+                ", tenantStatus='" + tenantStatus + '\'' +
                 ", branchList=" + branchList +
                 '}';
     }

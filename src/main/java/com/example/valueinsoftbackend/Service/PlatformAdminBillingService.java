@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingDunning
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingEntitlementsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingHealthSnapshotResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingInvoicesPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingManualActionResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingOperationResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentAttemptsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationItem;
@@ -14,6 +15,7 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRenewal
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRetryInvoiceResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSubscriptionsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSummaryResponse;
+import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.ManualBillingActionRequest;
 import org.springframework.stereotype.Service;
 
 import java.sql.Date;
@@ -30,15 +32,18 @@ public class PlatformAdminBillingService {
     private final PlatformAuthorizationService platformAuthorizationService;
     private final LegacyBillingBridgeService legacyBillingBridgeService;
     private final BillingSchedulerService billingSchedulerService;
+    private final ManualBillingAdjustmentService manualBillingAdjustmentService;
 
     public PlatformAdminBillingService(DbBillingAdminReadModels dbBillingAdminReadModels,
                                        PlatformAuthorizationService platformAuthorizationService,
                                        LegacyBillingBridgeService legacyBillingBridgeService,
-                                       BillingSchedulerService billingSchedulerService) {
+                                       BillingSchedulerService billingSchedulerService,
+                                       ManualBillingAdjustmentService manualBillingAdjustmentService) {
         this.dbBillingAdminReadModels = dbBillingAdminReadModels;
         this.platformAuthorizationService = platformAuthorizationService;
         this.legacyBillingBridgeService = legacyBillingBridgeService;
         this.billingSchedulerService = billingSchedulerService;
+        this.manualBillingAdjustmentService = manualBillingAdjustmentService;
     }
 
     public PlatformBillingSummaryResponse getBillingSummaryForAuthenticatedUser(String authenticatedName, String packageId) {
@@ -216,6 +221,27 @@ public class PlatformAdminBillingService {
                                                                                 long billingInvoiceId) {
         platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.admin.write");
         return billingSchedulerService.retryInvoice(billingInvoiceId, authenticatedName);
+    }
+
+    public PlatformBillingManualActionResponse recordManualPaymentForAuthenticatedUser(String authenticatedName,
+                                                                                      long billingInvoiceId,
+                                                                                      ManualBillingActionRequest request) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.admin.write");
+        return manualBillingAdjustmentService.recordManualPayment(billingInvoiceId, request, authenticatedName);
+    }
+
+    public PlatformBillingManualActionResponse markInvoiceUnpaidForAuthenticatedUser(String authenticatedName,
+                                                                                    long billingInvoiceId,
+                                                                                    ManualBillingActionRequest request) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.admin.write");
+        return manualBillingAdjustmentService.markInvoiceUnpaid(billingInvoiceId, request, authenticatedName);
+    }
+
+    public PlatformBillingManualActionResponse refundInvoiceForAuthenticatedUser(String authenticatedName,
+                                                                                long billingInvoiceId,
+                                                                                ManualBillingActionRequest request) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.admin.write");
+        return manualBillingAdjustmentService.refundInvoice(billingInvoiceId, request, authenticatedName);
     }
 
     private int sanitizePage(int page) {

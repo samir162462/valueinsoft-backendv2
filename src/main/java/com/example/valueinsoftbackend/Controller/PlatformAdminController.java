@@ -21,6 +21,7 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformTenantBillingW
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingDunningRunsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingEntitlementsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingHealthSnapshotResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingManualActionResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingOperationResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRenewalBacklogPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRetryInvoiceResponse;
@@ -41,6 +42,7 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupportNoteIte
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupportNotesPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupplierReceiptsPageResponse;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.CreatePlatformSupportNoteRequest;
+import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.ManualBillingActionRequest;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.PlatformAlertAcknowledgmentRequest;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.PlatformLifecycleActionRequest;
 import com.example.valueinsoftbackend.Service.PlatformAdminAlertService;
@@ -412,6 +414,39 @@ public class PlatformAdminController {
         return platformAdminBillingService.retryInvoiceForAuthenticatedUser(
                 principal.getName(),
                 billingInvoiceId
+        );
+    }
+
+    @PostMapping("/billing/invoices/{billingInvoiceId}/manual-payment")
+    public PlatformBillingManualActionResponse recordManualBillingPayment(Principal principal,
+                                                                          @PathVariable long billingInvoiceId,
+                                                                          @Valid @RequestBody ManualBillingActionRequest request) {
+        return platformAdminBillingService.recordManualPaymentForAuthenticatedUser(
+                principal.getName(),
+                billingInvoiceId,
+                request
+        );
+    }
+
+    @PostMapping("/billing/invoices/{billingInvoiceId}/mark-unpaid")
+    public PlatformBillingManualActionResponse markBillingInvoiceUnpaid(Principal principal,
+                                                                        @PathVariable long billingInvoiceId,
+                                                                        @RequestBody(required = false) ManualBillingActionRequest request) {
+        return platformAdminBillingService.markInvoiceUnpaidForAuthenticatedUser(
+                principal.getName(),
+                billingInvoiceId,
+                request == null ? new ManualBillingActionRequest() : request
+        );
+    }
+
+    @PostMapping("/billing/invoices/{billingInvoiceId}/refund")
+    public PlatformBillingManualActionResponse refundBillingInvoice(Principal principal,
+                                                                    @PathVariable long billingInvoiceId,
+                                                                    @RequestBody(required = false) ManualBillingActionRequest request) {
+        return platformAdminBillingService.refundInvoiceForAuthenticatedUser(
+                principal.getName(),
+                billingInvoiceId,
+                request == null ? new ManualBillingActionRequest() : request
         );
     }
 

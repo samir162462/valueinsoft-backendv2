@@ -110,6 +110,7 @@ public class DbBillingAdminReadModels {
     private static final RowMapper<PlatformBillingSubscriptionItem> SUBSCRIPTION_ROW_MAPPER = (rs, rowNum) ->
             new PlatformBillingSubscriptionItem(
                     rs.getInt("subscription_id"),
+                    (Long) rs.getObject("billing_invoice_id"),
                     rs.getInt("tenant_id"),
                     rs.getInt("company_id"),
                     rs.getString("company_name"),
@@ -308,6 +309,7 @@ public class DbBillingAdminReadModels {
                 namedParameterJdbcTemplate.query(
                         baseSql +
                                 "SELECT bbc.subscription_id, bbc.tenant_id, bbc.company_id, bbc.company_name, bbc.branch_id, bbc.branch_name, " +
+                                "bbc.billing_invoice_id, " +
                                 "bbc.package_id, bbc.package_display_name, bbc.start_time, bbc.end_time, bbc.amount_to_pay, bbc.amount_paid, " +
                                 "bbc.outstanding_amount, bbc.status, bbc.active " +
                                 "FROM branch_billing_context bbc " + whereClause +
@@ -541,6 +543,7 @@ public class DbBillingAdminReadModels {
                 " b.\"branchId\" AS branch_id, b.\"branchName\" AS branch_name, " +
                 " t.package_id, COALESCE(pp.display_name, t.package_id) AS package_display_name, " +
                 " COALESCE(bs.branch_subscription_id, 0) AS subscription_id, " +
+                " lis.billing_invoice_id, " +
                 " bs.current_period_start AS start_time, bs.current_period_end AS end_time, " +
                 " COALESCE(lis.total_amount, bs.unit_amount, 0) AS amount_to_pay, " +
                 " GREATEST(COALESCE(lis.total_amount, bs.unit_amount, 0) - COALESCE(lis.due_amount, 0), 0) AS amount_paid, " +

@@ -32,6 +32,7 @@ public class DbPlatformAdminBillingReadModels {
     private static final RowMapper<PlatformBillingSubscriptionItem> SUBSCRIPTION_ROW_MAPPER = (rs, rowNum) ->
             new PlatformBillingSubscriptionItem(
                     rs.getInt("subscription_id"),
+                    null,
                     rs.getInt("tenant_id"),
                     rs.getInt("company_id"),
                     rs.getString("company_name"),

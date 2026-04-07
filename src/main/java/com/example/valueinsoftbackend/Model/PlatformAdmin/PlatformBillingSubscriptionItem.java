@@ -12,6 +12,7 @@ import java.sql.Date;
 @AllArgsConstructor
 public class PlatformBillingSubscriptionItem {
     private int subscriptionId;
+    private Long billingInvoiceId;
     private int tenantId;
     private int companyId;
     private String companyName;

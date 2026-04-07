@@ -54,8 +54,10 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
                 .antMatchers(
                         "/authenticate",
                         "/users/saveNewUser",
+                        "/Company/saveCompany",
                         "/Company/getCompany",
                         "/Company/getCompanyById",
+                        "/public/package-plans",
                         "/appSubscription/Res",
                         "/OP/TPC",
                         "/users/checkUserEmail/**",

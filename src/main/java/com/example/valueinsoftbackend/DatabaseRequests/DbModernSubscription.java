@@ -54,18 +54,22 @@ public class DbModernSubscription {
         );
     }
 
+    public boolean hasBranchSubscriptionRecords(int branchId) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        Boolean exists = namedParameterJdbcTemplate.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM public.branch_subscriptions WHERE branch_id = :branchId)",
+                new MapSqlParameterSource().addValue("branchId", branchId),
+                Boolean.class
+        );
+        return Boolean.TRUE.equals(exists);
+    }
+
     public Map<String, Object> getBranchActiveState(int branchId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         String sql = modernSubscriptionContextSql() +
                 "SELECT mc.subscription_id, mc.start_time, mc.end_time, mc.amount_to_pay, mc.amount_paid, mc.order_id, mc.legacy_status " +
                 "FROM modern_context mc WHERE mc.branch_id = :branchId " +
-                "ORDER BY " +
-                " CASE " +
-                "   WHEN mc.legacy_status = 'PD' AND mc.start_time <= CURRENT_DATE AND mc.end_time >= CURRENT_DATE THEN 0 " +
-                "   WHEN mc.start_time > CURRENT_DATE THEN 1 " +
-                "   ELSE 2 " +
-                " END ASC, " +
-                " mc.subscription_id DESC LIMIT 1";
+                "ORDER BY mc.subscription_id DESC LIMIT 1";
         List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(
                 sql,
                 new MapSqlParameterSource().addValue("branchId", branchId)
@@ -153,7 +157,11 @@ public class DbModernSubscription {
                 "), modern_context AS (" +
                 " SELECT bs.branch_subscription_id AS subscription_id, bs.branch_id, bs.current_period_start AS start_time, bs.current_period_end AS end_time, " +
                 " bi.total_amount AS amount_to_pay, (bi.total_amount - bi.due_amount) AS amount_paid, " +
-                " COALESCE(CAST(la.external_order_id AS INTEGER), 0) AS order_id, " +
+                " CASE " +
+                "   WHEN la.external_order_id ~ '^[0-9]{1,9}$' THEN CAST(la.external_order_id AS INTEGER) " +
+                "   WHEN la.external_order_id ~ '^[0-9]{10}$' AND la.external_order_id <= '2147483647' THEN CAST(la.external_order_id AS INTEGER) " +
+                "   ELSE 0 " +
+                " END AS order_id, " +
                 " CASE WHEN bi.status = 'paid' AND bs.status = 'active' THEN 'PD' ELSE 'NP' END AS legacy_status " +
                 " FROM public.branch_subscriptions bs " +
                 " LEFT JOIN public.billing_invoices bi ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
