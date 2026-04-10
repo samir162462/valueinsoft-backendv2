@@ -13,6 +13,7 @@ public class TenantConfig {
     private int tenantId;
     private String packageId;
     private String templateId;
+    private String businessPackageId;
     private String status;
     private String configVersion;
     private String legacyPlanName;

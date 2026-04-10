@@ -16,9 +16,11 @@ import java.util.ArrayList;
 public class BranchService {
 
     private final DbBranch dbBranch;
+    private final BusinessPackageCatalogService businessPackageCatalogService;
 
-    public BranchService(DbBranch dbBranch) {
+    public BranchService(DbBranch dbBranch, BusinessPackageCatalogService businessPackageCatalogService) {
         this.dbBranch = dbBranch;
+        this.businessPackageCatalogService = businessPackageCatalogService;
     }
 
     @Transactional
@@ -34,6 +36,7 @@ public class BranchService {
                 normalize(branchLocation),
                 companyId
         );
+        businessPackageCatalogService.provisionBranchCategoriesIfMissing(companyId, branchId);
         log.info("Created branch {} for company {}", branchId, companyId);
         return branchId;
     }

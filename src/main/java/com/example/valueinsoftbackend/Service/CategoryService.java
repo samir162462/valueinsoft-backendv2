@@ -24,10 +24,14 @@ public class CategoryService {
 
     private final DbPosCategory dbPosCategory;
     private final ObjectMapper objectMapper;
+    private final BusinessPackageCatalogService businessPackageCatalogService;
 
-    public CategoryService(DbPosCategory dbPosCategory, ObjectMapper objectMapper) {
+    public CategoryService(DbPosCategory dbPosCategory,
+                           ObjectMapper objectMapper,
+                           BusinessPackageCatalogService businessPackageCatalogService) {
         this.dbPosCategory = dbPosCategory;
         this.objectMapper = objectMapper;
+        this.businessPackageCatalogService = businessPackageCatalogService;
     }
 
     public ResponseEntity<String> saveCategory(int companyId, int branchId, SaveCategoryRequest request) {
@@ -50,12 +54,14 @@ public class CategoryService {
     public ArrayList<CustomPair> getCategoriesJson(int companyId, int branchId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        businessPackageCatalogService.provisionBranchCategoriesIfMissing(companyId, branchId);
         return parseCategoryPairs(dbPosCategory.getCategoryJson(branchId, companyId));
     }
 
     public String getCategoriesJsonFlat(int companyId, int branchId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        businessPackageCatalogService.provisionBranchCategoriesIfMissing(companyId, branchId);
         String payload = dbPosCategory.getCategoryJson(branchId, companyId);
         return payload == null ? "" : payload;
     }
@@ -96,13 +102,26 @@ public class CategoryService {
         }
 
         if (node.isObject()) {
+            if (node.has("categoryData")) {
+                appendCategoryPairs(customPairs, node.get("categoryData"));
+                return;
+            }
+
             if (node.hasNonNull("key") && node.has("value")) {
                 customPairs.add(new CustomPair(node.get("key").asText(), toStringList(node.get("value"))));
                 return;
             }
 
-            node.fields().forEachRemaining(entry ->
-                    customPairs.add(new CustomPair(entry.getKey(), toStringList(entry.getValue()))));
+            node.fields().forEachRemaining(entry -> {
+                if ("branchGroups".equals(entry.getKey()) || "groups".equals(entry.getKey())) {
+                    return;
+                }
+                if ("categoryData".equals(entry.getKey())) {
+                    appendCategoryPairs(customPairs, entry.getValue());
+                    return;
+                }
+                customPairs.add(new CustomPair(entry.getKey(), toStringList(entry.getValue())));
+            });
             return;
         }
 

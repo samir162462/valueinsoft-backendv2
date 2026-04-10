@@ -58,6 +58,7 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
                         "/Company/getCompany",
                         "/Company/getCompanyById",
                         "/public/package-plans",
+                        "/public/business-packages",
                         "/appSubscription/Res",
                         "/OP/TPC",
                         "/users/checkUserEmail/**",

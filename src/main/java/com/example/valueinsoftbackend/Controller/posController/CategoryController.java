@@ -1,8 +1,10 @@
 package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.Model.MainMajor;
+import com.example.valueinsoftbackend.Model.Configuration.BusinessPackageConfig;
 import com.example.valueinsoftbackend.Model.Request.SaveCategoryRequest;
 import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.BusinessPackageCatalogService;
 import com.example.valueinsoftbackend.Service.CategoryService;
 import com.example.valueinsoftbackend.util.CustomPair;
 import org.springframework.http.ResponseEntity;
@@ -21,10 +23,14 @@ public class CategoryController {
 
     private final CategoryService categoryService;
     private final AuthorizationService authorizationService;
+    private final BusinessPackageCatalogService businessPackageCatalogService;
 
-    public CategoryController(CategoryService categoryService, AuthorizationService authorizationService) {
+    public CategoryController(CategoryService categoryService,
+                              AuthorizationService authorizationService,
+                              BusinessPackageCatalogService businessPackageCatalogService) {
         this.categoryService = categoryService;
         this.authorizationService = authorizationService;
+        this.businessPackageCatalogService = businessPackageCatalogService;
     }
 
     @PostMapping("/{companyId}/{branchId}/saveCategory")
@@ -83,5 +89,17 @@ public class CategoryController {
                 "inventory.item.read"
         );
         return categoryService.getMainCategories(companyId);
+    }
+
+    @GetMapping("/business-package/{companyId}")
+    public BusinessPackageConfig getAssignedBusinessPackage(@PathVariable @Positive int companyId,
+                                                            Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                null,
+                "inventory.item.read"
+        );
+        return businessPackageCatalogService.getAssignedBusinessPackageForTenant(companyId);
     }
 }

@@ -119,6 +119,48 @@ public class DbConfigurationAdmin {
         jdbcTemplate.update(sql, tenantId, moduleId, enabled, mode, reason, source, version);
     }
 
+    public void upsertTenant(int tenantId,
+                             String packageId,
+                             String templateId,
+                             String businessPackageId,
+                             String status,
+                             String configVersion,
+                             String legacyPlanName,
+                             String bootstrapSource) {
+        TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
+        String sql = "INSERT INTO public.tenants " +
+                "(tenant_id, package_id, template_id, business_package_id, status, config_version, legacy_plan_name, bootstrap_source) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON CONFLICT (tenant_id) DO UPDATE SET package_id = EXCLUDED.package_id, template_id = EXCLUDED.template_id, " +
+                "business_package_id = EXCLUDED.business_package_id, status = EXCLUDED.status, config_version = EXCLUDED.config_version, " +
+                "legacy_plan_name = EXCLUDED.legacy_plan_name, bootstrap_source = EXCLUDED.bootstrap_source, updated_at = NOW()";
+        jdbcTemplate.update(sql, tenantId, packageId, templateId, businessPackageId, status, configVersion, legacyPlanName, bootstrapSource);
+    }
+
+    public void updateTenantBusinessPackage(int tenantId, String businessPackageId) {
+        TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
+        jdbcTemplate.update(
+                "UPDATE public.tenants SET business_package_id = ?, updated_at = NOW() WHERE tenant_id = ?",
+                businessPackageId,
+                tenantId
+        );
+    }
+
+    public void upsertOnboardingState(int tenantId,
+                                      String status,
+                                      String currentStep,
+                                      String completedStepsJson,
+                                      String requiredNextAction,
+                                      String diagnosticsJson) {
+        TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
+        String sql = "INSERT INTO public.onboarding_states " +
+                "(tenant_id, status, current_step, completed_steps, required_next_action, diagnostics) " +
+                "VALUES (?, ?, ?, CAST(? AS jsonb), ?, CAST(? AS jsonb)) " +
+                "ON CONFLICT (tenant_id) DO UPDATE SET status = EXCLUDED.status, current_step = EXCLUDED.current_step, " +
+                "completed_steps = EXCLUDED.completed_steps, required_next_action = EXCLUDED.required_next_action, diagnostics = EXCLUDED.diagnostics, updated_at = NOW()";
+        jdbcTemplate.update(sql, tenantId, status, currentStep, completedStepsJson, requiredNextAction, diagnosticsJson);
+    }
+
     public void upsertTenantWorkflowOverride(int tenantId,
                                              String flagKey,
                                              String flagValueJson,

@@ -21,6 +21,7 @@ public class DbTenants {
             rs.getInt("tenant_id"),
             rs.getString("package_id"),
             rs.getString("template_id"),
+            rs.getString("business_package_id"),
             rs.getString("status"),
             rs.getString("config_version"),
             rs.getString("legacy_plan_name"),
@@ -71,7 +72,7 @@ public class DbTenants {
      */
     public TenantConfig getTenantById(int tenantId) {
         TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
-        String sql = "SELECT tenant_id, package_id, template_id, status, config_version, legacy_plan_name, " +
+        String sql = "SELECT tenant_id, package_id, template_id, business_package_id, status, config_version, legacy_plan_name, " +
                 "bootstrap_source, created_at, updated_at FROM public.tenants WHERE tenant_id = ?";
         List<TenantConfig> results = jdbcTemplate.query(sql, TENANT_ROW_MAPPER, tenantId);
         return results.isEmpty() ? null : results.get(0);

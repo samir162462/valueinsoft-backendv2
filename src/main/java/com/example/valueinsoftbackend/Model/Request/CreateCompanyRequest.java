@@ -30,6 +30,9 @@ public class CreateCompanyRequest {
 
     private String branchMajor;
 
+    @JsonAlias("businessPackage")
+    private String businessPackageId;
+
     public CreateCompanyRequest() {
     }
 
@@ -95,5 +98,13 @@ public class CreateCompanyRequest {
 
     public void setBranchMajor(String branchMajor) {
         this.branchMajor = branchMajor;
+    }
+
+    public String getBusinessPackageId() {
+        return businessPackageId;
+    }
+
+    public void setBusinessPackageId(String businessPackageId) {
+        this.businessPackageId = businessPackageId;
     }
 }

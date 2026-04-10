@@ -19,11 +19,16 @@ public class CompanyService {
     private final DbCompany dbCompany;
     private final DbUsers dbUsers;
     private final BranchService branchService;
+    private final BusinessPackageCatalogService businessPackageCatalogService;
 
-    public CompanyService(DbCompany dbCompany, DbUsers dbUsers, BranchService branchService) {
+    public CompanyService(DbCompany dbCompany,
+                          DbUsers dbUsers,
+                          BranchService branchService,
+                          BusinessPackageCatalogService businessPackageCatalogService) {
         this.dbCompany = dbCompany;
         this.dbUsers = dbUsers;
         this.branchService = branchService;
+        this.businessPackageCatalogService = businessPackageCatalogService;
     }
 
     public Company getCompanyForOwnerUserName(String userName) {
@@ -86,6 +91,13 @@ public class CompanyService {
         }
 
         dbUsers.updateRole("public", owner.getUserId(), "Owner");
+        businessPackageCatalogService.bootstrapTenantForNewCompany(
+                companyId,
+                normalize(request.getPlan()),
+                resolveBusinessPackageId(request),
+                normalize(request.getPlan()),
+                owner.getUserId()
+        );
 
         String branchName = normalize(request.getBranchName());
         if (branchName.length() > 2) {
@@ -116,5 +128,17 @@ public class CompanyService {
 
     private String normalizeNullable(String value) {
         return value == null ? null : value.trim();
+    }
+
+    private String resolveBusinessPackageId(CreateCompanyRequest request) {
+        if (request == null) {
+            return businessPackageCatalogService.resolveBusinessPackageId(null);
+        }
+
+        if (request.getBusinessPackageId() != null && !request.getBusinessPackageId().trim().isEmpty()) {
+            return businessPackageCatalogService.resolveBusinessPackageId(request.getBusinessPackageId());
+        }
+
+        return businessPackageCatalogService.mapLegacyBranchMajorToBusinessPackage(request.getBranchMajor());
     }
 }

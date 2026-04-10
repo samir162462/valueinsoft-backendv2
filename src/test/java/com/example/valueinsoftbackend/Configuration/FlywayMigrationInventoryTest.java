@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FlywayMigrationInventoryTest {
 
     @Test
-    void configurationMigrationSetExistsThroughV27() {
+    void configurationMigrationSetExistsThroughV29() {
         String[] migrations = {
                 "db/migration/V6__configuration_platform_auth_foundation.sql",
                 "db/migration/V7__configuration_platform_auth_foundation_seed.sql",
@@ -31,7 +31,9 @@ class FlywayMigrationInventoryTest {
                 "db/migration/V24__billing_core_foundation.sql",
                 "db/migration/V25__package_plan_pricing_admin_fields.sql",
                 "db/migration/V26__package_plan_feature_catalog_seed.sql",
-                "db/migration/V27__package_plan_feature_policy_defaults.sql"
+                "db/migration/V27__package_plan_feature_policy_defaults.sql",
+                "db/migration/V28__business_package_category_catalog.sql",
+                "db/migration/V29__business_package_category_catalog_seed.sql"
         };
 
         for (String migration : migrations) {
