@@ -1,6 +1,5 @@
 package com.example.valueinsoftbackend.Service;
 
-
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProductCommandRepository;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
@@ -14,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -23,15 +23,20 @@ public class ProductService {
 
     private final DbPosProduct productRepository;
     private final DbPosProductCommandRepository productCommandRepository;
+    private final LegacyInventoryBackfillService legacyInventoryBackfillService;
 
     @Autowired
-    public ProductService(DbPosProduct productRepository, DbPosProductCommandRepository productCommandRepository) {
+    public ProductService(DbPosProduct productRepository,
+                          DbPosProductCommandRepository productCommandRepository,
+                          LegacyInventoryBackfillService legacyInventoryBackfillService) {
         this.productRepository = productRepository;
         this.productCommandRepository = productCommandRepository;
+        this.legacyInventoryBackfillService = legacyInventoryBackfillService;
     }
 
     public ResponsePagination<Product> searchProductsByText(String[] words, String branchId, int companyId,
                                                             ProductFilter productFilter, PageHandler pageHandler) {
+        legacyInventoryBackfillService.backfillBranchProducts(companyId, Integer.parseInt(branchId));
         ResponsePagination<Product> response = productRepository.getProductBySearchText(
                 words, branchId, companyId, productFilter, pageHandler, true);
 
@@ -44,25 +49,39 @@ public class ProductService {
 
     public ResponsePagination<Product> searchProductsByCompanyName(String companyName, String branchId, int companyId,
                                                                    ProductFilter productFilter, PageHandler pageHandler) {
+        legacyInventoryBackfillService.backfillBranchProducts(companyId, Integer.parseInt(branchId));
         return productRepository.getProductBySearchCompanyName(companyName, branchId, companyId, productFilter, pageHandler);
     }
 
     public List<Product> getProductsAllRange(String branchId, int companyId, ProductFilter productFilter) {
+        legacyInventoryBackfillService.backfillBranchProducts(companyId, Integer.parseInt(branchId));
         return productRepository.getProductsAllRange(branchId, companyId, productFilter);
     }
 
     public Product getProductById(int productId, int branchId, int companyId) {
-        return productRepository.getProductById(productId, branchId, companyId);
+        legacyInventoryBackfillService.backfillBranchProducts(companyId, branchId);
+        Product product = productRepository.getProductById(productId, branchId, companyId);
+        if (product != null) {
+            return product;
+        }
+        Integer mappedProductId = legacyInventoryBackfillService.resolveModernProductId(companyId, branchId, productId);
+        if (mappedProductId != null) {
+            return productRepository.getProductById(mappedProductId, branchId, companyId);
+        }
+        return null;
     }
 
     public List<Product> getProductsByBarcode(String barcode, String branchId, int companyId) {
+        legacyInventoryBackfillService.backfillBranchProducts(companyId, Integer.parseInt(branchId));
         return productRepository.getProductBySearchBarcode(barcode, branchId, companyId);
     }
 
     public List<ProductUtilNames> getProductNames(String text, int branchId, int companyId) {
+        legacyInventoryBackfillService.backfillBranchProducts(companyId, branchId);
         return productRepository.getProductNames(text, branchId, companyId);
     }
 
+    @Transactional
     public ProductOperationResponse addProduct(Product product, String branchId, int companyId) {
         if (product.getQuantity() <= 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_QUANTITY_REQUIRED", "quantity must be greater than zero when creating a product");
@@ -70,18 +89,24 @@ public class ProductService {
 
         long id = productCommandRepository.addProduct(product, branchId, companyId);
         Product savedProduct = productRepository.getProductById((int) id, Integer.parseInt(branchId), companyId);
-        log.info("Created product {} for company {} branch {}", id, companyId, branchId);
+        log.info("Created company-scoped product {} for company {} branch {}", id, companyId, branchId);
         return buildOperationResponse("The Product  Saved", id, savedProduct == null ? product : savedProduct, "Add");
     }
 
+    @Transactional
     public ProductOperationResponse editProduct(Product product, String branchId, int companyId) {
         if (product.getProductId() <= 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_ID_REQUIRED", "productId must be greater than zero when editing a product");
         }
 
+        legacyInventoryBackfillService.backfillBranchProducts(companyId, Integer.parseInt(branchId));
+        Integer mappedProductId = legacyInventoryBackfillService.resolveModernProductId(companyId, Integer.parseInt(branchId), product.getProductId());
+        if (mappedProductId != null) {
+            product.setProductId(mappedProductId);
+        }
         productCommandRepository.updateProduct(product, branchId, companyId);
         Product savedProduct = productRepository.getProductById(product.getProductId(), Integer.parseInt(branchId), companyId);
-        log.info("Updated product {} for company {} branch {}", product.getProductId(), companyId, branchId);
+        log.info("Updated company-scoped product {} for company {} branch {}", product.getProductId(), companyId, branchId);
         return buildOperationResponse("The Product Edit Saved", product.getProductId(), savedProduct == null ? product : savedProduct, "Update");
     }
 

@@ -59,6 +59,11 @@ public class InventoryTransactionService {
                 request.getTransTotal(),
                 request.getRemainingAmount()
         );
+        dbPosInventoryTransaction.syncLatestLedgerMetadata(
+                request.getCompanyId(),
+                request.getBranchId(),
+                inventoryTransaction
+        );
 
         if (insertedRows != 1 || supplierRows != 1) {
             throw new ApiException(

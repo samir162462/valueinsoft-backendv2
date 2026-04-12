@@ -69,8 +69,9 @@ public class DamagedItemService {
         int insertedRows = dbPosDamagedList.insertDamagedItem(companyId, damagedItem);
         int updatedRows = dbPosDamagedList.decrementProductQuantity(companyId, branchId, request.getProductId(), request.getQuantity());
         int inventoryRows = dbPosDamagedList.insertDamagedInventoryTransaction(companyId, branchId, damagedItem);
+        int modernLedgerRows = dbPosDamagedList.insertDamagedLedgerEntry(companyId, branchId, damagedItem);
 
-        if (insertedRows != 1 || updatedRows != 1 || inventoryRows != 1) {
+        if (insertedRows != 1 || updatedRows != 1 || inventoryRows != 1 || modernLedgerRows != 1) {
             throw new ApiException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "DAMAGED_ITEM_WRITE_FAILED",

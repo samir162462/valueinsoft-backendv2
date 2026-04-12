@@ -55,6 +55,7 @@ import com.example.valueinsoftbackend.Service.PlatformAdminLifecycleService;
 import com.example.valueinsoftbackend.Service.PlatformAdminMetricsService;
 import com.example.valueinsoftbackend.Service.PlatformAdminOverviewService;
 import com.example.valueinsoftbackend.Service.PlatformSupportService;
+import com.example.valueinsoftbackend.Service.InventoryTemplateMetadataService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -70,6 +71,7 @@ import javax.validation.Valid;
 import java.security.Principal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Map;
 
 @RestController
 @Validated
@@ -86,6 +88,7 @@ public class PlatformAdminController {
     private final PlatformAdminFinanceService platformAdminFinanceService;
     private final PlatformAdminMetricsService platformAdminMetricsService;
     private final PlatformSupportService platformSupportService;
+    private final InventoryTemplateMetadataService inventoryTemplateMetadataService;
 
     public PlatformAdminController(PlatformAdminOverviewService platformAdminOverviewService,
                                    PlatformAdminAlertService platformAdminAlertService,
@@ -96,7 +99,8 @@ public class PlatformAdminController {
                                    PlatformAdminBillingService platformAdminBillingService,
                                    PlatformAdminFinanceService platformAdminFinanceService,
                                    PlatformAdminMetricsService platformAdminMetricsService,
-                                   PlatformSupportService platformSupportService) {
+                                   PlatformSupportService platformSupportService,
+                                   InventoryTemplateMetadataService inventoryTemplateMetadataService) {
         this.platformAdminOverviewService = platformAdminOverviewService;
         this.platformAdminAlertService = platformAdminAlertService;
         this.platformAdminCompanyService = platformAdminCompanyService;
@@ -107,6 +111,7 @@ public class PlatformAdminController {
         this.platformAdminFinanceService = platformAdminFinanceService;
         this.platformAdminMetricsService = platformAdminMetricsService;
         this.platformSupportService = platformSupportService;
+        this.inventoryTemplateMetadataService = inventoryTemplateMetadataService;
     }
 
     @GetMapping("/overview")
@@ -253,6 +258,20 @@ public class PlatformAdminController {
                 branchId,
                 max
         );
+    }
+
+    @GetMapping("/companies/{tenantId}/inventory/templates")
+    public ArrayList<Map<String, Object>> getCompanyInventoryTemplates(Principal principal,
+                                                                       @PathVariable int tenantId) {
+        return inventoryTemplateMetadataService.getAdminTemplates(principal.getName(), tenantId);
+    }
+
+    @PostMapping("/companies/{tenantId}/inventory/templates/{templateKey}")
+    public Map<String, Object> updateCompanyInventoryTemplate(Principal principal,
+                                                              @PathVariable int tenantId,
+                                                              @PathVariable String templateKey,
+                                                              @RequestBody Map<String, Object> request) {
+        return inventoryTemplateMetadataService.updateTemplate(principal.getName(), tenantId, templateKey, request);
     }
 
     @GetMapping("/billing/summary")

@@ -184,7 +184,7 @@ public class DbCompany {
     private List<String> buildCompanySchemaSql(int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         String schemaName = TenantSqlIdentifiers.companySchema(companyId);
-        return List.of(
+        ArrayList<String> statements = new ArrayList<>(List.of(
                 "CREATE SCHEMA IF NOT EXISTS " + schemaName,
                 SQLCompanyUsers(schemaName, databaseOwner),
                 SQLPosShiftPeriod(schemaName, databaseOwner),
@@ -199,7 +199,9 @@ public class DbCompany {
                 SQLSupplierReciepts(schemaName, databaseOwner),
                 SQLFixArea(schemaName, databaseOwner),
                 SQLClient(schemaName, databaseOwner)
-        );
+        ));
+        statements.addAll(SQLModernInventoryFoundation(schemaName, databaseOwner));
+        return statements;
     }
 
     //Statics SQL Queries
@@ -484,5 +486,232 @@ public class DbCompany {
                 "\n";
 
         return query;
+    }
+
+    static List<String> SQLModernInventoryFoundation(String schemaName, String dbOwner) {
+        ArrayList<String> statements = new ArrayList<>();
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_product (" +
+                " product_id BIGSERIAL PRIMARY KEY," +
+                " product_name VARCHAR(30) NOT NULL," +
+                " buying_day TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " activation_period INTEGER NOT NULL DEFAULT 0," +
+                " retail_price INTEGER NOT NULL," +
+                " lowest_price INTEGER NOT NULL," +
+                " buying_price INTEGER NOT NULL," +
+                " company_name VARCHAR(30) NOT NULL," +
+                " product_type VARCHAR(15) NOT NULL," +
+                " owner_name VARCHAR(20)," +
+                " serial VARCHAR(35)," +
+                " description VARCHAR(60)," +
+                " battery_life INTEGER NOT NULL DEFAULT 0," +
+                " owner_phone VARCHAR(14)," +
+                " owner_ni VARCHAR(18)," +
+                " product_state VARCHAR(10) NOT NULL," +
+                " supplier_id INTEGER NOT NULL DEFAULT 0," +
+                " major VARCHAR(30) NOT NULL," +
+                " img_file TEXT," +
+                " business_line_key VARCHAR(40) NOT NULL DEFAULT 'MOBILE'," +
+                " template_key VARCHAR(80) NOT NULL DEFAULT 'mobile_device'," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT inventory_product_price_order_ck CHECK (retail_price >= lowest_price AND lowest_price >= buying_price)," +
+                " CONSTRAINT inventory_product_state_ck CHECK (product_state IN ('New', 'Used'))," +
+                " CONSTRAINT inventory_product_activation_ck CHECK (activation_period >= 0)," +
+                " CONSTRAINT inventory_product_battery_ck CHECK (battery_life >= 0)" +
+                ")");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_major ON " + schemaName + ".inventory_product (major, product_id DESC)");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_name ON " + schemaName + ".inventory_product (product_name)");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_serial ON " + schemaName + ".inventory_product (serial)");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_branch_stock_balance (" +
+                " branch_id INTEGER NOT NULL," +
+                " product_id BIGINT NOT NULL," +
+                " quantity INTEGER NOT NULL DEFAULT 0," +
+                " reserved_qty INTEGER NOT NULL DEFAULT 0," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " PRIMARY KEY (branch_id, product_id)," +
+                " CONSTRAINT inventory_branch_stock_balance_branch_fk FOREIGN KEY (branch_id) REFERENCES public.\"Branch\" (\"branchId\") ON DELETE CASCADE," +
+                " CONSTRAINT inventory_branch_stock_balance_product_fk FOREIGN KEY (product_id) REFERENCES " + schemaName + ".inventory_product (product_id) ON DELETE CASCADE," +
+                " CONSTRAINT inventory_branch_stock_balance_quantity_ck CHECK (quantity >= 0)," +
+                " CONSTRAINT inventory_branch_stock_balance_reserved_ck CHECK (reserved_qty >= 0)" +
+                ")");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_branch_stock_balance_branch ON " + schemaName + ".inventory_branch_stock_balance (branch_id, quantity DESC)");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_stock_ledger (" +
+                " stock_ledger_id BIGSERIAL PRIMARY KEY," +
+                " branch_id INTEGER NOT NULL," +
+                " product_id BIGINT NOT NULL," +
+                " quantity_delta INTEGER NOT NULL," +
+                " movement_type VARCHAR(40) NOT NULL," +
+                " reference_type VARCHAR(40)," +
+                " reference_id VARCHAR(64)," +
+                " actor_name VARCHAR(100)," +
+                " note VARCHAR(255)," +
+                " supplier_id INTEGER NOT NULL DEFAULT 0," +
+                " trans_total INTEGER NOT NULL DEFAULT 0," +
+                " pay_type VARCHAR(30)," +
+                " remaining_amount INTEGER NOT NULL DEFAULT 0," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT inventory_stock_ledger_branch_fk FOREIGN KEY (branch_id) REFERENCES public.\"Branch\" (\"branchId\") ON DELETE CASCADE," +
+                " CONSTRAINT inventory_stock_ledger_product_fk FOREIGN KEY (product_id) REFERENCES " + schemaName + ".inventory_product (product_id) ON DELETE CASCADE" +
+                ")");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_stock_ledger_branch_product_time ON " + schemaName + ".inventory_stock_ledger (branch_id, product_id, created_at DESC)");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_legacy_product_mapping (" +
+                " branch_id INTEGER NOT NULL," +
+                " legacy_product_id INTEGER NOT NULL," +
+                " product_id BIGINT NOT NULL," +
+                " synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " PRIMARY KEY (branch_id, legacy_product_id)," +
+                " CONSTRAINT inventory_legacy_product_mapping_product_fk FOREIGN KEY (product_id) REFERENCES " + schemaName + ".inventory_product (product_id) ON DELETE CASCADE" +
+                ")");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_product_template (" +
+                " template_id BIGSERIAL PRIMARY KEY," +
+                " business_line_key VARCHAR(40) NOT NULL," +
+                " template_key VARCHAR(80) NOT NULL UNIQUE," +
+                " display_name VARCHAR(100) NOT NULL," +
+                " major_key VARCHAR(40)," +
+                " supports_serial BOOLEAN NOT NULL DEFAULT FALSE," +
+                " supports_batch BOOLEAN NOT NULL DEFAULT FALSE," +
+                " supports_expiry BOOLEAN NOT NULL DEFAULT FALSE," +
+                " supports_weight BOOLEAN NOT NULL DEFAULT FALSE," +
+                " is_system BOOLEAN NOT NULL DEFAULT TRUE," +
+                " is_active BOOLEAN NOT NULL DEFAULT TRUE," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+                ")");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_attribute_definition (" +
+                " attribute_id BIGSERIAL PRIMARY KEY," +
+                " business_line_key VARCHAR(40) NOT NULL," +
+                " attribute_key VARCHAR(80) NOT NULL," +
+                " display_name VARCHAR(100) NOT NULL," +
+                " data_type VARCHAR(20) NOT NULL," +
+                " is_required BOOLEAN NOT NULL DEFAULT FALSE," +
+                " is_filterable BOOLEAN NOT NULL DEFAULT FALSE," +
+                " is_searchable BOOLEAN NOT NULL DEFAULT FALSE," +
+                " field_schema JSONB NOT NULL DEFAULT '{}'::jsonb," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT inventory_attribute_definition_data_type_ck CHECK (data_type IN ('TEXT', 'NUMBER', 'BOOLEAN', 'DATE', 'JSON'))," +
+                " CONSTRAINT inventory_attribute_definition_unique_key UNIQUE (business_line_key, attribute_key)" +
+                ")");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_template_attribute (" +
+                " template_id BIGINT NOT NULL," +
+                " attribute_id BIGINT NOT NULL," +
+                " display_order INTEGER NOT NULL DEFAULT 0," +
+                " is_required BOOLEAN NOT NULL DEFAULT FALSE," +
+                " group_key VARCHAR(80)," +
+                " default_value_jsonb JSONB," +
+                " PRIMARY KEY (template_id, attribute_id)," +
+                " CONSTRAINT inventory_template_attribute_template_fk FOREIGN KEY (template_id) REFERENCES " + schemaName + ".inventory_product_template (template_id) ON DELETE CASCADE," +
+                " CONSTRAINT inventory_template_attribute_attribute_fk FOREIGN KEY (attribute_id) REFERENCES " + schemaName + ".inventory_attribute_definition (attribute_id) ON DELETE CASCADE" +
+                ")");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_product_attribute_value (" +
+                " product_id BIGINT NOT NULL," +
+                " attribute_id BIGINT NOT NULL," +
+                " value_text TEXT," +
+                " value_number DOUBLE PRECISION," +
+                " value_boolean BOOLEAN," +
+                " value_date DATE," +
+                " value_jsonb JSONB," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " PRIMARY KEY (product_id, attribute_id)," +
+                " CONSTRAINT inventory_product_attribute_value_product_fk FOREIGN KEY (product_id) REFERENCES " + schemaName + ".inventory_product (product_id) ON DELETE CASCADE," +
+                " CONSTRAINT inventory_product_attribute_value_attribute_fk FOREIGN KEY (attribute_id) REFERENCES " + schemaName + ".inventory_attribute_definition (attribute_id) ON DELETE CASCADE" +
+                ")");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_attribute_value_attribute_text ON " + schemaName + ".inventory_product_attribute_value (attribute_id, value_text)");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_attribute_value_attribute_number ON " + schemaName + ".inventory_product_attribute_value (attribute_id, value_number)");
+        statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_attribute_value_attribute_boolean ON " + schemaName + ".inventory_product_attribute_value (attribute_id, value_boolean)");
+
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_uom_dimension (" +
+                " dimension_key VARCHAR(20) PRIMARY KEY," +
+                " display_name VARCHAR(60) NOT NULL," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+                ")");
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_uom_unit (" +
+                " uom_code VARCHAR(20) PRIMARY KEY," +
+                " display_name VARCHAR(60) NOT NULL," +
+                " dimension_key VARCHAR(20) NOT NULL," +
+                " precision_scale INTEGER NOT NULL DEFAULT 0," +
+                " is_base BOOLEAN NOT NULL DEFAULT FALSE," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT inventory_uom_unit_dimension_fk FOREIGN KEY (dimension_key) REFERENCES " + schemaName + ".inventory_uom_dimension (dimension_key) ON DELETE CASCADE" +
+                ")");
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_uom_conversion (" +
+                " from_uom_code VARCHAR(20) NOT NULL," +
+                " to_uom_code VARCHAR(20) NOT NULL," +
+                " multiplier NUMERIC(18,6) NOT NULL," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " PRIMARY KEY (from_uom_code, to_uom_code)," +
+                " CONSTRAINT inventory_uom_conversion_from_fk FOREIGN KEY (from_uom_code) REFERENCES " + schemaName + ".inventory_uom_unit (uom_code) ON DELETE CASCADE," +
+                " CONSTRAINT inventory_uom_conversion_to_fk FOREIGN KEY (to_uom_code) REFERENCES " + schemaName + ".inventory_uom_unit (uom_code) ON DELETE CASCADE," +
+                " CONSTRAINT inventory_uom_conversion_multiplier_ck CHECK (multiplier > 0)" +
+                ")");
+        statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_pricing_policy (" +
+                " pricing_policy_code VARCHAR(40) PRIMARY KEY," +
+                " display_name VARCHAR(100) NOT NULL," +
+                " strategy_type VARCHAR(40) NOT NULL," +
+                " config_json JSONB NOT NULL DEFAULT '{}'::jsonb," +
+                " is_active BOOLEAN NOT NULL DEFAULT TRUE," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP" +
+                ")");
+        statements.add("ALTER TABLE " + schemaName + ".inventory_product " +
+                " ADD COLUMN IF NOT EXISTS base_uom_code VARCHAR(20) NOT NULL DEFAULT 'PCS'," +
+                " ADD COLUMN IF NOT EXISTS pricing_policy_code VARCHAR(40) NOT NULL DEFAULT 'FIXED_RETAIL'");
+
+        statements.add("INSERT INTO " + schemaName + ".inventory_product_template " +
+                "(business_line_key, template_key, display_name, major_key, supports_serial, supports_batch, supports_expiry, supports_weight, is_system, is_active, created_at, updated_at) " +
+                "SELECT business_line_key, template_key, display_name, major_key, supports_serial, supports_batch, supports_expiry, supports_weight, is_system, is_active, created_at, updated_at " +
+                "FROM public.inventory_product_template ON CONFLICT (template_key) DO NOTHING");
+        statements.add("INSERT INTO " + schemaName + ".inventory_attribute_definition " +
+                "(business_line_key, attribute_key, display_name, data_type, is_required, is_filterable, is_searchable, field_schema, created_at, updated_at) " +
+                "SELECT business_line_key, attribute_key, display_name, data_type, is_required, is_filterable, is_searchable, field_schema, created_at, updated_at " +
+                "FROM public.inventory_attribute_definition ON CONFLICT (business_line_key, attribute_key) DO NOTHING");
+        statements.add("INSERT INTO " + schemaName + ".inventory_template_attribute " +
+                "(template_id, attribute_id, display_order, is_required, group_key, default_value_jsonb) " +
+                "SELECT target_template.template_id, target_attribute.attribute_id, source.display_order, source.is_required, source.group_key, source.default_value_jsonb " +
+                "FROM public.inventory_template_attribute source " +
+                "JOIN public.inventory_product_template source_template ON source_template.template_id = source.template_id " +
+                "JOIN public.inventory_attribute_definition source_attribute ON source_attribute.attribute_id = source.attribute_id " +
+                "JOIN " + schemaName + ".inventory_product_template target_template ON target_template.template_key = source_template.template_key " +
+                "JOIN " + schemaName + ".inventory_attribute_definition target_attribute ON target_attribute.business_line_key = source_attribute.business_line_key AND target_attribute.attribute_key = source_attribute.attribute_key " +
+                "ON CONFLICT (template_id, attribute_id) DO NOTHING");
+
+        statements.add("INSERT INTO " + schemaName + ".inventory_uom_dimension (dimension_key, display_name) VALUES " +
+                "('COUNT', 'Count'), ('WEIGHT', 'Weight'), ('VOLUME', 'Volume') " +
+                "ON CONFLICT (dimension_key) DO NOTHING");
+        statements.add("INSERT INTO " + schemaName + ".inventory_uom_unit (uom_code, display_name, dimension_key, precision_scale, is_base) VALUES " +
+                "('PCS', 'Piece', 'COUNT', 0, TRUE), " +
+                "('BOX', 'Box', 'COUNT', 0, FALSE), " +
+                "('PACK', 'Pack', 'COUNT', 0, FALSE), " +
+                "('GRAM', 'Gram', 'WEIGHT', 3, TRUE), " +
+                "('KILOGRAM', 'Kilogram', 'WEIGHT', 3, FALSE), " +
+                "('ML', 'Milliliter', 'VOLUME', 2, TRUE), " +
+                "('LITER', 'Liter', 'VOLUME', 2, FALSE) " +
+                "ON CONFLICT (uom_code) DO UPDATE SET display_name = EXCLUDED.display_name, dimension_key = EXCLUDED.dimension_key, precision_scale = EXCLUDED.precision_scale, is_base = EXCLUDED.is_base, updated_at = CURRENT_TIMESTAMP");
+        statements.add("INSERT INTO " + schemaName + ".inventory_uom_conversion (from_uom_code, to_uom_code, multiplier) VALUES " +
+                "('KILOGRAM', 'GRAM', 1000.000000), ('LITER', 'ML', 1000.000000) " +
+                "ON CONFLICT (from_uom_code, to_uom_code) DO UPDATE SET multiplier = EXCLUDED.multiplier");
+        statements.add("INSERT INTO " + schemaName + ".inventory_pricing_policy (pricing_policy_code, display_name, strategy_type, config_json) VALUES " +
+                "('FIXED_RETAIL', 'Fixed Retail Price', 'FIXED', '{}'::jsonb), " +
+                "('MARKUP_COST', 'Markup From Cost', 'MARKUP', '{\"base\":\"buying_price\"}'::jsonb), " +
+                "('WEIGHT_MARKET', 'Weight X Market Rate', 'WEIGHT_X_MARKET_RATE', '{\"market\":\"gold\"}'::jsonb), " +
+                "('FORMULA', 'Formula Based', 'FORMULA', '{}'::jsonb), " +
+                "('BATCH_BASED', 'Batch Based', 'BATCH_BASED', '{}'::jsonb) " +
+                "ON CONFLICT (pricing_policy_code) DO UPDATE SET display_name = EXCLUDED.display_name, strategy_type = EXCLUDED.strategy_type, config_json = EXCLUDED.config_json, is_active = TRUE, updated_at = CURRENT_TIMESTAMP");
+        statements.add("UPDATE " + schemaName + ".inventory_product SET base_uom_code = CASE WHEN business_line_key = 'GOLD' THEN 'GRAM' WHEN business_line_key = 'CHEMICAL' THEN 'LITER' ELSE 'PCS' END WHERE base_uom_code IS NULL OR base_uom_code = ''");
+        statements.add("UPDATE " + schemaName + ".inventory_product SET pricing_policy_code = CASE WHEN business_line_key = 'GOLD' THEN 'WEIGHT_MARKET' WHEN business_line_key = 'CHEMICAL' THEN 'FORMULA' ELSE 'FIXED_RETAIL' END WHERE pricing_policy_code IS NULL OR pricing_policy_code = ''");
+        statements.add("ALTER TABLE " + schemaName + ".inventory_product DROP CONSTRAINT IF EXISTS inventory_product_uom_fk");
+        statements.add("ALTER TABLE " + schemaName + ".inventory_product DROP CONSTRAINT IF EXISTS inventory_product_pricing_policy_fk");
+        statements.add("ALTER TABLE " + schemaName + ".inventory_product ADD CONSTRAINT inventory_product_uom_fk FOREIGN KEY (base_uom_code) REFERENCES " + schemaName + ".inventory_uom_unit (uom_code)");
+        statements.add("ALTER TABLE " + schemaName + ".inventory_product ADD CONSTRAINT inventory_product_pricing_policy_fk FOREIGN KEY (pricing_policy_code) REFERENCES " + schemaName + ".inventory_pricing_policy (pricing_policy_code)");
+
+        return statements;
     }
 }

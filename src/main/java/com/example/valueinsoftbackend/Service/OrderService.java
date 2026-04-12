@@ -77,6 +77,14 @@ public class OrderService {
                 throw new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found for bounce back");
             }
             dbPosOrder.insertBounceBackInventoryTransaction(context, request.getBranchId(), companyId);
+            int modernLedgerRows = dbPosOrder.insertBounceBackLedgerEntry(context, request.getBranchId(), companyId);
+            if (modernLedgerRows != 1) {
+                throw new ApiException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "BOUNCE_BACK_LEDGER_WRITE_FAILED",
+                        "Modern inventory ledger entry was not written for bounce back"
+                );
+            }
         }
 
         int updatedOrderRows = dbPosOrder.updateOrderBounceBackTotals(

@@ -6,6 +6,7 @@ import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.InventoryTemplateMetadataService;
 import com.example.valueinsoftbackend.Service.ProductService;
 import com.example.valueinsoftbackend.util.PageHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -28,11 +29,15 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+    private final InventoryTemplateMetadataService inventoryTemplateMetadataService;
     private final AuthorizationService authorizationService;
 
     @Autowired
-    public ProductController(ProductService productService, AuthorizationService authorizationService) {
+    public ProductController(ProductService productService,
+                             InventoryTemplateMetadataService inventoryTemplateMetadataService,
+                             AuthorizationService authorizationService) {
         this.productService = productService;
+        this.inventoryTemplateMetadataService = inventoryTemplateMetadataService;
         this.authorizationService = authorizationService;
     }
 
@@ -158,5 +163,18 @@ public class ProductController {
                 "inventory.item.read"
         );
         return ResponseEntity.ok(productService.getProductNames(text, branchId, companyId));
+    }
+
+    @GetMapping("{companyId}/{branchId}/templates")
+    public ResponseEntity<Object> productTemplates(@PathVariable("companyId") @Positive int companyId,
+                                                   @PathVariable("branchId") @Positive int branchId,
+                                                   Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.item.read"
+        );
+        return ResponseEntity.ok(inventoryTemplateMetadataService.getTemplates(companyId));
     }
 }

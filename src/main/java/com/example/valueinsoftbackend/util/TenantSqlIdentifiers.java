@@ -43,6 +43,38 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"PosProduct_" + branchId + "\"";
     }
 
+    public static String inventoryProductTable(int companyId) {
+        return companySchema(companyId) + ".inventory_product";
+    }
+
+    public static String inventoryBranchStockBalanceTable(int companyId) {
+        return companySchema(companyId) + ".inventory_branch_stock_balance";
+    }
+
+    public static String inventoryStockLedgerTable(int companyId) {
+        return companySchema(companyId) + ".inventory_stock_ledger";
+    }
+
+    public static String inventoryLegacyProductMappingTable(int companyId) {
+        return companySchema(companyId) + ".inventory_legacy_product_mapping";
+    }
+
+    public static String inventoryProductTemplateTable(int companyId) {
+        return companySchema(companyId) + ".inventory_product_template";
+    }
+
+    public static String inventoryAttributeDefinitionTable(int companyId) {
+        return companySchema(companyId) + ".inventory_attribute_definition";
+    }
+
+    public static String inventoryTemplateAttributeTable(int companyId) {
+        return companySchema(companyId) + ".inventory_template_attribute";
+    }
+
+    public static String inventoryProductAttributeValueTable(int companyId) {
+        return companySchema(companyId) + ".inventory_product_attribute_value";
+    }
+
     public static String shiftPeriodTable(int companyId) {
         return companySchema(companyId) + ".\"PosShiftPeriod\"";
     }

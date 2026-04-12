@@ -1,9 +1,11 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.ProductFilter;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.example.valueinsoftbackend.util.PageHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -11,88 +13,115 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.text.Normalizer;
 
 final class ProductQueryBuilder {
 
-    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+");
     private static final Pattern DATE_RANGE_PATTERN = Pattern.compile("'([^']+)'\\s+And\\s+'([^']+)'", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter FRONTEND_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE MMM dd yyyy", Locale.ENGLISH);
     private static final String PRODUCT_SELECT_COLUMNS =
-            "\"productId\", \"productName\", \"buyingDay\", \"activationPeriod\", \"rPrice\", \"lPrice\", \"bPrice\", " +
-                    "\"companyName\", type, \"ownerName\", serial, \"desc\", \"batteryLife\", \"ownerPhone\", " +
-                    "\"ownerNI\", quantity, \"pState\", \"supplierId\", major, \"imgFile\"";
-
+            "prod.product_id AS \"productId\", " +
+                    "prod.product_name AS \"productName\", " +
+                    "prod.buying_day AS \"buyingDay\", " +
+                    "CAST(prod.activation_period AS VARCHAR) AS \"activationPeriod\", " +
+                    "prod.retail_price AS \"rPrice\", " +
+                    "prod.lowest_price AS \"lPrice\", " +
+                    "prod.buying_price AS \"bPrice\", " +
+                    "prod.company_name AS \"companyName\", " +
+                    "prod.product_type AS type, " +
+                    "prod.owner_name AS \"ownerName\", " +
+                    "prod.serial AS serial, " +
+                    "prod.description AS \"desc\", " +
+                    "prod.battery_life AS \"batteryLife\", " +
+                    "prod.owner_phone AS \"ownerPhone\", " +
+                    "prod.owner_ni AS \"ownerNI\", " +
+                    "COALESCE(stock.quantity, 0) AS quantity, " +
+                    "prod.product_state AS \"pState\", " +
+                    "prod.supplier_id AS \"supplierId\", " +
+                    "prod.major AS major, " +
+                    "prod.img_file AS \"imgFile\", " +
+                    "prod.business_line_key AS \"businessLineKey\", " +
+                    "prod.template_key AS \"templateKey\", " +
+                    "prod.base_uom_code AS \"baseUomCode\", " +
+                    "prod.pricing_policy_code AS \"pricingPolicyCode\"";
     private ProductQueryBuilder() {
     }
 
     static ProductQuerySpec buildTextSearchQuery(String[] text, String branchId, int companyId, ProductFilter productFilter,
                                                  PageHandler pageHandler, boolean useDefaultInStockFilter) {
-        String tableName = productTable(companyId, branchId);
+        MapSqlParameterSource params = baseParams(branchId, companyId);
         List<String> conditions = new ArrayList<>();
-        MapSqlParameterSource params = new MapSqlParameterSource();
 
         addFilterConditions(conditions, params, productFilter, useDefaultInStockFilter);
 
         List<String> tokens = normalizeTokens(text);
         for (int i = 0; i < tokens.size(); i++) {
-            conditions.add("\"productName\" ILIKE :token" + i);
+            conditions.add("prod.product_name ILIKE :token" + i);
             params.addValue("token" + i, "%" + tokens.get(i) + "%");
         }
 
         String whereClause = buildWhereClause(conditions);
-        String countSql = "SELECT count(*) FROM " + tableName + whereClause;
-        String dataSql = "SELECT " + PRODUCT_SELECT_COLUMNS + " FROM " + tableName + whereClause + appendPaging(pageHandler);
+        String fromClause = productFromClause(companyId);
+        String countSql = "SELECT count(*)" + fromClause + whereClause;
+        String dataSql = "SELECT " + PRODUCT_SELECT_COLUMNS + fromClause + whereClause + appendPaging(pageHandler);
         return new ProductQuerySpec(dataSql, countSql, params);
     }
 
     static ProductQuerySpec buildCompanySearchQuery(String comName, String branchId, int companyId, ProductFilter productFilter,
                                                     PageHandler pageHandler) {
-        String tableName = productTable(companyId, branchId);
+        MapSqlParameterSource params = baseParams(branchId, companyId);
         List<String> conditions = new ArrayList<>();
-        MapSqlParameterSource params = new MapSqlParameterSource();
 
         addFilterConditions(conditions, params, productFilter, false);
 
         if (comName != null && comName.startsWith("All ")) {
-            conditions.add("\"type\" = :type");
+            conditions.add("prod.product_type = :type");
             params.addValue("type", comName.substring(4).trim());
         } else {
-            conditions.add("\"companyName\" = :companyName");
+            conditions.add("prod.company_name = :companyName");
             params.addValue("companyName", comName == null ? "" : comName.trim());
         }
 
         String whereClause = buildWhereClause(conditions);
-        String countSql = "SELECT count(*) FROM " + tableName + whereClause;
-        String dataSql = "SELECT " + PRODUCT_SELECT_COLUMNS + " FROM " + tableName + whereClause + appendPaging(pageHandler);
+        String fromClause = productFromClause(companyId);
+        String countSql = "SELECT count(*)" + fromClause + whereClause;
+        String dataSql = "SELECT " + PRODUCT_SELECT_COLUMNS + fromClause + whereClause + appendPaging(pageHandler);
         return new ProductQuerySpec(dataSql, countSql, params);
     }
 
     static ProductQuerySpec buildAllRangeQuery(String branchId, int companyId, ProductFilter productFilter) {
-        String tableName = productTable(companyId, branchId);
+        MapSqlParameterSource params = baseParams(branchId, companyId);
         List<String> conditions = new ArrayList<>();
-        MapSqlParameterSource params = new MapSqlParameterSource();
 
         addFilterConditions(conditions, params, productFilter, false);
-        conditions.add("\"productId\" > 0");
+        conditions.add("prod.product_id > 0");
 
         String whereClause = buildWhereClause(conditions);
-        String sql = "SELECT " + PRODUCT_SELECT_COLUMNS + " FROM " + tableName + whereClause;
+        String sql = "SELECT " + PRODUCT_SELECT_COLUMNS + productFromClause(companyId) + whereClause;
         return new ProductQuerySpec(sql, null, params);
-    }
-
-    static String productTable(int companyId, String branchId) {
-        validateCompanyId(companyId);
-        validateIdentifier(branchId, "branchId");
-        return "C_" + companyId + ".\"PosProduct_" + branchId + "\"";
-    }
-
-    static String productTable(int companyId, int branchId) {
-        return productTable(companyId, String.valueOf(branchId));
     }
 
     static String productSelectColumns() {
         return PRODUCT_SELECT_COLUMNS;
+    }
+
+    static String productFromClause(int companyId) {
+        return " FROM " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " prod " +
+                "LEFT JOIN " + TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId) + " stock " +
+                "ON stock.product_id = prod.product_id " +
+                "AND stock.branch_id = :branchId ";
+    }
+
+    static MapSqlParameterSource baseParams(String branchId, int companyId) {
+        int numericBranchId = Integer.parseInt(branchId);
+        return new MapSqlParameterSource()
+                .addValue("companyId", companyId)
+                .addValue("branchId", numericBranchId);
+    }
+
+    static MapSqlParameterSource baseParams(int branchId, int companyId) {
+        return new MapSqlParameterSource()
+                .addValue("companyId", companyId)
+                .addValue("branchId", branchId);
     }
 
     static List<String> normalizeTokens(String[] text) {
@@ -111,16 +140,10 @@ final class ProductQueryBuilder {
                 continue;
             }
 
-            // Remove control characters and invisible/formatting chars (zero-width, etc.)
             token = token.replaceAll("\\p{C}", "");
-
-            // Normalize unicode to a consistent form to avoid mismatch (NFKC)
             token = Normalizer.normalize(token, Normalizer.Form.NFKC);
-
-            // Replace punctuation with a single space, then collapse whitespace
             token = token.replaceAll("[\\p{Punct}]+", " ").replaceAll("\\s+", " ").trim();
 
-            // Skip tokens that are too short to be useful (single characters)
             if (token.length() < 2) {
                 continue;
             }
@@ -135,32 +158,32 @@ final class ProductQueryBuilder {
                                             ProductFilter productFilter, boolean useDefaultInStockFilter) {
         if (productFilter == null) {
             if (useDefaultInStockFilter) {
-                conditions.add("\"quantity\" <> 0");
+                conditions.add("COALESCE(stock.quantity, 0) <> 0");
             }
             return;
         }
 
         if (productFilter.isOutOfStock() && productFilter.isToSell()) {
-            conditions.add("\"quantity\" >= 0");
+            conditions.add("COALESCE(stock.quantity, 0) >= 0");
         } else if (!productFilter.isOutOfStock() && productFilter.isToSell()) {
-            conditions.add("\"quantity\" > 0");
+            conditions.add("COALESCE(stock.quantity, 0) > 0");
         } else if (productFilter.isOutOfStock()) {
-            conditions.add("\"quantity\" = 0");
+            conditions.add("COALESCE(stock.quantity, 0) = 0");
         }
 
         if (productFilter.getRangeMin() > 0 || productFilter.getRangeMax() < 100000) {
-            conditions.add("\"rPrice\" BETWEEN :rangeMin AND :rangeMax");
+            conditions.add("prod.retail_price BETWEEN :rangeMin AND :rangeMax");
             params.addValue("rangeMin", productFilter.getRangeMin());
             params.addValue("rangeMax", productFilter.getRangeMax());
         }
 
         if (productFilter.isUsed()) {
-            conditions.add("\"pState\" = :productState");
+            conditions.add("prod.product_state = :productState");
             params.addValue("productState", "Used");
         }
 
         if (productFilter.getMajor() != null && !productFilter.getMajor().isBlank()) {
-            conditions.add("\"major\" = :major");
+            conditions.add("prod.major = :major");
             params.addValue("major", productFilter.getMajor().trim());
         }
 
@@ -182,7 +205,7 @@ final class ProductQueryBuilder {
         LocalDate startDate = firstDate.isBefore(secondDate) ? firstDate : secondDate;
         LocalDate endDate = firstDate.isAfter(secondDate) ? firstDate : secondDate;
 
-        conditions.add("\"buyingDay\"::date BETWEEN :startDate AND :endDate");
+        conditions.add("prod.buying_day::date BETWEEN :startDate AND :endDate");
         params.addValue("startDate", startDate);
         params.addValue("endDate", endDate);
     }
@@ -199,18 +222,6 @@ final class ProductQueryBuilder {
             return "";
         }
         return pageHandler.handlePageSqlQuery();
-    }
-
-    private static void validateCompanyId(int companyId) {
-        if (companyId <= 0) {
-            throw new IllegalArgumentException("companyId must be positive");
-        }
-    }
-
-    private static void validateIdentifier(String value, String fieldName) {
-        if (value == null || !SAFE_IDENTIFIER.matcher(value).matches()) {
-            throw new IllegalArgumentException(fieldName + " contains unsupported characters");
-        }
     }
 }
 

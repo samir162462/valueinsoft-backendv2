@@ -105,8 +105,10 @@ public class DbPlatformAdminDailyMetrics {
 
     public int getBranchProductCount(int companyId, int branchId) {
         Integer value = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM " + TenantSqlIdentifiers.productTable(companyId, branchId),
+                "SELECT COUNT(*) FROM " + TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId) + " WHERE branch_id = ? AND quantity > 0",
                 Integer.class
+                ,
+                branchId
         );
         return value == null ? 0 : value;
     }
@@ -180,9 +182,10 @@ public class DbPlatformAdminDailyMetrics {
 
     public int getBranchInventoryAdjustmentCount(int companyId, int branchId, LocalDate metricDate) {
         Integer value = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) +
-                        " WHERE \"time\"::date = ? AND COALESCE(\"transactionType\", '') NOT IN ('Sold', 'BounceBackInv')",
+                "SELECT COUNT(*) FROM " + TenantSqlIdentifiers.inventoryStockLedgerTable(companyId) +
+                        " WHERE branch_id = ? AND created_at::date = ? AND COALESCE(movement_type, '') NOT IN ('SALE_OUT', 'BOUNCE_BACK_IN')",
                 Integer.class,
+                branchId,
                 Date.valueOf(metricDate)
         );
         return value == null ? 0 : value;

@@ -16,12 +16,14 @@ import static org.mockito.Mockito.when;
 class CategoryServiceTest {
 
     private DbPosCategory dbPosCategory;
+    private BusinessPackageCatalogService businessPackageCatalogService;
     private CategoryService categoryService;
 
     @BeforeEach
     void setUp() {
         dbPosCategory = Mockito.mock(DbPosCategory.class);
-        categoryService = new CategoryService(dbPosCategory, new ObjectMapper());
+        businessPackageCatalogService = Mockito.mock(BusinessPackageCatalogService.class);
+        categoryService = new CategoryService(dbPosCategory, new ObjectMapper(), businessPackageCatalogService);
     }
 
     @Test

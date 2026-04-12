@@ -60,9 +60,9 @@ public class DBMSupplierReceipt {
     }
 
     public int updateInventoryRemainingAmount(int companyId, int branchId, int transId, java.math.BigDecimal remainingAmount) {
-        String sql = "UPDATE " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) +
-                " SET \"RemainingAmount\" = ? WHERE \"transId\" = ?";
-        return jdbcTemplate.update(sql, remainingAmount, transId);
+        String sql = "UPDATE " + TenantSqlIdentifiers.inventoryStockLedgerTable(companyId) +
+                " SET remaining_amount = ? WHERE branch_id = ? AND stock_ledger_id = ?";
+        return jdbcTemplate.update(sql, remainingAmount, branchId, transId);
     }
 
     public int decrementSupplierRemaining(int companyId, int branchId, int supplierId, java.math.BigDecimal amountPaid) {

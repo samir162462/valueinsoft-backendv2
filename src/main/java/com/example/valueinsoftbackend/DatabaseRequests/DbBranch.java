@@ -210,8 +210,7 @@ public class DbBranch {
                 "    \"transTotal\" INTEGER," +
                 "    \"payType\" VARCHAR," +
                 "    \"time\" TIMESTAMP," +
-                "    \"RemainingAmount\" INTEGER," +
-                "    FOREIGN KEY (\"productId\") REFERENCES " + TenantSqlIdentifiers.productTable(companyId, branchId) + " (\"productId\")" +
+                "    \"RemainingAmount\" INTEGER" +
                 ")";
         return executeProvisioningSql(sql, "InventoryTransactions", branchId, companyId);
     }

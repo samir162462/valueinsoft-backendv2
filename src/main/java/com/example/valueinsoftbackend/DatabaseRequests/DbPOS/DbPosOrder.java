@@ -11,6 +11,8 @@ import com.google.gson.reflect.TypeToken;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.lang.reflect.Type;
@@ -27,10 +29,12 @@ public class DbPosOrder {
     }.getType();
 
     private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final Gson gson = new Gson();
 
     public DbPosOrder(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.namedParameterJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
     }
 
     public int addOrder(Order order, int companyId) {
@@ -64,6 +68,7 @@ public class DbPosOrder {
         insertOrderDetails(orderId, order, companyId);
         updateProductQuantities(order, companyId);
         insertSoldInventoryTransactions(order, companyId, orderTime);
+        insertSoldLedgerEntries(orderId, order, companyId, orderTime);
 
         log.debug("Inserted order {} for company {} branch {}", orderId, companyId, branchId);
         return orderId;
@@ -147,17 +152,16 @@ public class DbPosOrder {
 
         String detailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
-        String productTable = TenantSqlIdentifiers.productTable(companyId, branchId);
         String sql = "SELECT od.\"orderDetailsId\", od.\"orderId\", od.quantity, od.total, od.\"productId\", " +
                 "COALESCE(od.\"bouncedBack\", 0) AS \"bouncedBack\", ord.\"salesUser\", COALESCE(ord.\"orderDiscount\", 0) AS \"orderDiscount\", " +
-                "COALESCE(prod.\"bPrice\", 0) AS \"buyingPrice\", " +
+                "COALESCE(prod.buying_price, 0) AS \"buyingPrice\", " +
                 "EXISTS (" +
                 " SELECT 1 FROM " + detailTable + " other " +
                 " WHERE other.\"orderId\" = od.\"orderId\" AND other.\"orderDetailsId\" <> od.\"orderDetailsId\" AND COALESCE(other.\"bouncedBack\", 0) = 0" +
                 ") AS \"hasOtherActiveItems\" " +
                 "FROM " + detailTable + " od " +
                 "JOIN " + orderTable + " ord ON ord.\"orderId\" = od.\"orderId\" " +
-                "LEFT JOIN " + productTable + " prod ON prod.\"productId\" = od.\"productId\" " +
+                "LEFT JOIN " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " prod ON prod.product_id = od.\"productId\" " +
                 "WHERE od.\"orderDetailsId\" = ?";
 
         List<OrderBounceBackContext> contexts = jdbcTemplate.query(sql, (rs, rowNum) -> new OrderBounceBackContext(
@@ -183,9 +187,10 @@ public class DbPosOrder {
     }
 
     public int restoreInventoryQuantity(int productId, int quantity, int branchId, int companyId) {
-        String sql = "UPDATE " + TenantSqlIdentifiers.productTable(companyId, branchId) +
-                " SET quantity = quantity + ? WHERE \"productId\" = ?";
-        return jdbcTemplate.update(sql, quantity, productId);
+        String sql = "UPDATE " + TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId) + " " +
+                "SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP " +
+                "WHERE branch_id = ? AND product_id = ?";
+        return jdbcTemplate.update(sql, quantity, branchId, productId);
     }
 
     public void insertBounceBackInventoryTransaction(OrderBounceBackContext context, int branchId, int companyId) {
@@ -202,6 +207,35 @@ public class DbPosOrder {
                 context.getTotal(),
                 "BounceBack",
                 0
+        );
+    }
+
+    public int insertBounceBackLedgerEntry(OrderBounceBackContext context, int branchId, int companyId) {
+        String sql = """
+                INSERT INTO %s (
+                    branch_id, product_id, quantity_delta, movement_type, reference_type, reference_id,
+                    actor_name, note, supplier_id, trans_total, pay_type, remaining_amount, created_at
+                ) VALUES (
+                    :branchId, :productId, :quantityDelta, :movementType, :referenceType, :referenceId,
+                    :actorName, :note, :supplierId, :transTotal, :payType, :remainingAmount, CURRENT_TIMESTAMP
+                )
+                """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
+
+        return namedParameterJdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("branchId", branchId)
+                        .addValue("productId", context.getProductId())
+                        .addValue("quantityDelta", context.getQuantity())
+                        .addValue("movementType", "BOUNCE_BACK_IN")
+                        .addValue("referenceType", "ORDER_BOUNCE_BACK")
+                        .addValue("referenceId", String.valueOf(context.getOrderDetailId()))
+                        .addValue("actorName", context.getSalesUser())
+                        .addValue("note", "Restored stock from order bounce back")
+                        .addValue("supplierId", 0)
+                        .addValue("transTotal", context.getTotal())
+                        .addValue("payType", "BounceBack")
+                        .addValue("remainingAmount", 0)
         );
     }
 
@@ -239,11 +273,18 @@ public class DbPosOrder {
     }
 
     private void updateProductQuantities(Order order, int companyId) {
-        String sql = "UPDATE " + TenantSqlIdentifiers.productTable(companyId, order.getBranchId()) +
-                " SET quantity = quantity - ? WHERE \"productId\" = ?";
+        String sql = "UPDATE " + TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId) + " " +
+                "SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP " +
+                "WHERE branch_id = ? AND product_id = ? AND quantity >= ?";
 
         for (OrderDetails detail : order.getOrderDetails()) {
-            int updatedRows = jdbcTemplate.update(sql, detail.getQuantity(), detail.getProductId());
+            int updatedRows = jdbcTemplate.update(
+                    sql,
+                    detail.getQuantity(),
+                    order.getBranchId(),
+                    detail.getProductId(),
+                    detail.getQuantity()
+            );
             if (updatedRows != 1) {
                 throw new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found for order item " + detail.getProductId());
             }
@@ -269,6 +310,43 @@ public class DbPosOrder {
                 ps.setString(7, "Sale");
                 ps.setTimestamp(8, orderTime);
                 ps.setInt(9, 0);
+            }
+
+            @Override
+            public int getBatchSize() {
+                return details.size();
+            }
+        });
+    }
+
+    private void insertSoldLedgerEntries(int orderId, Order order, int companyId, Timestamp orderTime) {
+        ArrayList<OrderDetails> details = order.getOrderDetails();
+        String sql = """
+                INSERT INTO %s (
+                    branch_id, product_id, quantity_delta, movement_type, reference_type, reference_id,
+                    actor_name, note, supplier_id, trans_total, pay_type, remaining_amount, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
+
+        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+                OrderDetails detail = details.get(i);
+                ps.setInt(1, order.getBranchId());
+                ps.setInt(2, detail.getProductId());
+                ps.setInt(3, detail.getQuantity() * -1);
+                ps.setString(4, "SALE_OUT");
+                ps.setString(5, "ORDER");
+                ps.setString(6, String.valueOf(orderId));
+                ps.setString(7, order.getSalesUser());
+                ps.setString(8, "Posted from POS sale flow");
+                ps.setInt(9, 0);
+                ps.setInt(10, detail.getTotal());
+                ps.setString(11, "Sale");
+                ps.setInt(12, 0);
+                ps.setTimestamp(13, orderTime);
             }
 
             @Override

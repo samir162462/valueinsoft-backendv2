@@ -47,12 +47,14 @@ public class DbExpenses {
     public List<ExpensesSum> getPurchasesExpensesByMonth(int branchId, int companyId, String timeText) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         String[] times = parseRange(timeText);
-        String sql = "SELECT time::date AS expenseDate, sum(\"transTotal\") AS totalAmount, count(time) AS transactionCount " +
-                "FROM " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) + " " +
-                "WHERE \"time\" >= date_trunc('month', CAST(? AS timestamp)) " +
-                "AND \"time\" < date_trunc('month', CAST(? AS timestamp)) + interval '1 month' " +
-                "GROUP BY time::date ORDER BY time::date ASC";
-        return jdbcTemplate.query(sql, expensesSumRowMapper, times[0], times[1]);
+        String sql = "SELECT created_at::date AS expenseDate, sum(COALESCE(trans_total, 0)) AS totalAmount, count(created_at) AS transactionCount " +
+                "FROM " + TenantSqlIdentifiers.inventoryStockLedgerTable(companyId) + " " +
+                "WHERE branch_id = ? " +
+                "AND created_at >= date_trunc('month', CAST(? AS timestamp)) " +
+                "AND created_at < date_trunc('month', CAST(? AS timestamp)) + interval '1 month' " +
+                "AND COALESCE(movement_type, '') NOT IN ('SALE_OUT', 'BOUNCE_BACK_IN') " +
+                "GROUP BY created_at::date ORDER BY created_at::date ASC";
+        return jdbcTemplate.query(sql, expensesSumRowMapper, branchId, times[0], times[1]);
     }
 
     public String addExpenses(int branchId, int companyId, Expenses expenses, boolean isStatic) {

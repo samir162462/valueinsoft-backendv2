@@ -9,6 +9,8 @@ import java.sql.Timestamp;
 public class InventoryTransaction {
     int transId;
     int productId;
+    String productName;
+    String serial;
     String userName;
     int supplierId;
     String transactionType;
@@ -17,6 +19,9 @@ public class InventoryTransaction {
     String payType;
     Timestamp time;
     int remainingAmount;
+    int runningBalance;
+    String businessLineKey;
+    String templateKey;
 
     public InventoryTransaction(int transId, int productId, String userName, int supplierId, String transactionType, int numItems, int transTotal, String payType, Timestamp time, int remainingAmount) {
         this.transId = transId;
@@ -29,6 +34,24 @@ public class InventoryTransaction {
         this.payType = payType;
         this.time = time;
         this.remainingAmount = remainingAmount;
+    }
+
+    public InventoryTransaction(int transId, int productId, String productName, String serial, String userName,
+                                int supplierId, String transactionType, int numItems, int transTotal,
+                                String payType, Timestamp time, int remainingAmount, int runningBalance) {
+        this(transId, productId, userName, supplierId, transactionType, numItems, transTotal, payType, time, remainingAmount);
+        this.productName = productName;
+        this.serial = serial;
+        this.runningBalance = runningBalance;
+    }
+
+    public InventoryTransaction(int transId, int productId, String productName, String serial, String userName,
+                                int supplierId, String transactionType, int numItems, int transTotal,
+                                String payType, Timestamp time, int remainingAmount, int runningBalance,
+                                String businessLineKey, String templateKey) {
+        this(transId, productId, productName, serial, userName, supplierId, transactionType, numItems, transTotal, payType, time, remainingAmount, runningBalance);
+        this.businessLineKey = businessLineKey;
+        this.templateKey = templateKey;
     }
 
     public int getTransId() {
@@ -45,6 +68,22 @@ public class InventoryTransaction {
 
     public void setProductId(int productId) {
         this.productId = productId;
+    }
+
+    public String getProductName() {
+        return productName;
+    }
+
+    public void setProductName(String productName) {
+        this.productName = productName;
+    }
+
+    public String getSerial() {
+        return serial;
+    }
+
+    public void setSerial(String serial) {
+        this.serial = serial;
     }
 
     public String getUserName() {
@@ -109,6 +148,30 @@ public class InventoryTransaction {
 
     public void setRemainingAmount(int remainingAmount) {
         this.remainingAmount = remainingAmount;
+    }
+
+    public int getRunningBalance() {
+        return runningBalance;
+    }
+
+    public void setRunningBalance(int runningBalance) {
+        this.runningBalance = runningBalance;
+    }
+
+    public String getBusinessLineKey() {
+        return businessLineKey;
+    }
+
+    public void setBusinessLineKey(String businessLineKey) {
+        this.businessLineKey = businessLineKey;
+    }
+
+    public String getTemplateKey() {
+        return templateKey;
+    }
+
+    public void setTemplateKey(String templateKey) {
+        this.templateKey = templateKey;
     }
 }
 

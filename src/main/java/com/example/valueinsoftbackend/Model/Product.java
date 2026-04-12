@@ -86,6 +86,20 @@ public class Product {
 
     String image;
 
+    @Size(max = 40, message = "businessLineKey must be 40 characters or fewer")
+    String businessLineKey;
+
+    @Size(max = 80, message = "templateKey must be 80 characters or fewer")
+    String templateKey;
+
+    @Size(max = 20, message = "baseUomCode must be 20 characters or fewer")
+    String baseUomCode;
+
+    @Size(max = 40, message = "pricingPolicyCode must be 40 characters or fewer")
+    String pricingPolicyCode;
+
+    String attributes;
+
     @AssertTrue(message = "rPrice must be greater than or equal to lPrice, and lPrice must be greater than or equal to bPrice")
     public boolean isPriceOrderValid() {
         return rPrice >= lPrice && lPrice >= bPrice;
