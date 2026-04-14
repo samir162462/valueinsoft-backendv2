@@ -1,13 +1,15 @@
 package com.example.valueinsoftbackend.Controller;
 
-import java.util.ArrayList;
-import java.util.Map;
-import java.security.Principal;
-
-import javax.validation.constraints.Positive;
-
-import com.example.valueinsoftbackend.Service.CompanyService;
+import com.example.valueinsoftbackend.Model.Branch;
+import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleResponse;
+import com.example.valueinsoftbackend.Model.Company;
+import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingsBatchUpdateRequest;
+import com.example.valueinsoftbackend.Model.Request.CreateBranchRequest;
 import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.BranchService;
+import com.example.valueinsoftbackend.Service.BranchSettingsService;
+import com.example.valueinsoftbackend.Service.CompanyService;
+import com.example.valueinsoftbackend.Service.SubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,45 +23,40 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.valueinsoftbackend.Model.Branch;
-import com.example.valueinsoftbackend.Model.Company;
-import com.example.valueinsoftbackend.Model.Request.CreateBranchRequest;
-import com.example.valueinsoftbackend.Service.BranchService;
-import com.example.valueinsoftbackend.Service.SubscriptionService;
-
 import javax.validation.Valid;
+import javax.validation.constraints.Positive;
+import java.security.Principal;
+import java.util.ArrayList;
+import java.util.Map;
 
 @RestController
 @Validated
 @RequestMapping("/Branch")
 public class BranchController {
 
-
     private final CompanyService companyService;
     private final BranchService branchService;
     private final SubscriptionService subscriptionService;
     private final AuthorizationService authorizationService;
-
+    private final BranchSettingsService branchSettingsService;
 
     @Autowired
     public BranchController(CompanyService companyService,
                             BranchService branchService,
                             SubscriptionService subscriptionService,
-                            AuthorizationService authorizationService) {
+                            AuthorizationService authorizationService,
+                            BranchSettingsService branchSettingsService) {
         this.companyService = companyService;
         this.branchService = branchService;
         this.subscriptionService = subscriptionService;
         this.authorizationService = authorizationService;
+        this.branchSettingsService = branchSettingsService;
     }
-
-
 
     @RequestMapping(value = "/getBranchById", method = RequestMethod.GET)
     @ResponseBody
-    public Company getCompanyById(
-            @RequestParam("id") @Positive int id,
-            Principal principal
-    ) {
+    public Company getCompanyById(@RequestParam("id") @Positive int id,
+                                  Principal principal) {
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
                 id,
@@ -71,10 +68,8 @@ public class BranchController {
 
     @RequestMapping(value = "{id}/getBranchesByCompanyId", method = RequestMethod.GET)
     @ResponseBody
-    public ArrayList<Branch> getBranchesByCompanyId(
-            @PathVariable("id") @Positive int id,
-            Principal principal
-    ) {
+    public ArrayList<Branch> getBranchesByCompanyId(@PathVariable("id") @Positive int id,
+                                                    Principal principal) {
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
                 id,
@@ -83,7 +78,6 @@ public class BranchController {
         );
         return branchService.getBranchesByCompanyId(id);
     }
-
 
     @PostMapping("/AddBranch")
     public ResponseEntity<Object> newUser(@Valid @RequestBody CreateBranchRequest body,
@@ -96,15 +90,12 @@ public class BranchController {
         );
         int branchId = branchService.createBranch(body);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body("{\"title\" : \"the Branched added saved\", \"branchId\" : " + branchId + "}");
-
     }
 
     @RequestMapping(value = "/isActive/{branchId}", method = RequestMethod.GET)
     @ResponseBody
-    public ResponseEntity<Object> isActiveBranch(
-            @PathVariable("branchId") @Positive int branchId,
-            Principal principal
-    ) {
+    public ResponseEntity<Object> isActiveBranch(@PathVariable("branchId") @Positive int branchId,
+                                                 Principal principal) {
         Branch branch = branchService.getBranchById(branchId);
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
@@ -113,12 +104,24 @@ public class BranchController {
                 "company.settings.read"
         );
 
-        Map<String, Object> Details = subscriptionService.isActive(branchId);
-
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Details);
+        Map<String, Object> details = subscriptionService.isActive(branchId);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(details);
     }
 
+    @RequestMapping(value = "/{tenantId}/{branchId}/settings", method = RequestMethod.GET)
+    @ResponseBody
+    public BranchSettingsBundleResponse getBranchSettings(@PathVariable("tenantId") @Positive int tenantId,
+                                                          @PathVariable("branchId") @Positive int branchId,
+                                                          Principal principal) {
+        return branchSettingsService.getBranchSettingsForAuthenticatedUser(principal.getName(), tenantId, branchId);
+    }
 
-
-
+    @RequestMapping(value = "/{tenantId}/{branchId}/settings", method = RequestMethod.PUT)
+    @ResponseBody
+    public BranchSettingsBundleResponse saveBranchSettings(@PathVariable("tenantId") @Positive int tenantId,
+                                                           @PathVariable("branchId") @Positive int branchId,
+                                                           @Valid @RequestBody BranchSettingsBatchUpdateRequest request,
+                                                           Principal principal) {
+        return branchSettingsService.saveBranchSettingsForAuthenticatedUser(principal.getName(), tenantId, branchId, request);
+    }
 }

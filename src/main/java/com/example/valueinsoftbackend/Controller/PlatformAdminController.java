@@ -39,6 +39,9 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformMetricsStatusR
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformOverviewResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformRevenueTrendResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupportNoteItem;
+import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingDefinitionConfig;
+import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleResponse;
+import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingsBatchUpdateRequest;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupportNotesPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupplierReceiptsPageResponse;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.CreatePlatformSupportNoteRequest;
@@ -56,6 +59,7 @@ import com.example.valueinsoftbackend.Service.PlatformAdminMetricsService;
 import com.example.valueinsoftbackend.Service.PlatformAdminOverviewService;
 import com.example.valueinsoftbackend.Service.PlatformSupportService;
 import com.example.valueinsoftbackend.Service.InventoryTemplateMetadataService;
+import com.example.valueinsoftbackend.Service.PlatformAdminBranchSettingsService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -89,6 +93,7 @@ public class PlatformAdminController {
     private final PlatformAdminMetricsService platformAdminMetricsService;
     private final PlatformSupportService platformSupportService;
     private final InventoryTemplateMetadataService inventoryTemplateMetadataService;
+    private final PlatformAdminBranchSettingsService platformAdminBranchSettingsService;
 
     public PlatformAdminController(PlatformAdminOverviewService platformAdminOverviewService,
                                    PlatformAdminAlertService platformAdminAlertService,
@@ -100,7 +105,8 @@ public class PlatformAdminController {
                                    PlatformAdminFinanceService platformAdminFinanceService,
                                    PlatformAdminMetricsService platformAdminMetricsService,
                                    PlatformSupportService platformSupportService,
-                                   InventoryTemplateMetadataService inventoryTemplateMetadataService) {
+                                   InventoryTemplateMetadataService inventoryTemplateMetadataService,
+                                   PlatformAdminBranchSettingsService platformAdminBranchSettingsService) {
         this.platformAdminOverviewService = platformAdminOverviewService;
         this.platformAdminAlertService = platformAdminAlertService;
         this.platformAdminCompanyService = platformAdminCompanyService;
@@ -112,6 +118,7 @@ public class PlatformAdminController {
         this.platformAdminMetricsService = platformAdminMetricsService;
         this.platformSupportService = platformSupportService;
         this.inventoryTemplateMetadataService = inventoryTemplateMetadataService;
+        this.platformAdminBranchSettingsService = platformAdminBranchSettingsService;
     }
 
     @GetMapping("/overview")
@@ -731,4 +738,48 @@ public class PlatformAdminController {
                 request
         );
     }
+    @GetMapping("/branch-settings/definitions")
+    public ArrayList<BranchSettingDefinitionConfig> getBranchSettingDefinitions(Principal principal) {
+        return platformAdminBranchSettingsService.getDefinitionsForAuthenticatedUser(principal.getName());
+    }
+
+    @GetMapping("/companies/{tenantId}/branches/{branchId}/settings")
+    public BranchSettingsBundleResponse getCompanyBranchSettings(Principal principal,
+                                                                @PathVariable int tenantId,
+                                                                @PathVariable int branchId) {
+        return platformAdminBranchSettingsService.getBranchSettingsForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                branchId
+        );
+    }
+
+    @PostMapping("/companies/{tenantId}/branches/{branchId}/settings")
+    public BranchSettingsBundleResponse saveCompanyBranchSettings(Principal principal,
+                                                                 @PathVariable int tenantId,
+                                                                 @PathVariable int branchId,
+                                                                 @Valid @RequestBody BranchSettingsBatchUpdateRequest request) {
+        return platformAdminBranchSettingsService.saveBranchSettingsForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                branchId,
+                request
+        );
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/companies/{tenantId}/branches/{branchId}/settings")
+    public BranchSettingsBundleResponse updateCompanyBranchSettings(Principal principal,
+                                                                   @PathVariable int tenantId,
+                                                                   @PathVariable int branchId,
+                                                                   @Valid @RequestBody BranchSettingsBatchUpdateRequest request) {
+        return platformAdminBranchSettingsService.saveBranchSettingsForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                branchId,
+                request
+        );
+    }
 }
+
+
+
