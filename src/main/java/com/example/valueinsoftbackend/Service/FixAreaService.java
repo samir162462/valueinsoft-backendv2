@@ -52,8 +52,10 @@ public class FixAreaService {
                 request.getStatus().trim(),
                 normalizeNullable(request.getDesc()),
                 request.getBranchId(),
-                request.getFees()
+                request.getFees(),request.getImei(),
+                request.getDeviceCondition(),request.getAccessories()
         );
+
 
         int rows = dbSlotsFixArea.insertFixAreaSlot(companyId, slotsFixArea);
         if (rows != 1) {
@@ -80,7 +82,8 @@ public class FixAreaService {
                 request.getStatus().trim(),
                 normalizeNullable(request.getDesc()),
                 request.getBranchId(),
-                request.getFees()
+                request.getFees(),request.getImei(),
+                request.getDeviceCondition(),request.getAccessories()
         );
 
         int rows = dbSlotsFixArea.updateFixAreaSlot(companyId, slotsFixArea);
@@ -88,8 +91,65 @@ public class FixAreaService {
             throw new ApiException(HttpStatus.NOT_FOUND, "FIX_AREA_SLOT_NOT_FOUND", "The Fix Slot Not Updated (Failed)");
         }
 
+        // Save associated parts
+        if (request.getUsedParts() != null) {
+            dbSlotsFixArea.saveParts(companyId, request.getFaId(), request.getUsedParts());
+        }
+
         log.info("Updated fix-area slot {} for company {} branch {}", request.getFaId(), companyId, request.getBranchId());
         return "The Fix Slot Updated (success)";
+    }
+
+    public SlotsFixArea getFixSlotById(int companyId, int branchId, int faId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        SlotsFixArea slot = dbSlotsFixArea.getFixSlotById(companyId, branchId, faId);
+        if (slot == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FIX_SLOT_NOT_FOUND", "Repair Ticket not found");
+        }
+        return slot;
+    }
+
+    public List<SlotsFixArea> searchFixSlots(int companyId, String query) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        return dbSlotsFixArea.searchFixAreaSlots(companyId, query);
+    }
+
+    @Transactional
+    public String markSlotPaidAndSave(int companyId, int faId, int orderId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        int rows = dbSlotsFixArea.markSlotPaidAndSave(companyId, faId, orderId);
+        if (rows != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FIX_AREA_SLOT_NOT_FOUND", "Could not update order status");
+        }
+        return "Slot marked as paid successfully";
+    }
+
+    @Transactional
+    public String reverseRepairPayment(int companyId, int orderId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(orderId, "orderId");
+        int rows = dbSlotsFixArea.reverseMarkPaid(companyId, orderId);
+        if (rows == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FIX_AREA_SLOT_NOT_FOUND", "No repair ticket linked to this order");
+        }
+        log.info("Reversed repair payment for company {} orderId {}", companyId, orderId);
+        return "Repair ticket restored successfully";
+    }
+
+    @Transactional
+    public String closeSlot(int companyId, int faId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(faId, "faId");
+        int rows = dbSlotsFixArea.closeSlot(companyId, faId);
+        if (rows == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FIX_AREA_SLOT_NOT_FOUND", "Repair ticket not found");
+        }
+        log.info("Closed fix-area slot {} for company {}", faId, companyId);
+        return "Repair ticket closed and parts removed";
     }
 
     private String normalizeNullable(String value) {

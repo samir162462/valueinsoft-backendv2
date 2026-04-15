@@ -1,10 +1,12 @@
 package com.example.valueinsoftbackend.Model.Request;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Positive;
 import javax.validation.constraints.PositiveOrZero;
+import com.example.valueinsoftbackend.Model.Slots.FixAreaPart;
 
 public class FixAreaSlotUpdateRequest {
 
@@ -29,6 +31,10 @@ public class FixAreaSlotUpdateRequest {
 
     @PositiveOrZero(message = "fees must be zero or greater")
     private BigDecimal fees;
+
+    private String imei;
+    private String deviceCondition;
+    private String accessories;
 
     public FixAreaSlotUpdateRequest() {
     }
@@ -95,5 +101,39 @@ public class FixAreaSlotUpdateRequest {
 
     public void setFees(BigDecimal fees) {
         this.fees = fees;
+    }
+
+    public String getImei() {
+        return imei;
+    }
+
+    public void setImei(String imei) {
+        this.imei = imei;
+    }
+
+    public String getDeviceCondition() {
+        return deviceCondition;
+    }
+
+    public void setDeviceCondition(String deviceCondition) {
+        this.deviceCondition = deviceCondition;
+    }
+
+    public String getAccessories() {
+        return accessories;
+    }
+
+    public void setAccessories(String accessories) {
+        this.accessories = accessories;
+    }
+
+    private List<FixAreaPart> usedParts;
+
+    public List<FixAreaPart> getUsedParts() {
+        return usedParts;
+    }
+
+    public void setUsedParts(List<FixAreaPart> usedParts) {
+        this.usedParts = usedParts;
     }
 }

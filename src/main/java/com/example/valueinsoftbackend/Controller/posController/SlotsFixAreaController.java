@@ -83,4 +83,81 @@ public class SlotsFixAreaController {
         );
         return ResponseEntity.accepted().body(fixAreaService.updateFixAreaSlot(companyId, slotsFixArea));
     }
+
+    @GetMapping("{companyName}/{branchId}/fixSlotById/{faId}")
+    public ResponseEntity<SlotsFixArea> getFixSlotById(
+            @PathVariable("companyName") @Positive int companyId,
+            @PathVariable @Positive int branchId,
+            @PathVariable @Positive int faId,
+            Principal principal
+    ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "pos.repair.read"
+        );
+        return ResponseEntity.ok(fixAreaService.getFixSlotById(companyId, branchId, faId));
+    }
+
+    @GetMapping("{companyName}/searchFixArea")
+    public ResponseEntity<List<SlotsFixArea>> searchFixSlots(
+            @PathVariable("companyName") @Positive int companyId,
+            @RequestParam("query") String query,
+            Principal principal
+    ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                null,
+                "pos.repair.read"
+        );
+        return ResponseEntity.ok(fixAreaService.searchFixSlots(companyId, query));
+    }
+
+    @PutMapping("{companyName}/markPaid")
+    public ResponseEntity<Object> markSlotPaid(
+            @PathVariable("companyName") @Positive int companyId,
+            @RequestParam("slotId") @Positive int slotId,
+            @RequestParam("orderId") @Positive int orderId,
+            Principal principal
+    ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                null,
+                "pos.repair.edit"
+        );
+        return ResponseEntity.accepted().body(fixAreaService.markSlotPaidAndSave(companyId, slotId, orderId));
+    }
+
+    @PutMapping("{companyName}/reverseRepairPayment")
+    public ResponseEntity<Object> reverseRepairPayment(
+            @PathVariable("companyName") @Positive int companyId,
+            @RequestParam("orderId") @Positive int orderId,
+            Principal principal
+    ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                null,
+                "pos.repair.edit"
+        );
+        return ResponseEntity.accepted().body(fixAreaService.reverseRepairPayment(companyId, orderId));
+    }
+
+    @DeleteMapping("{companyName}/closeSlot")
+    public ResponseEntity<Object> closeSlot(
+            @PathVariable("companyName") @Positive int companyId,
+            @RequestParam("faId") @Positive int faId,
+            Principal principal
+    ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                null,
+                "pos.repair.edit"
+        );
+        return ResponseEntity.accepted().body(fixAreaService.closeSlot(companyId, faId));
+    }
 }

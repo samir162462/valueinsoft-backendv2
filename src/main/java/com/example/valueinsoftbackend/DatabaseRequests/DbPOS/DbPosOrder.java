@@ -278,6 +278,9 @@ public class DbPosOrder {
                 "WHERE branch_id = ? AND product_id = ? AND quantity >= ?";
 
         for (OrderDetails detail : order.getOrderDetails()) {
+            if (detail.getProductId() <= 0) {
+                continue; // Skip inventory updates for non-inventory items (like Repair Fees)
+            }
             int updatedRows = jdbcTemplate.update(
                     sql,
                     detail.getQuantity(),
@@ -286,13 +289,19 @@ public class DbPosOrder {
                     detail.getQuantity()
             );
             if (updatedRows != 1) {
-                throw new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found for order item " + detail.getProductId());
+                log.warn("Product not found or not enough quantity for product {}. Expected: {}", detail.getProductId(), detail.getQuantity());
+                throw new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found or low stock for item " + detail.getProductId());
             }
         }
     }
 
     private void insertSoldInventoryTransactions(Order order, int companyId, Timestamp orderTime) {
-        ArrayList<OrderDetails> details = order.getOrderDetails();
+        ArrayList<OrderDetails> details = new ArrayList<>();
+        for (OrderDetails d : order.getOrderDetails()) {
+            if (d.getProductId() > 0) details.add(d);
+        }
+        if (details.isEmpty()) return;
+
         String sql = "INSERT INTO " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, order.getBranchId()) +
                 " (\"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\") " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -320,7 +329,12 @@ public class DbPosOrder {
     }
 
     private void insertSoldLedgerEntries(int orderId, Order order, int companyId, Timestamp orderTime) {
-        ArrayList<OrderDetails> details = order.getOrderDetails();
+        ArrayList<OrderDetails> details = new ArrayList<>();
+        for (OrderDetails d : order.getOrderDetails()) {
+            if (d.getProductId() > 0) details.add(d);
+        }
+        if (details.isEmpty()) return;
+
         String sql = """
                 INSERT INTO %s (
                     branch_id, product_id, quantity_delta, movement_type, reference_type, reference_id,

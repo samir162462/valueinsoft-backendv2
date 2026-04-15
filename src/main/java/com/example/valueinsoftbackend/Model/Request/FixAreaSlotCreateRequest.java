@@ -45,6 +45,10 @@ public class FixAreaSlotCreateRequest {
     @PositiveOrZero(message = "fees must be zero or greater")
     private BigDecimal fees;
 
+    private String imei;
+    private String deviceCondition;
+    private String accessories;
+
     public FixAreaSlotCreateRequest() {
     }
 
@@ -150,5 +154,29 @@ public class FixAreaSlotCreateRequest {
 
     public void setFees(BigDecimal fees) {
         this.fees = fees;
+    }
+
+    public String getImei() {
+        return imei;
+    }
+
+    public void setImei(String imei) {
+        this.imei = imei;
+    }
+
+    public String getDeviceCondition() {
+        return deviceCondition;
+    }
+
+    public void setDeviceCondition(String deviceCondition) {
+        this.deviceCondition = deviceCondition;
+    }
+
+    public String getAccessories() {
+        return accessories;
+    }
+
+    public void setAccessories(String accessories) {
+        this.accessories = accessories;
     }
 }

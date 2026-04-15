@@ -9,6 +9,8 @@ import com.google.gson.JsonObject;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.util.List;
+import com.example.valueinsoftbackend.Model.Slots.FixAreaPart;
 
 public class SlotsFixArea {
     int faId;
@@ -24,9 +26,14 @@ public class SlotsFixArea {
     String desc;
      int branchId;
      BigDecimal fees;
+    String imei;
+    String deviceCondition;
+    String accessories;
     JsonNode clientData;
+    Integer orderId;
+    List<FixAreaPart> usedParts;
 
-    public SlotsFixArea(int faId, int fixSlot, int clientId, Date dateIn, Date dateFinished, String phoneName, String problem, boolean show, String userName_Recived, String status, String desc, int branchId, BigDecimal fees) {
+    public SlotsFixArea(int faId, int fixSlot, int clientId, Date dateIn, Date dateFinished, String phoneName, String problem, boolean show, String userName_Recived, String status, String desc, int branchId, BigDecimal fees, String imei, String deviceCondition, String accessories) {
         this.faId = faId;
         this.fixSlot = fixSlot;
         this.clientId = clientId;
@@ -40,6 +47,9 @@ public class SlotsFixArea {
         this.desc = desc;
         this.branchId = branchId;
         this.fees = fees;
+        this.imei = imei;
+        this.deviceCondition = deviceCondition;
+        this.accessories = accessories;
     }
 
 
@@ -156,6 +166,46 @@ public class SlotsFixArea {
         this.desc = desc;
     }
 
+    public String getImei() {
+        return imei;
+    }
+
+    public void setImei(String imei) {
+        this.imei = imei;
+    }
+
+    public String getDeviceCondition() {
+        return deviceCondition;
+    }
+
+    public void setDeviceCondition(String deviceCondition) {
+        this.deviceCondition = deviceCondition;
+    }
+
+    public String getAccessories() {
+        return accessories;
+    }
+
+    public void setAccessories(String accessories) {
+        this.accessories = accessories;
+    }
+
+    public Integer getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(Integer orderId) {
+        this.orderId = orderId;
+    }
+
+    public List<FixAreaPart> getUsedParts() {
+        return usedParts;
+    }
+
+    public void setUsedParts(List<FixAreaPart> usedParts) {
+        this.usedParts = usedParts;
+    }
+
     @Override
     public String toString() {
         return "SlotsFixArea{" +
@@ -170,6 +220,7 @@ public class SlotsFixArea {
                 ", userName_Recived='" + userName_Recived + '\'' +
                 ", status='" + status + '\'' +
                 ", desc='" + desc + '\'' +
+                ", orderId=" + orderId +
                 '}';
     }
 }

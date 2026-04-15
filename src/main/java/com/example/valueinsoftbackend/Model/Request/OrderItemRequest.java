@@ -6,7 +6,6 @@ import javax.validation.constraints.Positive;
 
 public class OrderItemRequest {
 
-    @Positive(message = "itemId must be positive")
     private int itemId;
 
     @NotBlank(message = "itemName is required")
@@ -21,7 +20,6 @@ public class OrderItemRequest {
     @Min(value = 0, message = "total must be zero or greater")
     private int total;
 
-    @Positive(message = "productId must be positive")
     private int productId;
 
     public OrderItemRequest() {

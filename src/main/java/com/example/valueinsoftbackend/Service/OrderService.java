@@ -66,7 +66,7 @@ public class OrderService {
             throw new ApiException(HttpStatus.CONFLICT, "ORDER_DETAIL_ALREADY_BOUNCED", "Order detail already bounced back");
         }
 
-        if (request.getToWho() == 1) {
+        if (request.getToWho() == 1 && context.getProductId() > 0) {
             int restoredRows = dbPosOrder.restoreInventoryQuantity(
                     context.getProductId(),
                     context.getQuantity(),
