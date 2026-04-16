@@ -50,23 +50,23 @@ public class ShiftService {
     @Transactional
     public Shift openShift(int companyId, OpenShiftRequest request, String principalName) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
-        TenantSqlIdentifiers.requirePositive(request.getBranchId(), "branchId");
+        TenantSqlIdentifiers.requirePositive(request.branchId(), "branchId");
 
-        Shift existing = dbPosShiftPeriod.getActiveShift(companyId, request.getBranchId());
+        Shift existing = dbPosShiftPeriod.getActiveShift(companyId, request.branchId());
         if (existing != null) {
             return existing;
         }
 
-        BigDecimal openingFloat = BigDecimal.valueOf(request.getOpeningFloat());
+        BigDecimal openingFloat = BigDecimal.valueOf(request.openingFloat());
         Timestamp now = new Timestamp(System.currentTimeMillis());
 
         Shift shift = dbPosShiftPeriod.insertShift(
                 companyId,
-                request.getBranchId(),
+                request.branchId(),
                 now,
                 principalName,
                 openingFloat,
-                request.getRegisterCode()
+                request.registerCode()
         );
 
         dbPosShiftPeriod.insertCashMovement(
@@ -82,7 +82,7 @@ public class ShiftService {
         );
 
         log.info("Opened shift {} for company {} branch {} by {}",
-                shift.getShiftId(), companyId, request.getBranchId(), principalName);
+                shift.getShiftId(), companyId, request.branchId(), principalName);
         return shift;
     }
 
@@ -135,7 +135,7 @@ public class ShiftService {
                                                   CashMovementRequest request,
                                                   String principalName) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
-        String type = request.getMovementType();
+        String type = request.movementType();
         if (!ALLOWED_MOVEMENT_TYPES.contains(type)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_MOVEMENT_TYPE",
                     "Allowed types: " + ALLOWED_MOVEMENT_TYPES);
@@ -146,23 +146,23 @@ public class ShiftService {
             throw new ApiException(HttpStatus.CONFLICT, "SHIFT_NOT_OPEN", "Shift is not active");
         }
 
-        BigDecimal amount = BigDecimal.valueOf(request.getAmount());
+        BigDecimal amount = BigDecimal.valueOf(request.amount());
         dbPosShiftPeriod.insertCashMovement(
                 companyId, shiftId, shift.getBranchId(),
-                type, amount, principalName, request.getNote(),
-                (request.getClientId() != null && request.getClientId() > 0) ? request.getClientId() : null,
-                request.getAssociatedUserId(), request.getReferenceType(), request.getReferenceId()
+                type, amount, principalName, request.note(),
+                (request.clientId() != null && request.clientId() > 0) ? request.clientId() : null,
+                request.associatedUserId(), request.referenceType(), request.referenceId()
         );
 
         // Link to Client Receipt if clientId is present (Sync accounts)
-        if (request.getClientId() != null && request.getClientId() > 0) {
+        if (request.clientId() != null && request.clientId() > 0) {
             String receiptType = null;
             if ("PAID_IN".equals(type)) receiptType = "Payment";
             else if ("PAID_OUT".equals(type)) receiptType = "Refund";
 
             if (receiptType != null) {
                 CreateClientReceiptRequest receiptReq = new CreateClientReceiptRequest();
-                receiptReq.setClientId(request.getClientId());
+                receiptReq.setClientId(request.clientId());
                 receiptReq.setBranchId(shift.getBranchId());
                 receiptReq.setAmount(amount);
                 receiptReq.setType(receiptType);
@@ -200,7 +200,7 @@ public class ShiftService {
         }
 
         BigDecimal expectedCash = dbPosShiftPeriod.computeExpectedCash(companyId, shiftId);
-        BigDecimal countedCash = BigDecimal.valueOf(request.getCountedCash());
+        BigDecimal countedCash = BigDecimal.valueOf(request.countedCash());
         BigDecimal variance = countedCash.subtract(expectedCash);
 
         ArrayList<Order> orders = dbPosOrder.getOrdersByShiftId(companyId, shift.getBranchId(), shiftId);
@@ -222,7 +222,7 @@ public class ShiftService {
         int rows = dbPosShiftPeriod.closeShift(
                 companyId, shiftId, now, principalName, closeStatus,
                 expectedCash, countedCash, variance,
-                request.getVarianceReason(), request.getCloseNote(),
+                request.varianceReason(), request.closeNote(),
                 orderCount, grossSales, netSales, discountTotal, refundTotal
         );
 
@@ -239,7 +239,7 @@ public class ShiftService {
 
         dbPosShiftPeriod.insertShiftEvent(
                 companyId, shiftId, shift.getBranchId(),
-                "SHIFT_CLOSED", principalName, null, request.getCloseNote(),
+                "SHIFT_CLOSED", principalName, null, request.closeNote(),
                 "{\"expectedCash\":" + expectedCash +
                         ",\"countedCash\":" + countedCash +
                         ",\"variance\":" + variance +
@@ -305,11 +305,11 @@ public class ShiftService {
 
     @Deprecated
     public ShiftPeriod currentShift(int companyId, CurrentShiftRequest data) {
-        ShiftPeriod sp = dbPosShiftPeriod.getCurrentShift(companyId, data.getBranchId());
+        ShiftPeriod sp = dbPosShiftPeriod.getCurrentShift(companyId, data.branchId());
         if (sp != null) {
             // Enrich with details if requested
-            if (data.isGetDetails()) {
-                sp.setOrderShiftList(dbPosOrder.getOrdersByShiftId(companyId, data.getBranchId(), sp.getShiftID()));
+            if (data.getDetails()) {
+                sp.setOrderShiftList(dbPosOrder.getOrdersByShiftId(companyId, data.branchId(), sp.getShiftID()));
                 sp.setCashMovements(dbPosShiftPeriod.getCashMovements(companyId, sp.getShiftID()));
                 sp.setExpectedCash(dbPosShiftPeriod.computeExpectedCash(companyId, sp.getShiftID()));
             }
@@ -319,7 +319,7 @@ public class ShiftService {
 
     @Deprecated
     public ArrayList<Order> shiftOrdersById(int companyId, ShiftOrdersRequest data) {
-        return dbPosOrder.getOrdersByShiftId(companyId, data.getBranchId(), data.getSpId());
+        return dbPosOrder.getOrdersByShiftId(companyId, data.branchId(), data.spId());
     }
 
     @Deprecated

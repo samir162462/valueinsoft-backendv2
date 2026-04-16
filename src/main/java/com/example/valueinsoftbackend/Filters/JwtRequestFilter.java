@@ -14,10 +14,10 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 @Component
@@ -43,15 +43,22 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             try {
                 username = jwtUtil.extractUsername(jwt);
             } catch (JwtException | IllegalArgumentException exception) {
-                log.debug("Ignoring invalid JWT for request {} {}", request.getMethod(), request.getRequestURI());
+                log.warn("JWT extraction failed for request {} {}: {}", request.getMethod(), request.getRequestURI(), exception.getMessage());
                 SecurityContextHolder.clearContext();
             }
         }
 
+        log.info("Filter Detail | Request: {} {} | Extracted Username: {} | Current Context: {}", 
+                request.getMethod(), request.getRequestURI(), 
+                username != null ? username : "NONE",
+                SecurityContextHolder.getContext().getAuthentication() != null ? "AUTHENTICATED" : "EMPTY");
+
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            log.info("Processing authentication for user: {}", username);
             try {
                 UserDetails userDetails = myUserDetailsServices.loadUserByUsername(username);
                 if (jwtUtil.validateToken(jwt, userDetails)) {
+                    log.info("JWT validated successfully for user: {}", username);
                     UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,
@@ -59,11 +66,15 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     );
                     usernamePasswordAuthenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+                } else {
+                    log.warn("JWT validation failed for user: {}", username);
                 }
             } catch (JwtException | IllegalArgumentException | UsernameNotFoundException exception) {
-                log.debug("Ignoring unauthenticated JWT context for request {} {}", request.getMethod(), request.getRequestURI());
+                log.warn("Authentication context population failed: {}", exception.getMessage());
                 SecurityContextHolder.clearContext();
             }
+        } else if (username == null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            log.info("No valid authentication found for request: {} {}", request.getMethod(), request.getRequestURI());
         }
 
         filterChain.doFilter(request, response);

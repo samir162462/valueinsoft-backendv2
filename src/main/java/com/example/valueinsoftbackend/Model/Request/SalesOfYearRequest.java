@@ -1,6 +1,6 @@
 package com.example.valueinsoftbackend.Model.Request;
 
-import javax.validation.constraints.Positive;
+import jakarta.validation.constraints.Positive;
 
 public class SalesOfYearRequest {
 

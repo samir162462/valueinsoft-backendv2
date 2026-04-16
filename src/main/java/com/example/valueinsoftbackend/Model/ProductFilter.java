@@ -4,9 +4,9 @@
 
 package com.example.valueinsoftbackend.Model;
 
-import javax.validation.constraints.AssertTrue;
-import javax.validation.constraints.PositiveOrZero;
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 
 public class ProductFilter {
     private boolean outOfStock;

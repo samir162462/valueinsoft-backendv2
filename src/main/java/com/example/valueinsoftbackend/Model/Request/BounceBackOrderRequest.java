@@ -1,8 +1,8 @@
 package com.example.valueinsoftbackend.Model.Request;
 
-import javax.validation.constraints.Max;
-import javax.validation.constraints.Min;
-import javax.validation.constraints.Positive;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Positive;
 
 public class BounceBackOrderRequest {
 

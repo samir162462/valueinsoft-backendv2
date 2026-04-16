@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Configuration.ResolvedCapabilityConfig;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +13,7 @@ import java.util.ArrayList;
  * instead of hardcoded legacy role names.
  */
 @Service
+@Slf4j
 public class AuthorizationService {
 
     private final AuthenticatedEffectiveConfigurationService authenticatedEffectiveConfigurationService;
@@ -36,6 +38,8 @@ public class AuthorizationService {
             return;
         }
 
+        log.warn("Capability DENIED for user {}: key={}, tenant={}, branch={}", 
+                authenticatedName, capabilityKey, tenantId, branchId);
         throw new ApiException(
                 HttpStatus.FORBIDDEN,
                 "CAPABILITY_DENIED",
@@ -57,14 +61,19 @@ public class AuthorizationService {
                         branchId
                 );
 
+        boolean found = false;
         for (ResolvedCapabilityConfig capability : capabilities) {
             if (capabilityKey.equals(capability.getCapabilityKey())
                     && "allow".equalsIgnoreCase(capability.getGrantMode())) {
-                return true;
+                found = true;
+                break;
             }
         }
 
-        return false;
+        log.info("Capability Check | User: {} | Key: {} | Branch: {} | Allowed: {}", 
+                authenticatedName, capabilityKey, branchId, found);
+
+        return found;
     }
 
     /**

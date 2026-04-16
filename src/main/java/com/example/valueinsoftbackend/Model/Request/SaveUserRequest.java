@@ -2,9 +2,9 @@ package com.example.valueinsoftbackend.Model.Request;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 
-import javax.validation.constraints.Email;
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 
 public class SaveUserRequest {
 

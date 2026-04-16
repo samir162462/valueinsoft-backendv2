@@ -3,8 +3,8 @@ package com.example.valueinsoftbackend.Model.Request;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.databind.JsonNode;
 
-import javax.validation.constraints.AssertTrue;
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
 
 public class SaveCategoryRequest {
 

@@ -153,40 +153,40 @@ public class OrderService {
     public ArrayList<Order> getOrdersByPeriod(OrderPeriodRequest request, int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         return dbPosOrder.getOrdersByPeriod(
-                request.getBranchId(),
-                RequestTimestampParser.parse(request.getStartTime(), "startTime"),
-                RequestTimestampParser.parse(request.getEndTime(), "endTime"),
+                request.branchId(),
+                RequestTimestampParser.parse(request.startTime(), "startTime"),
+                RequestTimestampParser.parse(request.endTime(), "endTime"),
                 companyId
         );
     }
 
     private Order toOrder(CreateOrderRequest request) {
         ArrayList<OrderDetails> details = new ArrayList<>();
-        List<OrderItemRequest> requestDetails = request.getOrderDetails();
+        List<OrderItemRequest> requestDetails = request.orderDetails();
         for (OrderItemRequest itemRequest : requestDetails) {
             details.add(new OrderDetails(
                     0,
-                    itemRequest.getItemId(),
-                    itemRequest.getItemName().trim(),
-                    itemRequest.getQuantity(),
-                    itemRequest.getPrice(),
-                    itemRequest.getTotal(),
-                    itemRequest.getProductId(),
+                    itemRequest.itemId(),
+                    itemRequest.itemName().trim(),
+                    itemRequest.quantity(),
+                    itemRequest.price(),
+                    itemRequest.total(),
+                    itemRequest.productId(),
                     0
             ));
         }
 
         return new Order(
-                request.getOrderId(),
+                request.orderId(),
                 new Timestamp(System.currentTimeMillis()),
-                request.getClientName() == null ? "" : request.getClientName().trim(),
-                request.getOrderType().trim(),
-                request.getOrderDiscount(),
-                request.getOrderTotal(),
-                request.getSalesUser().trim(),
-                request.getBranchId(),
-                request.getClientId(),
-                request.getOrderIncome(),
+                request.clientName() == null ? "" : request.clientName().trim(),
+                request.orderType().trim(),
+                request.orderDiscount(),
+                request.orderTotal(),
+                request.salesUser().trim(),
+                request.branchId(),
+                request.clientId(),
+                request.orderIncome(),
                 0,
                 details
         );

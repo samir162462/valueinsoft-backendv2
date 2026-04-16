@@ -1,6 +1,6 @@
 package com.example.valueinsoftbackend.Model.Request;
 
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.Size;
 
 public class SupplierUpdateRequest {
 

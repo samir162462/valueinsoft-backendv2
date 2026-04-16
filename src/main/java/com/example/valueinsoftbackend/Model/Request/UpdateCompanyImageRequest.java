@@ -1,6 +1,6 @@
 package com.example.valueinsoftbackend.Model.Request;
 
-import javax.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotBlank;
 
 public class UpdateCompanyImageRequest {
 

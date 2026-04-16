@@ -2,8 +2,8 @@ package com.example.valueinsoftbackend.Model.Request;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Positive;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 
 public class CreateBranchRequest {
 

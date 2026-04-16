@@ -13,8 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import javax.validation.Valid;
-import javax.validation.constraints.Positive;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import java.security.Principal;
 import java.util.ArrayList;
 
@@ -43,7 +43,7 @@ public class OrderController {
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
                 companyId,
-                newOrderShiftIn.getBranchId(),
+                newOrderShiftIn.branchId(),
                 "pos.sale.create"
         );
         return ResponseEntity.status(201).body(orderService.createOrder(newOrderShiftIn, companyId));
@@ -60,7 +60,7 @@ public class OrderController {
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
                 companyId,
-                data.getBranchId(),
+                data.branchId(),
                 "pos.sale.read"
         );
         return orderService.getOrdersByPeriod(data, companyId);

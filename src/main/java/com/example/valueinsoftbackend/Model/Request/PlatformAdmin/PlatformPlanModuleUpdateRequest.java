@@ -2,7 +2,7 @@ package com.example.valueinsoftbackend.Model.Request.PlatformAdmin;
 
 import lombok.Data;
 
-import javax.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotBlank;
 
 @Data
 public class PlatformPlanModuleUpdateRequest {

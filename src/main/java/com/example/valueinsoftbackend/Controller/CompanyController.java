@@ -17,8 +17,8 @@ import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Map;
 
-import javax.validation.Valid;
-import javax.validation.constraints.Positive;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 
 
 @RestController

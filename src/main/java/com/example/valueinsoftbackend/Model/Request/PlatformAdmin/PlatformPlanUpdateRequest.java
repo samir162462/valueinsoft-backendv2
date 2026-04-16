@@ -2,10 +2,10 @@ package com.example.valueinsoftbackend.Model.Request.PlatformAdmin;
 
 import lombok.Data;
 
-import javax.validation.Valid;
-import javax.validation.constraints.DecimalMin;
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Pattern;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 

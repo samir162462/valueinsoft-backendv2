@@ -2,8 +2,8 @@ package com.example.valueinsoftbackend.Model.Request.PlatformAdmin;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
-import javax.validation.constraints.Positive;
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 public class PlatformAlertAcknowledgmentRequest {

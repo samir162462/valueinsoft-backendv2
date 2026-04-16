@@ -1,8 +1,8 @@
 package com.example.valueinsoftbackend.Model.Request.Configuration;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Positive;
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 
 public class SaveUserGrantOverrideRequest {
 

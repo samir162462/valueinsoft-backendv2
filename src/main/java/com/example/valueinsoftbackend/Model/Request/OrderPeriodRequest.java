@@ -1,43 +1,15 @@
 package com.example.valueinsoftbackend.Model.Request;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Positive;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 
-public class OrderPeriodRequest {
+public record OrderPeriodRequest(
+        @Positive(message = "branchId must be greater than zero")
+        int branchId,
 
-    @Positive(message = "branchId must be greater than zero")
-    private int branchId;
+        @NotBlank(message = "startTime is required")
+        String startTime,
 
-    @NotBlank(message = "startTime is required")
-    private String startTime;
-
-    @NotBlank(message = "endTime is required")
-    private String endTime;
-
-    public OrderPeriodRequest() {
-    }
-
-    public int getBranchId() {
-        return branchId;
-    }
-
-    public void setBranchId(int branchId) {
-        this.branchId = branchId;
-    }
-
-    public String getStartTime() {
-        return startTime;
-    }
-
-    public void setStartTime(String startTime) {
-        this.startTime = startTime;
-    }
-
-    public String getEndTime() {
-        return endTime;
-    }
-
-    public void setEndTime(String endTime) {
-        this.endTime = endTime;
-    }
-}
+        @NotBlank(message = "endTime is required")
+        String endTime
+) {}

@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.Model.Request;
 
-import javax.validation.constraints.Positive;
-import javax.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 
 public class CompanyAnalysisUpdateRequest {
 

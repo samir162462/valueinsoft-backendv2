@@ -5,14 +5,16 @@ import com.example.valueinsoftbackend.Filters.JwtRequestFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -23,7 +25,7 @@ import java.util.stream.Collectors;
 
 @EnableWebSecurity
 @Configuration
-public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
+public class SecurityConfiguration {
 
     private final MyUserDetailsServices myUserDetailsServices;
     private final JwtRequestFilter jwtRequestFilter;
@@ -40,48 +42,54 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
         this.passwordEncoder = passwordEncoder;
     }
 
-    @Override
-    protected void configure(AuthenticationManagerBuilder auth) {
-        auth.authenticationProvider(daoAuthenticationProvider());
-    }
-
-    @Override
-    protected void configure(HttpSecurity http) throws Exception {
-        http.csrf().disable()
-                .cors().configurationSource(corsConfigurationSource())
-                .and()
-                .authorizeRequests()
-                .antMatchers(
-                        "/authenticate",
-                        "/users/saveNewUser",
-                        "/Company/saveCompany",
-                        "/Company/getCompany",
-                        "/Company/getCompanyById",
-                        "/public/package-plans",
-                        "/public/business-packages",
-                        "/appSubscription/Res",
-                        "/OP/TPC",
-                        "/users/checkUserEmail/**",
-                        "/users/checkUserUserName/**"
-                ).permitAll()
-                .anyRequest().authenticated()
-                .and()
-                .sessionManagement()
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(authenticationEntryPoint())
+                )
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(AntPathRequestMatcher.antMatcher(org.springframework.http.HttpMethod.OPTIONS, "/**")).permitAll()
+                        .requestMatchers(
+                                AntPathRequestMatcher.antMatcher("/authenticate"),
+                                AntPathRequestMatcher.antMatcher("/users/saveNewUser"),
+                                AntPathRequestMatcher.antMatcher("/Company/saveCompany"),
+                                AntPathRequestMatcher.antMatcher("/Company/getCompany"),
+                                AntPathRequestMatcher.antMatcher("/Company/getCompanyById"),
+                                AntPathRequestMatcher.antMatcher("/public/package-plans"),
+                                AntPathRequestMatcher.antMatcher("/public/business-packages"),
+                                AntPathRequestMatcher.antMatcher("/appSubscription/Res"),
+                                AntPathRequestMatcher.antMatcher("/OP/TPC"),
+                                AntPathRequestMatcher.antMatcher("/users/checkUserEmail/**"),
+                                AntPathRequestMatcher.antMatcher("/users/checkUserUserName/**")
+                        ).permitAll()
+                        .anyRequest().authenticated()
+                );
 
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
-        http.requiresChannel()
-                .requestMatchers(request -> request.getHeader("X-Forwarded-Proto") != null)
-                .requiresSecure();
+
+        return http.build();
     }
 
     @Bean
-    public DaoAuthenticationProvider daoAuthenticationProvider() {
+    public AuthenticationEntryPoint authenticationEntryPoint() {
+        return (request, response, authException) -> {
+            response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\": \"Unauthorized\", \"message\": \"" + authException.getMessage() + "\"}");
+        };
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(myUserDetailsServices);
         provider.setUserDetailsPasswordService(myUserDetailsServices);
         provider.setPasswordEncoder(passwordEncoder);
-        return provider;
+        return new ProviderManager(provider);
     }
 
     @Bean
@@ -100,10 +108,5 @@ public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManagerBean() throws Exception {
-        return super.authenticationManagerBean();
     }
 }

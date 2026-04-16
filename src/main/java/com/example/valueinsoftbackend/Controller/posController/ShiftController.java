@@ -14,8 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import javax.validation.Valid;
-import javax.validation.constraints.Positive;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +48,7 @@ public class ShiftController {
             Principal principal
     ) {
         authorizationService.assertAuthenticatedCapability(
-                principal.getName(), companyId, request.getBranchId(),
+                principal.getName(), companyId, request.branchId(),
                 "pos.shift.create"
         );
         Shift shift = shiftService.openShift(companyId, request, principal.getName());
@@ -231,8 +231,8 @@ public class ShiftController {
             Principal principal
     ) {
         authorizationService.assertAuthenticatedCapability(
-                principal.getName(), companyId, data.getBranchId(),
-                data.isGetDetails() ? "pos.sale.read" : "pos.shift.read"
+                principal.getName(), companyId, data.branchId(),
+                data.getDetails() ? "pos.sale.read" : "pos.shift.read"
         );
         return shiftService.currentShift(companyId, data);
     }
@@ -245,7 +245,7 @@ public class ShiftController {
             Principal principal
     ) {
         authorizationService.assertAuthenticatedCapability(
-                principal.getName(), companyId, data.getBranchId(), "pos.sale.read"
+                principal.getName(), companyId, data.branchId(), "pos.sale.read"
         );
         return shiftService.shiftOrdersById(companyId, data);
     }
@@ -260,6 +260,6 @@ public class ShiftController {
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(), companyId, branchId, "pos.shift.read"
         );
-        return shiftService.shiftsByBranchId(companyId, branchId);
+        return ResponseEntity.ok(shiftService.shiftsByBranchId(companyId, branchId)).getBody();
     }
 }
