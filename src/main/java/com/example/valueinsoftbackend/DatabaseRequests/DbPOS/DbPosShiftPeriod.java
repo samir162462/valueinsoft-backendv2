@@ -204,20 +204,39 @@ public class DbPosShiftPeriod {
 
     public void insertCashMovement(int companyId, int shiftId, int branchId,
                                    String movementType, BigDecimal amount,
-                                   String actorUserId, String note, Integer clientId, String associatedUserId) {
+                                   String actorUserId, String note, Integer clientId, 
+                                   String associatedUserId, String referenceType, String referenceId) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.shiftCashMovementTable(companyId) +
-                " (shift_id, branch_id, movement_type, amount, actor_user_id, note, client_id, associated_user_id) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        jdbcTemplate.update(sql, shiftId, branchId, movementType, amount, actorUserId, note, clientId, associatedUserId);
+                " (shift_id, branch_id, movement_type, amount, actor_user_id, note, client_id, associated_user_id, reference_type, reference_id) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(sql, shiftId, branchId, movementType, amount, actorUserId, note, clientId, associatedUserId, referenceType, referenceId);
     }
 
     public List<Map<String, Object>> getCashMovements(int companyId, int shiftId) {
+        // First get branchId to join with the correct orders table
+        Integer branchId = getShiftBranchId(companyId, shiftId);
+        String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
+
         String sql = "SELECT m.movement_id, m.shift_id, m.branch_id, m.movement_type, m.amount, " +
-                "m.actor_user_id, m.note, m.created_at, m.client_id, c.\"clientName\", " +
-                "m.associated_user_id, (u.\"firstName\" || ' ' || u.\"lastName\") as \"staffName\" " +
+                "m.actor_user_id, m.note, m.created_at, " +
+                "COALESCE(m.client_id, ord.\"clientId\") as client_id, " +
+                "COALESCE(NULLIF(NULLIF(c.\"clientName\", ''), 'No Client'), " +
+                "         NULLIF(NULLIF(ord.\"clientName\", ''), 'No Client'), " +
+                "  CASE WHEN m.movement_type IN ('CASH_SALE', 'CASH_REFUND') THEN 'Guest' ELSE NULL END) as \"clientName\", " +
+                "m.associated_user_id, " +
+                "COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.\"firstName\", u.\"lastName\")), ''), " +
+                "         NULLIF(TRIM(CONCAT_WS(' ', act.\"firstName\", act.\"lastName\")), ''), " +
+                "         m.associated_user_id, " +
+                "         m.actor_user_id) as \"staffName\" " +
                 "FROM " + TenantSqlIdentifiers.shiftCashMovementTable(companyId) + " m " +
                 "LEFT JOIN " + TenantSqlIdentifiers.clientTable(companyId) + " c ON m.client_id = c.c_id " +
-                "LEFT JOIN " + TenantSqlIdentifiers.userTable(companyId) + " u ON m.associated_user_id = u.\"userName\" " +
+                "LEFT JOIN " + TenantSqlIdentifiers.userTable(companyId) + " u ON (m.associated_user_id = u.\"userName\" OR m.associated_user_id LIKE (u.\"userName\" || ' : %')) " +
+                "LEFT JOIN " + TenantSqlIdentifiers.userTable(companyId) + " act ON (m.actor_user_id = act.\"userName\" OR m.actor_user_id LIKE (act.\"userName\" || ' : %')) " +
+                "LEFT JOIN " + orderTable + " ord ON (" +
+                "  (m.reference_type = 'ORDER' AND m.reference_id ~ '^[0-9]+$' AND ord.\"orderId\" = CAST(m.reference_id AS INTEGER)) " +
+                "  OR (m.reference_type IS NULL AND m.movement_type IN ('CASH_SALE', 'CASH_REFUND') AND m.note ~ '#\\s*[0-9]+' " +
+                "      AND ord.\"orderId\" = CAST(SUBSTRING(m.note FROM '#\\s*([0-9]+)') AS INTEGER))" +
+                ") " +
                 " WHERE m.shift_id = ? ORDER BY m.created_at";
         return jdbcTemplate.queryForList(sql, shiftId);
     }

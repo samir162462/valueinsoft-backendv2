@@ -72,7 +72,7 @@ public class ShiftService {
         dbPosShiftPeriod.insertCashMovement(
                 companyId, shift.getShiftId(), shift.getBranchId(),
                 "OPENING_FLOAT", openingFloat, principalName,
-                "Opening float set at shift start", null, null
+                "Opening float set at shift start", null, null, null, null
         );
 
         dbPosShiftPeriod.insertShiftEvent(
@@ -88,12 +88,20 @@ public class ShiftService {
 
     public Shift getActiveShift(int companyId, int branchId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
-        return dbPosShiftPeriod.getActiveShift(companyId, branchId);
+        Shift shift = dbPosShiftPeriod.getActiveShift(companyId, branchId);
+        if (shift != null) {
+            enrichShiftDetailed(companyId, shift);
+        }
+        return shift;
     }
 
     public Shift getShiftById(int companyId, int shiftId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
-        return dbPosShiftPeriod.getShiftById(companyId, shiftId);
+        Shift shift = dbPosShiftPeriod.getShiftById(companyId, shiftId);
+        if (shift != null) {
+            enrichShiftDetailed(companyId, shift);
+        }
+        return shift;
     }
 
     public ArrayList<Shift> getBranchShifts(int companyId, int branchId) {
@@ -143,7 +151,7 @@ public class ShiftService {
                 companyId, shiftId, shift.getBranchId(),
                 type, amount, principalName, request.getNote(),
                 (request.getClientId() != null && request.getClientId() > 0) ? request.getClientId() : null,
-                request.getAssociatedUserId()
+                request.getAssociatedUserId(), request.getReferenceType(), request.getReferenceId()
         );
 
         // Link to Client Receipt if clientId is present (Sync accounts)
@@ -226,7 +234,7 @@ public class ShiftService {
         dbPosShiftPeriod.insertCashMovement(
                 companyId, shiftId, shift.getBranchId(),
                 "CLOSE_COUNT", countedCash, principalName,
-                "Physical drawer count at shift close", null, null
+                "Physical drawer count at shift close", null, null, null, null
         );
 
         dbPosShiftPeriod.insertShiftEvent(
@@ -239,7 +247,9 @@ public class ShiftService {
         );
 
         log.info("Closed shift {} with variance {}", shiftId, variance);
-        return dbPosShiftPeriod.getShiftById(companyId, shiftId);
+        Shift closedShift = dbPosShiftPeriod.getShiftById(companyId, shiftId);
+        enrichShiftDetailed(companyId, closedShift);
+        return closedShift;
     }
 
     @Transactional
@@ -262,6 +272,13 @@ public class ShiftService {
     }
 
     // ── helpers ─────────────────────────────────────────
+
+    private void enrichShiftDetailed(int companyId, Shift shift) {
+        if (shift == null) return;
+        shift.setOrders(dbPosOrder.getOrdersByShiftId(companyId, shift.getBranchId(), shift.getShiftId()));
+        shift.setCashMovements(dbPosShiftPeriod.getCashMovements(companyId, shift.getShiftId()));
+        shift.setExpectedCash(dbPosShiftPeriod.computeExpectedCash(companyId, shift.getShiftId()));
+    }
 
     public int getShiftBranchId(int companyId, int shiftId) {
         return dbPosShiftPeriod.getShiftBranchId(companyId, shiftId);

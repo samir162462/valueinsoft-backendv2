@@ -14,6 +14,8 @@ public class CashMovementRequest {
     private String note;
     private Integer clientId;
     private String associatedUserId;
+    private String referenceType;
+    private String referenceId;
 
     public CashMovementRequest() {}
 
@@ -31,4 +33,10 @@ public class CashMovementRequest {
 
     public String getAssociatedUserId() { return associatedUserId; }
     public void setAssociatedUserId(String associatedUserId) { this.associatedUserId = associatedUserId; }
+
+    public String getReferenceType() { return referenceType; }
+    public void setReferenceType(String referenceType) { this.referenceType = referenceType; }
+
+    public String getReferenceId() { return referenceId; }
+    public void setReferenceId(String referenceId) { this.referenceId = referenceId; }
 }

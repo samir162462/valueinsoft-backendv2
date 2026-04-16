@@ -59,7 +59,7 @@ public class OrderService {
                         "CASH_SALE", java.math.BigDecimal.valueOf(order.getOrderTotal()),
                         order.getSalesUser(), "Sale #" + result.orderId(), 
                         order.getClientId() > 0 ? order.getClientId() : null,
-                        null
+                        null, "ORDER", String.valueOf(result.orderId())
                 );
             }
         }
@@ -125,7 +125,7 @@ public class OrderService {
                     "CASH_REFUND", java.math.BigDecimal.valueOf(context.getTotal() + fullBounceDiscount),
                     context.getSalesUser(), "Refund for Order Detail #" + request.getOdId(),
                     (context.getClientId() != null && context.getClientId() > 0) ? context.getClientId() : null,
-                    null
+                    null, "ORDER", String.valueOf(context.getOrderId())
             );
         }
 
