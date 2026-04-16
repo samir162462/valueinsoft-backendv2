@@ -188,6 +188,8 @@ public class DbCompany {
                 "CREATE SCHEMA IF NOT EXISTS " + schemaName,
                 SQLCompanyUsers(schemaName, databaseOwner),
                 SQLPosShiftPeriod(schemaName, databaseOwner),
+                SQLShiftEvent(schemaName, databaseOwner),
+                SQLShiftCashMovement(schemaName, databaseOwner),
                 SQLSupplier(schemaName, databaseOwner),
                 SQLBranch(schemaName, databaseOwner),
                 SQLDamagedList(schemaName, databaseOwner),
@@ -246,21 +248,79 @@ public class DbCompany {
 
     //Todo SQL PosShiftPeriod
     static String SQLPosShiftPeriod(String SchemaName, String DBOwner) {
-        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"PosShiftPeriod\"\n" +
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"PosShiftPeriod\"\n" +
                 "(\n" +
                 "    \"PosSOID\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
                 "    \"ShiftStartTime\" timestamp without time zone,\n" +
                 "    \"ShiftEndTime\" timestamp without time zone,\n" +
                 "    \"branchId\" integer,\n" +
-                "    CONSTRAINT \"PosShiftPeriod_pkey\" PRIMARY KEY (\"PosSOID\")\n" +
+                "    opened_by_user_id   VARCHAR(120),\n" +
+                "    assigned_cashier_id  VARCHAR(120),\n" +
+                "    closed_by_user_id    VARCHAR(120),\n" +
+                "    register_code        VARCHAR(40),\n" +
+                "    status               VARCHAR(20) NOT NULL DEFAULT 'OPEN',\n" +
+                "    opening_float        NUMERIC(14,2) NOT NULL DEFAULT 0,\n" +
+                "    expected_cash        NUMERIC(14,2),\n" +
+                "    counted_cash         NUMERIC(14,2),\n" +
+                "    variance_amount      NUMERIC(14,2),\n" +
+                "    variance_reason      VARCHAR(500),\n" +
+                "    close_note           VARCHAR(500),\n" +
+                "    order_count          INTEGER DEFAULT 0,\n" +
+                "    gross_sales          NUMERIC(14,2) DEFAULT 0,\n" +
+                "    net_sales            NUMERIC(14,2) DEFAULT 0,\n" +
+                "    discount_total       NUMERIC(14,2) DEFAULT 0,\n" +
+                "    refund_total         NUMERIC(14,2) DEFAULT 0,\n" +
+                "    version              INTEGER NOT NULL DEFAULT 1,\n" +
+                "    created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n" +
+                "    updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n" +
+                "    CONSTRAINT \"PosShiftPeriod_pkey\" PRIMARY KEY (\"PosSOID\"),\n" +
+                "    CONSTRAINT shift_status_ck CHECK (status IN ('OPEN', 'CLOSING', 'CLOSED', 'FORCE_CLOSED'))\n" +
                 ")\n" +
                 "\n" +
                 "TABLESPACE pg_default;\n" +
                 "\n" +
                 "ALTER TABLE " + SchemaName + ".\"PosShiftPeriod\"\n" +
-                "    OWNER to " + DBOwner + "; ";
+                "    OWNER to " + DBOwner + "; " +
+                "CREATE INDEX IF NOT EXISTS idx_shift_branch_status ON " + SchemaName + ".\"PosShiftPeriod\" (\"branchId\", status); " +
+                "CREATE INDEX IF NOT EXISTS idx_shift_opened_at ON " + SchemaName + ".\"PosShiftPeriod\" (\"ShiftStartTime\" DESC); ";
+    }
 
-        return query;
+    static String SQLShiftEvent(String SchemaName, String DBOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".shift_event (" +
+                " event_id BIGSERIAL PRIMARY KEY," +
+                " shift_id INTEGER NOT NULL," +
+                " branch_id INTEGER NOT NULL," +
+                " event_type VARCHAR(60) NOT NULL," +
+                " event_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " actor_user_id VARCHAR(120)," +
+                " actor_role VARCHAR(40)," +
+                " reference_type VARCHAR(60)," +
+                " reference_id VARCHAR(120)," +
+                " metadata JSONB," +
+                " reason VARCHAR(500)," +
+                " CONSTRAINT shift_event_shift_fk FOREIGN KEY (shift_id) REFERENCES " + SchemaName + ".\"PosShiftPeriod\" (\"PosSOID\") ON DELETE CASCADE" +
+                "); " +
+                "CREATE INDEX IF NOT EXISTS idx_shift_event_shift_time ON " + SchemaName + ".shift_event (shift_id, event_time); " +
+                "ALTER TABLE " + SchemaName + ".shift_event OWNER to " + DBOwner + "; ";
+    }
+
+    static String SQLShiftCashMovement(String SchemaName, String DBOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".shift_cash_movement (" +
+                " movement_id BIGSERIAL PRIMARY KEY," +
+                " shift_id INTEGER NOT NULL," +
+                " branch_id INTEGER NOT NULL," +
+                " movement_type VARCHAR(30) NOT NULL," +
+                " amount NUMERIC(14,2) NOT NULL," +
+                " actor_user_id VARCHAR(120)," +
+                " reference_type VARCHAR(60)," +
+                " reference_id VARCHAR(120)," +
+                " note VARCHAR(500)," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT shift_cash_movement_shift_fk FOREIGN KEY (shift_id) REFERENCES " + SchemaName + ".\"PosShiftPeriod\" (\"PosSOID\") ON DELETE CASCADE," +
+                " CONSTRAINT shift_cash_movement_type_ck CHECK (movement_type IN ('OPENING_FLOAT','CASH_SALE','CASH_REFUND','PAID_IN','PAID_OUT','SAFE_DROP','CASH_ADJUSTMENT','CLOSE_COUNT'))" +
+                "); " +
+                "CREATE INDEX IF NOT EXISTS idx_shift_cash_movement_shift ON " + SchemaName + ".shift_cash_movement (shift_id, created_at); " +
+                "ALTER TABLE " + SchemaName + ".shift_cash_movement OWNER to " + DBOwner + "; ";
     }
 
     //Todo SQL supplier

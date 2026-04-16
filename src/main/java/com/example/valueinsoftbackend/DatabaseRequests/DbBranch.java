@@ -27,8 +27,7 @@ public class DbBranch {
                     rs.getInt("companyId"),
                     rs.getString("branchName"),
                     rs.getString("branchLocation"),
-                    rs.getTimestamp("branchEstTime")
-            );
+                    rs.getTimestamp("branchEstTime"));
         }
     };
 
@@ -86,16 +85,20 @@ public class DbBranch {
             throw new ApiException(HttpStatus.CONFLICT, "BRANCH_NAME_EXISTS", "The Branch Name existed!");
         }
 
-        String insertBranchSql = "INSERT INTO public.\"Branch\" (\"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\") " +
+        String insertBranchSql = "INSERT INTO public.\"Branch\" (\"branchName\", \"branchLocation\", \"companyId\", \"branchEstTime\") "
+                +
                 "VALUES (?, ?, ?, ?)";
-        int result = jdbcTemplate.update(insertBranchSql, branchName, branchLocation, companyId, new Timestamp(System.currentTimeMillis()));
+        int result = jdbcTemplate.update(insertBranchSql, branchName, branchLocation, companyId,
+                new Timestamp(System.currentTimeMillis()));
         if (result != 1) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_CREATE_FAILED", "The branch not added due to error!");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_CREATE_FAILED",
+                    "The branch not added due to error!");
         }
 
         int branchId = getBranchIdByCompanyNameAndBranchName(companyId, branchName);
         if (branchId <= 0) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_ID_RESOLUTION_FAILED", "Branch was inserted but could not be resolved");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_ID_RESOLUTION_FAILED",
+                    "Branch was inserted but could not be resolved");
         }
 
         boolean provisioned = createPosProductTable(branchId, companyId)
@@ -105,7 +108,8 @@ public class DbBranch {
                 && createTransactionTable(branchId, companyId);
 
         if (!provisioned) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_PROVISION_FAILED", "Branch tables could not be provisioned");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BRANCH_PROVISION_FAILED",
+                    "Branch tables could not be provisioned");
         }
 
         return branchId;
@@ -122,11 +126,16 @@ public class DbBranch {
 
         try {
             jdbcTemplate.update("DELETE FROM public.\"Branch\" WHERE \"branchId\" = ?", branchId);
-            jdbcTemplate.execute("DROP TABLE IF EXISTS " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) + " CASCADE");
-            jdbcTemplate.execute("DROP TABLE IF EXISTS " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " CASCADE");
-            jdbcTemplate.execute("DROP TABLE IF EXISTS " + TenantSqlIdentifiers.productTable(companyId, branchId) + " CASCADE");
-            jdbcTemplate.execute("DROP TABLE IF EXISTS " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) + " CASCADE");
-            jdbcTemplate.execute("DROP TABLE IF EXISTS " + TenantSqlIdentifiers.supplierTable(companyId, branchId) + " CASCADE");
+            jdbcTemplate.execute(
+                    "DROP TABLE IF EXISTS " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) + " CASCADE");
+            jdbcTemplate.execute(
+                    "DROP TABLE IF EXISTS " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " CASCADE");
+            jdbcTemplate.execute(
+                    "DROP TABLE IF EXISTS " + TenantSqlIdentifiers.productTable(companyId, branchId) + " CASCADE");
+            jdbcTemplate.execute("DROP TABLE IF EXISTS "
+                    + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) + " CASCADE");
+            jdbcTemplate.execute(
+                    "DROP TABLE IF EXISTS " + TenantSqlIdentifiers.supplierTable(companyId, branchId) + " CASCADE");
             log.info("Deleted branch {} for company {}", branchId, companyId);
             return true;
         } catch (Exception e) {
@@ -176,7 +185,8 @@ public class DbBranch {
                 "    \"salesUser\" VARCHAR," +
                 "    \"clientId\" INTEGER," +
                 "    \"orderIncome\" INTEGER," +
-                "    \"orderBouncedBack\" INTEGER" +
+                "    \"orderBouncedBack\" INTEGER," +
+                "    \"shift_id\" INTEGER" +
                 ")";
         return executeProvisioningSql(sql, "PosOrder", branchId, companyId);
     }
@@ -200,7 +210,8 @@ public class DbBranch {
     public boolean createTransactionTable(int branchId, int companyId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
-        String sql = "CREATE TABLE IF NOT EXISTS " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) + " (" +
+        String sql = "CREATE TABLE IF NOT EXISTS "
+                + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) + " (" +
                 "    \"transId\" SERIAL PRIMARY KEY," +
                 "    \"productId\" INTEGER," +
                 "    \"userName\" VARCHAR(15)," +
@@ -228,7 +239,8 @@ public class DbBranch {
                 "    \"orderId\" INTEGER," +
                 "    \"productId\" INTEGER," +
                 "    \"bouncedBack\" INTEGER," +
-                "    FOREIGN KEY (\"orderId\") REFERENCES " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " (\"orderId\") ON DELETE CASCADE ON UPDATE CASCADE" +
+                "    FOREIGN KEY (\"orderId\") REFERENCES " + TenantSqlIdentifiers.orderTable(companyId, branchId)
+                + " (\"orderId\") ON DELETE CASCADE ON UPDATE CASCADE" +
                 ")";
         return executeProvisioningSql(sql, "PosOrderDetail", branchId, companyId);
     }

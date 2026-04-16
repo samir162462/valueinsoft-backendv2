@@ -37,15 +37,26 @@ public class DbPosOrder {
         this.namedParameterJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
     }
 
-    public int addOrder(Order order, int companyId) {
+    public AddOrderResult addOrder(Order order, int companyId) {
         validateOrder(order, companyId);
 
         int branchId = order.getBranchId();
         Timestamp orderTime = new Timestamp(System.currentTimeMillis());
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
+        
+        // Resolve active shift for formal FK linkage
+        Integer shiftId = null;
+        try {
+            String shiftTable = TenantSqlIdentifiers.shiftPeriodTable(companyId);
+            String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable + " WHERE \"branchId\" = ? AND status = 'OPEN' ORDER BY \"PosSOID\" DESC LIMIT 1";
+            shiftId = jdbcTemplate.queryForObject(shiftSql, Integer.class, branchId);
+        } catch (Exception e) {
+            log.warn("No open shift found for company {} branch {} when creating order. Continuing with null shift_id.", companyId, branchId);
+        }
+
         String sql = "INSERT INTO " + orderTable + " (" +
-                "\"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\", \"clientId\", \"orderIncome\", \"orderBouncedBack\") " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING \"orderId\"";
+                "\"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\", \"clientId\", \"orderIncome\", \"orderBouncedBack\", shift_id) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING \"orderId\"";
 
         Integer orderId = jdbcTemplate.queryForObject(
                 sql,
@@ -58,7 +69,8 @@ public class DbPosOrder {
                 order.getSalesUser(),
                 order.getClientId(),
                 order.getOrderIncome(),
-                0
+                0,
+                shiftId
         );
 
         if (orderId == null) {
@@ -71,8 +83,10 @@ public class DbPosOrder {
         insertSoldLedgerEntries(orderId, order, companyId, orderTime);
 
         log.debug("Inserted order {} for company {} branch {}", orderId, companyId, branchId);
-        return orderId;
+        return new AddOrderResult(orderId, shiftId);
     }
+
+    public static record AddOrderResult(int orderId, Integer shiftId) {}
 
     public ArrayList<Order> getOrdersByPeriod(int branchId, Timestamp startTime, Timestamp endTime, int companyId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
@@ -153,7 +167,7 @@ public class DbPosOrder {
         String detailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String sql = "SELECT od.\"orderDetailsId\", od.\"orderId\", od.quantity, od.total, od.\"productId\", " +
-                "COALESCE(od.\"bouncedBack\", 0) AS \"bouncedBack\", ord.\"salesUser\", COALESCE(ord.\"orderDiscount\", 0) AS \"orderDiscount\", " +
+                "COALESCE(od.\"bouncedBack\", 0) AS \"bouncedBack\", ord.\"salesUser\", ord.\"clientId\", COALESCE(ord.\"orderDiscount\", 0) AS \"orderDiscount\", " +
                 "COALESCE(prod.buying_price, 0) AS \"buyingPrice\", " +
                 "EXISTS (" +
                 " SELECT 1 FROM " + detailTable + " other " +
@@ -172,6 +186,7 @@ public class DbPosOrder {
                 rs.getInt("productId"),
                 rs.getInt("bouncedBack"),
                 rs.getString("salesUser"),
+                rs.getObject("clientId") != null ? rs.getInt("clientId") : null,
                 rs.getInt("orderDiscount"),
                 rs.getInt("buyingPrice"),
                 rs.getBoolean("hasOtherActiveItems")
@@ -441,12 +456,13 @@ public class DbPosOrder {
         private final int productId;
         private final int bouncedBack;
         private final String salesUser;
+        private final Integer clientId;
         private final int orderDiscount;
         private final int buyingPrice;
         private final boolean hasOtherActiveItems;
 
         public OrderBounceBackContext(int orderDetailId, int orderId, int quantity, int total, int productId,
-                                      int bouncedBack, String salesUser, int orderDiscount, int buyingPrice,
+                                      int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int buyingPrice,
                                       boolean hasOtherActiveItems) {
             this.orderDetailId = orderDetailId;
             this.orderId = orderId;
@@ -455,6 +471,7 @@ public class DbPosOrder {
             this.productId = productId;
             this.bouncedBack = bouncedBack;
             this.salesUser = salesUser;
+            this.clientId = clientId;
             this.orderDiscount = orderDiscount;
             this.buyingPrice = buyingPrice;
             this.hasOtherActiveItems = hasOtherActiveItems;
@@ -486,6 +503,10 @@ public class DbPosOrder {
 
         public String getSalesUser() {
             return salesUser;
+        }
+
+        public Integer getClientId() {
+            return clientId;
         }
 
         public int getOrderDiscount() {

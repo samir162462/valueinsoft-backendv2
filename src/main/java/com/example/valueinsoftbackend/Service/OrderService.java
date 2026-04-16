@@ -25,18 +25,47 @@ import java.util.List;
 public class OrderService {
 
     private final DbPosOrder dbPosOrder;
+    private final com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod;
 
-    public OrderService(DbPosOrder dbPosOrder) {
+    public OrderService(DbPosOrder dbPosOrder, com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod) {
         this.dbPosOrder = dbPosOrder;
+        this.dbPosShiftPeriod = dbPosShiftPeriod;
     }
 
     @Transactional
     public int createOrder(CreateOrderRequest request, int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         Order order = toOrder(request);
-        int orderId = dbPosOrder.addOrder(order, companyId);
-        log.info("Saved order {} for company {} branch {} with {} items", orderId, companyId, order.getBranchId(), order.getOrderDetails().size());
-        return orderId;
+        DbPosOrder.AddOrderResult result = dbPosOrder.addOrder(order, companyId);
+        
+        // Resolve shiftId: Prefer the result from addOrder, fallback to searching for active shift
+        Integer shiftId = result.shiftId();
+        if (shiftId == null) {
+            com.example.valueinsoftbackend.Model.Shift.Shift activeShift = dbPosShiftPeriod.getActiveShift(companyId, order.getBranchId());
+            if (activeShift != null) {
+                shiftId = activeShift.getShiftId();
+            }
+        }
+
+        // Record as cash movement if shift is active
+        // We handle 'Dirict' (standard POS), 'Direct', and Arabic 'مباشر' or just any non-empty type
+        if (shiftId != null && order.getOrderTotal() > 0) {
+            String type = order.getOrderType();
+            boolean isStandardSale = "Dirict".equalsIgnoreCase(type) || "Direct".equalsIgnoreCase(type) || "مباشر".equals(type);
+            
+            if (isStandardSale) {
+                dbPosShiftPeriod.insertCashMovement(
+                        companyId, shiftId, order.getBranchId(),
+                        "CASH_SALE", java.math.BigDecimal.valueOf(order.getOrderTotal()),
+                        order.getSalesUser(), "Sale #" + result.orderId(), 
+                        order.getClientId() > 0 ? order.getClientId() : null,
+                        null
+                );
+            }
+        }
+
+        log.info("Saved order {} for company {} branch {} with {} items", result.orderId(), companyId, order.getBranchId(), order.getOrderDetails().size());
+        return result.orderId();
     }
 
     @Transactional
@@ -66,6 +95,7 @@ public class OrderService {
             throw new ApiException(HttpStatus.CONFLICT, "ORDER_DETAIL_ALREADY_BOUNCED", "Order detail already bounced back");
         }
 
+        // Only restore inventory and record ledger if returning to stock
         if (request.getToWho() == 1 && context.getProductId() > 0) {
             int restoredRows = dbPosOrder.restoreInventoryQuantity(
                     context.getProductId(),
@@ -87,6 +117,18 @@ public class OrderService {
             }
         }
 
+        // If a shift is active, record the refund in the shift ledger
+        com.example.valueinsoftbackend.Model.Shift.Shift activeShift = dbPosShiftPeriod.getActiveShift(companyId, request.getBranchId());
+        if (activeShift != null) {
+            dbPosShiftPeriod.insertCashMovement(
+                    companyId, activeShift.getShiftId(), request.getBranchId(),
+                    "CASH_REFUND", java.math.BigDecimal.valueOf(context.getTotal() + fullBounceDiscount),
+                    context.getSalesUser(), "Refund for Order Detail #" + request.getOdId(),
+                    (context.getClientId() != null && context.getClientId() > 0) ? context.getClientId() : null,
+                    null
+            );
+        }
+
         int updatedOrderRows = dbPosOrder.updateOrderBounceBackTotals(
                 context.getOrderId(),
                 request.getBranchId(),
@@ -105,7 +147,7 @@ public class OrderService {
                 request.getBranchId(),
                 request.getToWho()
         );
-        return "The Shift Ended";
+        return "Bounce back successful";
     }
 
     public ArrayList<Order> getOrdersByPeriod(OrderPeriodRequest request, int companyId) {

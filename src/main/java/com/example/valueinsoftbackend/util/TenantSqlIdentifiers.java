@@ -9,6 +9,10 @@ public final class TenantSqlIdentifiers {
     private TenantSqlIdentifiers() {
     }
 
+    public static String offerTable(int companyId) {
+        return companySchema(companyId) + ".pos_offers";
+    }
+
     public static String requireSchemaName(String schemaName) {
         requireIdentifier(schemaName, "schemaName");
         return schemaName;
@@ -79,6 +83,14 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"PosShiftPeriod\"";
     }
 
+    public static String shiftEventTable(int companyId) {
+        return companySchema(companyId) + ".shift_event";
+    }
+
+    public static String shiftCashMovementTable(int companyId) {
+        return companySchema(companyId) + ".shift_cash_movement";
+    }
+
     public static String supplierReceiptsTable(int companyId) {
         return companySchema(companyId) + ".\"supplierReciepts\"";
     }
@@ -101,6 +113,10 @@ public final class TenantSqlIdentifiers {
 
     public static String clientReceiptsTable(int companyId) {
         return companySchema(companyId) + ".\"ClientReceipts\"";
+    }
+
+    public static String userTable(int companyId) {
+        return companySchema(companyId) + ".\"users\"";
     }
 
     public static String categoryJsonTable(int companyId) {
