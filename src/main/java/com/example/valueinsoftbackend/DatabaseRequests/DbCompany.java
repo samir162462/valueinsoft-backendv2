@@ -44,18 +44,21 @@ public class DbCompany {
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final DbBranch dbBranch;
     private final String databaseOwner;
+    private final boolean legacyDirectSchemaProvisioningEnabled;
 
     @Autowired
     public DbCompany(
             JdbcTemplate jdbcTemplate,
             NamedParameterJdbcTemplate namedParameterJdbcTemplate,
             DbBranch dbBranch,
-            @Value("${vls.database.owner:${spring.datasource.username:postgres}}") String databaseOwner
+            @Value("${vls.database.owner:${spring.datasource.username:postgres}}") String databaseOwner,
+            @Value("${vls.database.legacy-direct-schema-provisioning-enabled:false}") boolean legacyDirectSchemaProvisioningEnabled
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
         this.dbBranch = dbBranch;
         this.databaseOwner = (databaseOwner == null || databaseOwner.isBlank()) ? "postgres" : databaseOwner.trim();
+        this.legacyDirectSchemaProvisioningEnabled = legacyDirectSchemaProvisioningEnabled;
     }
 
     public Company getCompanyByOwnerId(String id) {
@@ -775,3 +778,4 @@ public class DbCompany {
         return statements;
     }
 }
+
