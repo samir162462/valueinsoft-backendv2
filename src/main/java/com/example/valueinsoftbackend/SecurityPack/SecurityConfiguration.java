@@ -15,6 +15,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+import jakarta.servlet.DispatcherType;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -52,6 +53,7 @@ public class SecurityConfiguration {
                         .authenticationEntryPoint(authenticationEntryPoint())
                 )
                 .authorizeHttpRequests(auth -> auth
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(AntPathRequestMatcher.antMatcher(org.springframework.http.HttpMethod.OPTIONS, "/**")).permitAll()
                         .requestMatchers(
                                 AntPathRequestMatcher.antMatcher("/authenticate"),
@@ -63,6 +65,7 @@ public class SecurityConfiguration {
                                 AntPathRequestMatcher.antMatcher("/public/business-packages"),
                                 AntPathRequestMatcher.antMatcher("/appSubscription/Res"),
                                 AntPathRequestMatcher.antMatcher("/OP/TPC"),
+                                AntPathRequestMatcher.antMatcher("/error"),
                                 AntPathRequestMatcher.antMatcher("/users/checkUserEmail/**"),
                                 AntPathRequestMatcher.antMatcher("/users/checkUserUserName/**")
                         ).permitAll()

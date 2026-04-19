@@ -109,7 +109,7 @@ public class DbInventoryAuditReadModels {
                              COALESCE(SUM(closing_qty), 0) AS total_closing_qty,
                              COALESCE(SUM(total_value), 0) AS total_stock_value,
                              COALESCE(SUM(CASE
-                                 WHEN :lowStockThreshold IS NOT NULL AND closing_qty <= :lowStockThreshold THEN 1
+                                 WHEN CAST(:lowStockThreshold AS INTEGER) IS NOT NULL AND closing_qty <= CAST(:lowStockThreshold AS INTEGER) THEN 1
                                  ELSE 0
                              END), 0) AS low_stock_count
                          FROM audit_base

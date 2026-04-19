@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.ArrayList;
 
@@ -80,3 +80,4 @@ public class InventoryWorkspaceController {
         inventoryWorkspaceService.deletePreset(principal.getName(), presetId);
     }
 }
+

@@ -3,12 +3,13 @@ package com.example.valueinsoftbackend.Model.Request.InventoryWorkspace;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryAnalysisFilters;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryDateRange;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventorySort;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.validation.Valid;
-import javax.validation.constraints.NotNull;
+
 import java.util.ArrayList;
 
 @Data
