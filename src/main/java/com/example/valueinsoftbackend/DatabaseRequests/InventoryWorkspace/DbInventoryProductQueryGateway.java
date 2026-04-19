@@ -141,7 +141,33 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                 conditions.add("p.major = :major");
                 params.addValue("major", filters.getMajor());
             }
-            // Add more filters as needed...
+        }
+
+        List<String> chips = request.getChips();
+        if (chips != null && !chips.isEmpty()) {
+            for (String chip : chips) {
+                switch (chip) {
+                    case "IN_STOCK":
+                        conditions.add("st.quantity > 0");
+                        break;
+                    case "OUT_OF_STOCK":
+                        conditions.add("COALESCE(st.quantity, 0) <= 0");
+                        break;
+                    case "LOW_STOCK":
+                        conditions.add("st.quantity > 0 AND st.quantity <= 5");
+                        break;
+                    case "USED":
+                        conditions.add("p.product_state = 'Used'");
+                        break;
+                    case "SELLABLE":
+                        // Active/Sellable items (not deleted or hidden)
+                        conditions.add("p.product_state NOT IN ('DELETED', 'HIDDEN')");
+                        break;
+                    case "RECENTLY_ADDED":
+                        conditions.add("p.updated_at >= (NOW() - INTERVAL '7 days')");
+                        break;
+                }
+            }
         }
 
         if (!conditions.isEmpty()) {
