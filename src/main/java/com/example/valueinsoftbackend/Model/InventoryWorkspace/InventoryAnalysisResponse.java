@@ -12,6 +12,9 @@ import java.util.LinkedHashMap;
 @AllArgsConstructor
 public class InventoryAnalysisResponse {
     private String mode;
+    private String query;
+    private InventoryDateRange dateRange;
+    private ArrayList<String> movementTypes = new ArrayList<>();
     private InventorySummaryResponse summary;
     private ArrayList<InventoryKpiItem> kpis = new ArrayList<>();
     private LinkedHashMap<String, Integer> movementCounts = new LinkedHashMap<>();

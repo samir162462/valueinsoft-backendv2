@@ -1,5 +1,10 @@
 package com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace;
 
+import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryCatalogBrowseResponse;
+import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryQuickFindResponse;
+import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryCatalogBrowseRequest;
+import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryQuickFindRequest;
+
 /**
  * Port interface for the inventory product query layer.
  *
@@ -8,4 +13,6 @@ package com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace;
  * staged inventory backend files in this repository.
  */
 public interface InventoryProductQueryGateway {
+    InventoryQuickFindResponse quickFind(String actorName, InventoryQuickFindRequest request);
+    InventoryCatalogBrowseResponse browseCatalog(String actorName, InventoryCatalogBrowseRequest request);
 }

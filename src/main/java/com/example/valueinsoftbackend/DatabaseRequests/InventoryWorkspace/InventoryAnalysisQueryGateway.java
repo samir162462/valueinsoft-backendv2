@@ -1,5 +1,8 @@
 package com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace;
 
+import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryAnalysisResponse;
+import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryAnalysisRequest;
+
 /**
  * Port interface for movement-ledger and analysis queries.
  *
@@ -7,4 +10,5 @@ package com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace;
  * inventory transaction repository and ledger SQL.
  */
 public interface InventoryAnalysisQueryGateway {
+    InventoryAnalysisResponse analyzeInventory(String actorName, InventoryAnalysisRequest request);
 }

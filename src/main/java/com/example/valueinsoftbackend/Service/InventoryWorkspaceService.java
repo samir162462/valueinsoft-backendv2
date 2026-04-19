@@ -1,5 +1,7 @@
 package com.example.valueinsoftbackend.Service;
 
+import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.InventoryAnalysisQueryGateway;
+import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.InventoryProductQueryGateway;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryAnalysisResponse;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryCatalogBrowseResponse;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryPresetResponse;
@@ -16,31 +18,28 @@ import java.util.ArrayList;
 @Service
 public class InventoryWorkspaceService {
 
-    private final InventoryQuickFindService inventoryQuickFindService;
-    private final InventoryCatalogBrowseService inventoryCatalogBrowseService;
-    private final InventoryAnalysisService inventoryAnalysisService;
+    private final InventoryProductQueryGateway inventoryProductQueryGateway;
+    private final InventoryAnalysisQueryGateway inventoryAnalysisQueryGateway;
     private final InventoryPresetService inventoryPresetService;
 
-    public InventoryWorkspaceService(InventoryQuickFindService inventoryQuickFindService,
-                                     InventoryCatalogBrowseService inventoryCatalogBrowseService,
-                                     InventoryAnalysisService inventoryAnalysisService,
+    public InventoryWorkspaceService(InventoryProductQueryGateway inventoryProductQueryGateway,
+                                     InventoryAnalysisQueryGateway inventoryAnalysisQueryGateway,
                                      InventoryPresetService inventoryPresetService) {
-        this.inventoryQuickFindService = inventoryQuickFindService;
-        this.inventoryCatalogBrowseService = inventoryCatalogBrowseService;
-        this.inventoryAnalysisService = inventoryAnalysisService;
+        this.inventoryProductQueryGateway = inventoryProductQueryGateway;
+        this.inventoryAnalysisQueryGateway = inventoryAnalysisQueryGateway;
         this.inventoryPresetService = inventoryPresetService;
     }
 
     public InventoryQuickFindResponse quickFind(String actorName, InventoryQuickFindRequest request) {
-        return inventoryQuickFindService.quickFind(actorName, request);
+        return inventoryProductQueryGateway.quickFind(actorName, request);
     }
 
     public InventoryCatalogBrowseResponse browseCatalog(String actorName, InventoryCatalogBrowseRequest request) {
-        return inventoryCatalogBrowseService.browseCatalog(actorName, request);
+        return inventoryProductQueryGateway.browseCatalog(actorName, request);
     }
 
     public InventoryAnalysisResponse analyzeInventory(String actorName, InventoryAnalysisRequest request) {
-        return inventoryAnalysisService.analyzeInventory(actorName, request);
+        return inventoryAnalysisQueryGateway.analyzeInventory(actorName, request);
     }
 
     public ArrayList<InventoryPresetResponse> getPresets(String actorName, Integer companyId, Integer branchId) {

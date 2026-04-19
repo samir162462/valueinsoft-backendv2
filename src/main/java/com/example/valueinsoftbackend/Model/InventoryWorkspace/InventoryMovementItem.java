@@ -14,6 +14,7 @@ public class InventoryMovementItem {
     private Long productId;
     private String productName;
     private String barcode;
+    private String serial;
     private String templateKey;
     private String businessLineKey;
     private Integer supplierId;
