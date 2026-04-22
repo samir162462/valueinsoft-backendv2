@@ -60,12 +60,14 @@ public class DbPosDamagedList {
         return quantities.isEmpty() ? null : quantities.get(0);
     }
 
-    public int insertDamagedItem(int companyId, DamagedItem damagedItem) {
+    public AddDamagedItemResult insertDamagedItem(int companyId, DamagedItem damagedItem) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.damagedListTable(companyId) + " " +
                 "(\"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", \"Cashier user\", " +
-                "\"AmountTP\", \"Paid\", \"branchId\", \"quantity\") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        return jdbcTemplate.update(
+                "\"AmountTP\", \"Paid\", \"branchId\", \"quantity\") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "RETURNING \"DId\"";
+        Integer damagedItemId = jdbcTemplate.queryForObject(
                 sql,
+                Integer.class,
                 damagedItem.getProductId(),
                 damagedItem.getProductName(),
                 damagedItem.getTime(),
@@ -77,6 +79,7 @@ public class DbPosDamagedList {
                 damagedItem.getBranchId(),
                 damagedItem.getQuantity()
         );
+        return new AddDamagedItemResult(damagedItemId == null ? 0 : damagedItemId);
     }
 
     public int decrementProductQuantity(int companyId, int branchId, int productId, int quantity) {
@@ -105,7 +108,7 @@ public class DbPosDamagedList {
         );
     }
 
-    public int insertDamagedLedgerEntry(int companyId, int branchId, DamagedItem damagedItem) {
+    public AddDamagedLedgerResult insertDamagedLedgerEntry(int companyId, int branchId, DamagedItem damagedItem) {
         String sql = """
                 INSERT INTO %s (
                     branch_id, product_id, quantity_delta, movement_type, reference_type, reference_id,
@@ -114,9 +117,10 @@ public class DbPosDamagedList {
                     :branchId, :productId, :quantityDelta, :movementType, :referenceType, :referenceId,
                     :actorName, :note, :supplierId, :transTotal, :payType, :remainingAmount, :createdAt
                 )
+                RETURNING stock_ledger_id
                 """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
 
-        return namedParameterJdbcTemplate.update(
+        Long stockLedgerId = namedParameterJdbcTemplate.queryForObject(
                 sql,
                 new MapSqlParameterSource()
                         .addValue("branchId", branchId)
@@ -131,9 +135,15 @@ public class DbPosDamagedList {
                         .addValue("transTotal", damagedItem.getAmountTP())
                         .addValue("payType", damagedItem.isPaid() ? "PaidDamaged" : "Damaged")
                         .addValue("remainingAmount", damagedItem.isPaid() ? 0 : damagedItem.getAmountTP())
-                        .addValue("createdAt", damagedItem.getTime())
+                        .addValue("createdAt", damagedItem.getTime()),
+                Long.class
         );
+        return new AddDamagedLedgerResult(stockLedgerId == null ? 0L : stockLedgerId);
     }
+
+    public record AddDamagedItemResult(int damagedItemId) {}
+
+    public record AddDamagedLedgerResult(long stockLedgerId) {}
 
     public boolean deleteDamagedItem(int companyId, int branchId, int damagedId) {
         String sql = "DELETE FROM " + TenantSqlIdentifiers.damagedListTable(companyId) +

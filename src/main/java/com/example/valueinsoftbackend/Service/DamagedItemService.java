@@ -11,6 +11,8 @@ import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.sql.Timestamp;
 import java.util.List;
@@ -20,9 +22,12 @@ import java.util.List;
 public class DamagedItemService {
 
     private final DbPosDamagedList dbPosDamagedList;
+    private final FinanceOperationalPostingService financeOperationalPostingService;
 
-    public DamagedItemService(DbPosDamagedList dbPosDamagedList) {
+    public DamagedItemService(DbPosDamagedList dbPosDamagedList,
+                              FinanceOperationalPostingService financeOperationalPostingService) {
         this.dbPosDamagedList = dbPosDamagedList;
+        this.financeOperationalPostingService = financeOperationalPostingService;
     }
 
     public List<DamagedItem> getDamagedItems(int companyId, int branchId) {
@@ -66,12 +71,12 @@ public class DamagedItemService {
                 request.getQuantity()
         );
 
-        int insertedRows = dbPosDamagedList.insertDamagedItem(companyId, damagedItem);
+        DbPosDamagedList.AddDamagedItemResult insertedItem = dbPosDamagedList.insertDamagedItem(companyId, damagedItem);
         int updatedRows = dbPosDamagedList.decrementProductQuantity(companyId, branchId, request.getProductId(), request.getQuantity());
         int inventoryRows = dbPosDamagedList.insertDamagedInventoryTransaction(companyId, branchId, damagedItem);
-        int modernLedgerRows = dbPosDamagedList.insertDamagedLedgerEntry(companyId, branchId, damagedItem);
+        DbPosDamagedList.AddDamagedLedgerResult modernLedger = dbPosDamagedList.insertDamagedLedgerEntry(companyId, branchId, damagedItem);
 
-        if (insertedRows != 1 || updatedRows != 1 || inventoryRows != 1 || modernLedgerRows != 1) {
+        if (insertedItem.damagedItemId() <= 0 || updatedRows != 1 || inventoryRows != 1 || modernLedger.stockLedgerId() <= 0) {
             throw new ApiException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "DAMAGED_ITEM_WRITE_FAILED",
@@ -79,8 +84,58 @@ public class DamagedItemService {
             );
         }
 
+        enqueueFinanceDamagedItemAfterCommit(
+                companyId,
+                branchId,
+                damagedItem,
+                insertedItem.damagedItemId(),
+                modernLedger.stockLedgerId()
+        );
+
         log.info("Created damaged-item row for company {} branch {} product {}", companyId, branchId, request.getProductId());
         return "the DamagedItem added! ok 200";
+    }
+
+    private void enqueueFinanceDamagedItemAfterCommit(int companyId,
+                                                      int branchId,
+                                                      DamagedItem damagedItem,
+                                                      int damagedItemId,
+                                                      Long inventoryMovementId) {
+        if (damagedItem.getAmountTP() <= 0 || damagedItem.getQuantity() <= 0) {
+            return;
+        }
+
+        Runnable enqueue = () -> {
+            try {
+                financeOperationalPostingService.enqueueDamagedItem(
+                        companyId,
+                        branchId,
+                        damagedItem,
+                        damagedItemId,
+                        inventoryMovementId
+                );
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Damaged item {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                        damagedItemId,
+                        companyId,
+                        branchId,
+                        exception.getMessage()
+                );
+            }
+        };
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            enqueue.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                enqueue.run();
+            }
+        });
     }
 
     @Transactional

@@ -14,6 +14,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -33,13 +35,16 @@ public class ShiftService {
     private final DbPosShiftPeriod dbPosShiftPeriod;
     private final DbPosOrder dbPosOrder;
     private final ClientReceiptService clientReceiptService;
+    private final FinanceOperationalPostingService financeOperationalPostingService;
 
     public ShiftService(DbPosShiftPeriod dbPosShiftPeriod, 
                         DbPosOrder dbPosOrder,
-                        ClientReceiptService clientReceiptService) {
+                        ClientReceiptService clientReceiptService,
+                        FinanceOperationalPostingService financeOperationalPostingService) {
         this.dbPosShiftPeriod = dbPosShiftPeriod;
         this.dbPosOrder = dbPosOrder;
         this.clientReceiptService = clientReceiptService;
+        this.financeOperationalPostingService = financeOperationalPostingService;
     }
 
     // ── lifecycle ───────────────────────────────────────
@@ -147,12 +152,24 @@ public class ShiftService {
         }
 
         BigDecimal amount = BigDecimal.valueOf(request.amount());
-        dbPosShiftPeriod.insertCashMovement(
+        Long cashMovementId = dbPosShiftPeriod.insertCashMovement(
                 companyId, shiftId, shift.getBranchId(),
                 type, amount, principalName, request.note(),
                 (request.clientId() != null && request.clientId() > 0) ? request.clientId() : null,
                 request.associatedUserId(), request.referenceType(), request.referenceId()
         );
+
+        if ("SAFE_DROP".equals(type)) {
+            enqueueFinanceSafeDropAfterCommit(
+                    companyId,
+                    shift.getBranchId(),
+                    shiftId,
+                    cashMovementId,
+                    amount,
+                    new Timestamp(System.currentTimeMillis()),
+                    principalName
+            );
+        }
 
         // Link to Client Receipt if clientId is present (Sync accounts)
         if (request.clientId() != null && request.clientId() > 0) {
@@ -231,10 +248,20 @@ public class ShiftService {
                     "Shift could not be closed — it may have been closed by another user");
         }
 
-        dbPosShiftPeriod.insertCashMovement(
+        Long closeCountMovementId = dbPosShiftPeriod.insertCashMovement(
                 companyId, shiftId, shift.getBranchId(),
                 "CLOSE_COUNT", countedCash, principalName,
                 "Physical drawer count at shift close", null, null, null, null
+        );
+
+        enqueueFinanceCashDrawerCloseAfterCommit(
+                companyId,
+                shift.getBranchId(),
+                shiftId,
+                closeCountMovementId,
+                countedCash,
+                now,
+                principalName
         );
 
         dbPosShiftPeriod.insertShiftEvent(
@@ -250,6 +277,92 @@ public class ShiftService {
         Shift closedShift = dbPosShiftPeriod.getShiftById(companyId, shiftId);
         enrichShiftDetailed(companyId, closedShift);
         return closedShift;
+    }
+
+    private void enqueueFinanceSafeDropAfterCommit(int companyId,
+                                                   int branchId,
+                                                   int shiftId,
+                                                   Long cashMovementId,
+                                                   BigDecimal amount,
+                                                   Timestamp movementTime,
+                                                   String principalName) {
+        if (cashMovementId == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        Runnable enqueue = () -> {
+            try {
+                financeOperationalPostingService.enqueueCashSafeDrop(
+                        companyId,
+                        branchId,
+                        shiftId,
+                        cashMovementId,
+                        amount,
+                        movementTime,
+                        principalName
+                );
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Safe drop cash movement {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                        cashMovementId,
+                        companyId,
+                        branchId,
+                        exception.getMessage()
+                );
+            }
+        };
+
+        runAfterCommit(enqueue);
+    }
+
+    private void enqueueFinanceCashDrawerCloseAfterCommit(int companyId,
+                                                          int branchId,
+                                                          int shiftId,
+                                                          Long cashMovementId,
+                                                          BigDecimal amount,
+                                                          Timestamp movementTime,
+                                                          String principalName) {
+        if (cashMovementId == null || amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        Runnable enqueue = () -> {
+            try {
+                financeOperationalPostingService.enqueueCashDrawerClose(
+                        companyId,
+                        branchId,
+                        shiftId,
+                        cashMovementId,
+                        amount,
+                        movementTime,
+                        principalName
+                );
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Cash drawer close for shift {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                        shiftId,
+                        companyId,
+                        branchId,
+                        exception.getMessage()
+                );
+            }
+        };
+
+        runAfterCommit(enqueue);
+    }
+
+    private void runAfterCommit(Runnable runnable) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            runnable.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                runnable.run();
+            }
+        });
     }
 
     @Transactional

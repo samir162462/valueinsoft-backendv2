@@ -26,7 +26,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -47,11 +49,14 @@ public class FinanceSetupService {
 
     private final DbFinanceSetup dbFinanceSetup;
     private final AuthorizationService authorizationService;
+    private final FinanceAuditService financeAuditService;
 
     public FinanceSetupService(DbFinanceSetup dbFinanceSetup,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            FinanceAuditService financeAuditService) {
         this.dbFinanceSetup = dbFinanceSetup;
         this.authorizationService = authorizationService;
+        this.financeAuditService = financeAuditService;
     }
 
     public FinanceSetupOverviewResponse getOverviewForAuthenticatedUser(String authenticatedName, int companyId) {
@@ -128,7 +133,15 @@ public class FinanceSetupService {
                 request.getStatus(),
                 null);
 
-        return dbFinanceSetup.createTaxCode(request);
+        FinanceTaxCodeItem taxCode = dbFinanceSetup.createTaxCode(request);
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.tax_code.created",
+                "finance_tax_code",
+                taxCode.getTaxCodeId(),
+                setupState("code", taxCode.getCode(), "status", taxCode.getStatus()));
+        return taxCode;
     }
 
     public FinanceTaxCodeItem updateTaxCodeForAuthenticatedUser(String authenticatedName,
@@ -162,6 +175,13 @@ public class FinanceSetupService {
                     "FINANCE_VERSION_CONFLICT",
                     "Tax code was updated by another request");
         }
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.tax_code.updated",
+                "finance_tax_code",
+                updated.getTaxCodeId(),
+                setupState("code", updated.getCode(), "status", updated.getStatus()));
         return updated;
     }
 
@@ -180,7 +200,15 @@ public class FinanceSetupService {
                 request.getStatus(),
                 null);
 
-        return dbFinanceSetup.createAccountMapping(request);
+        FinanceAccountMappingItem mapping = dbFinanceSetup.createAccountMapping(request);
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.account_mapping.created",
+                "finance_account_mapping",
+                mapping.getAccountMappingId(),
+                setupState("mappingKey", mapping.getMappingKey(), "status", mapping.getStatus()));
+        return mapping;
     }
 
     public FinanceAccountMappingItem updateAccountMappingForAuthenticatedUser(String authenticatedName,
@@ -212,6 +240,13 @@ public class FinanceSetupService {
                     "FINANCE_VERSION_CONFLICT",
                     "Account mapping was updated by another request");
         }
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.account_mapping.updated",
+                "finance_account_mapping",
+                updated.getAccountMappingId(),
+                setupState("mappingKey", updated.getMappingKey(), "status", updated.getStatus()));
         return updated;
     }
 
@@ -231,7 +266,15 @@ public class FinanceSetupService {
 
         AccountHierarchy hierarchy = resolveAccountHierarchy(request.getCompanyId(), request.getParentAccountId(),
                 request.getAccountCode());
-        return dbFinanceSetup.createAccount(request, hierarchy.accountPath(), hierarchy.accountLevel());
+        FinanceAccountItem account = dbFinanceSetup.createAccount(request, hierarchy.accountPath(), hierarchy.accountLevel());
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.account.created",
+                "finance_account",
+                account.getAccountId(),
+                setupState("accountCode", account.getAccountCode(), "status", account.getStatus()));
+        return account;
     }
 
     public FinanceAccountItem updateAccountForAuthenticatedUser(String authenticatedName,
@@ -284,6 +327,13 @@ public class FinanceSetupService {
                     levelDelta);
         }
 
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.account.updated",
+                "finance_account",
+                updated.getAccountId(),
+                setupState("accountCode", updated.getAccountCode(), "status", updated.getStatus()));
         return updated;
     }
 
@@ -301,7 +351,15 @@ public class FinanceSetupService {
                     "Fiscal year date range overlaps an existing fiscal year");
         }
 
-        return dbFinanceSetup.createFiscalYear(request);
+        FinanceFiscalYearItem fiscalYear = dbFinanceSetup.createFiscalYear(request);
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.fiscal_year.created",
+                "finance_fiscal_year",
+                fiscalYear.getFiscalYearId(),
+                setupState("name", fiscalYear.getName(), "status", fiscalYear.getStatus()));
+        return fiscalYear;
     }
 
     public FinanceFiscalYearItem updateFiscalYearForAuthenticatedUser(String authenticatedName,
@@ -331,6 +389,13 @@ public class FinanceSetupService {
                     "FINANCE_VERSION_CONFLICT",
                     "Fiscal year was updated by another request");
         }
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.fiscal_year.updated",
+                "finance_fiscal_year",
+                updated.getFiscalYearId(),
+                setupState("name", updated.getName(), "status", updated.getStatus()));
         return updated;
     }
 
@@ -346,7 +411,15 @@ public class FinanceSetupService {
                 request.getStatus(),
                 null);
 
-        return dbFinanceSetup.createFiscalPeriod(request);
+        FinanceFiscalPeriodItem fiscalPeriod = dbFinanceSetup.createFiscalPeriod(request);
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.fiscal_period.created",
+                "finance_fiscal_period",
+                fiscalPeriod.getFiscalPeriodId(),
+                setupState("name", fiscalPeriod.getName(), "status", fiscalPeriod.getStatus()));
+        return fiscalPeriod;
     }
 
     public FinanceFiscalPeriodItem updateFiscalPeriodForAuthenticatedUser(String authenticatedName,
@@ -375,7 +448,38 @@ public class FinanceSetupService {
                     "FINANCE_VERSION_CONFLICT",
                     "Fiscal period was updated by another request");
         }
+        recordSetupAudit(
+                authenticatedName,
+                request.getCompanyId(),
+                "finance.setup.fiscal_period.updated",
+                "finance_fiscal_period",
+                updated.getFiscalPeriodId(),
+                setupState("name", updated.getName(), "status", updated.getStatus()));
         return updated;
+    }
+
+    private void recordSetupAudit(String authenticatedName,
+                                  int companyId,
+                                  String eventType,
+                                  String entityType,
+                                  UUID entityId,
+                                  Map<String, Object> afterState) {
+        financeAuditService.recordEvent(
+                authenticatedName,
+                companyId,
+                null,
+                eventType,
+                entityType,
+                entityId.toString(),
+                afterState,
+                "Finance setup changed");
+    }
+
+    private Map<String, Object> setupState(String firstKey, Object firstValue, String secondKey, Object secondValue) {
+        Map<String, Object> state = new HashMap<>();
+        state.put(firstKey, firstValue);
+        state.put(secondKey, secondValue);
+        return state;
     }
 
     private void authorizeRead(String authenticatedName, int companyId) {

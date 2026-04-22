@@ -93,12 +93,13 @@ public class DbPosInventoryTransaction {
         return jdbcTemplate.query(sql, new InventoryTransactionMapper(), branchId, startDate, endDate);
     }
 
-    public int insertInventoryTransaction(InventoryTransaction inventoryTransaction, int branchId, int companyId) {
+    public AddInventoryTransactionResult insertInventoryTransaction(InventoryTransaction inventoryTransaction, int branchId, int companyId) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) +
                 " (\"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\") " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        return jdbcTemplate.update(
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING \"transId\"";
+        Integer transactionId = jdbcTemplate.queryForObject(
                 sql,
+                Integer.class,
                 inventoryTransaction.getProductId(),
                 inventoryTransaction.getUserName(),
                 inventoryTransaction.getSupplierId(),
@@ -109,7 +110,61 @@ public class DbPosInventoryTransaction {
                 new Timestamp(inventoryTransaction.getTime().getTime()),
                 inventoryTransaction.getRemainingAmount()
         );
+        return new AddInventoryTransactionResult(transactionId == null ? 0 : transactionId);
     }
+
+    public Long findLatestPurchaseInventoryMovementId(int companyId, int branchId, InventoryTransaction inventoryTransaction) {
+        String sql = """
+                SELECT stock_ledger_id
+                FROM %s
+                WHERE branch_id = :branchId
+                  AND product_id = :productId
+                  AND quantity_delta > 0
+                  AND movement_type IN ('OPENING_BALANCE', 'MANUAL_STOCK_IN')
+                  AND COALESCE(supplier_id, 0) = :supplierId
+                  AND COALESCE(trans_total, 0) = :transTotal
+                ORDER BY created_at DESC, stock_ledger_id DESC
+                LIMIT 1
+                """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
+
+        List<Long> movementIds = namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("branchId", branchId)
+                        .addValue("productId", inventoryTransaction.getProductId())
+                        .addValue("supplierId", inventoryTransaction.getSupplierId())
+                        .addValue("transTotal", inventoryTransaction.getTransTotal()),
+                (rs, rowNum) -> rs.getLong("stock_ledger_id")
+        );
+        return movementIds.isEmpty() ? null : movementIds.getFirst();
+    }
+
+    public Long findLatestAdjustmentInventoryMovementId(int companyId, int branchId, InventoryTransaction inventoryTransaction) {
+        String sql = """
+                SELECT stock_ledger_id
+                FROM %s
+                WHERE branch_id = :branchId
+                  AND product_id = :productId
+                  AND quantity_delta = :quantityDelta
+                  AND movement_type IN ('MANUAL_STOCK_IN', 'MANUAL_STOCK_OUT')
+                  AND COALESCE(trans_total, 0) = :transTotal
+                ORDER BY created_at DESC, stock_ledger_id DESC
+                LIMIT 1
+                """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
+
+        List<Long> movementIds = namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("branchId", branchId)
+                        .addValue("productId", inventoryTransaction.getProductId())
+                        .addValue("quantityDelta", inventoryTransaction.getNumItems())
+                        .addValue("transTotal", inventoryTransaction.getTransTotal()),
+                (rs, rowNum) -> rs.getLong("stock_ledger_id")
+        );
+        return movementIds.isEmpty() ? null : movementIds.getFirst();
+    }
+
+    public record AddInventoryTransactionResult(int transactionId) {}
 
     public int updateSupplierTotals(int companyId, int branchId, int supplierId, int transTotal, int remainingAmount) {
         String sql = "UPDATE " + TenantSqlIdentifiers.supplierTable(companyId, branchId) +

@@ -116,4 +116,57 @@ class FlywayMigrationInventoryTest {
         assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
         assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
     }
+
+    @Test
+    void financeTrialBalanceSnapshotMetadataMigrationExistsAndAvoidsFloatingPointMoneyTypes() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V52__finance_trial_balance_snapshot_metadata.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing finance trial balance snapshot metadata migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("FINANCE_TRIAL_BALANCE_SNAPSHOT"));
+        assertTrue(sql.contains("CURRENCY_CODE"));
+        assertTrue(sql.contains("BALANCE_ROW_COUNT"));
+        assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
+        assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
+    }
+
+    @Test
+    void financePostingRequestOrchestrationMigrationExistsAndAvoidsFloatingPointMoneyTypes() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V53__finance_posting_request_orchestration_metadata.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing finance posting request orchestration migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("FINANCE_POSTING_REQUEST"));
+        assertTrue(sql.contains("POSTING_DATE"));
+        assertTrue(sql.contains("FISCAL_PERIOD_ID"));
+        assertTrue(sql.contains("REQUEST_PAYLOAD"));
+        assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
+        assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
+    }
+
+    @Test
+    void financeReconciliationSourceItemsMigrationExistsAndAvoidsFloatingPointMoneyTypes() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V54__finance_reconciliation_source_items.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing finance reconciliation source items migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("FINANCE_RECONCILIATION_SOURCE_ITEM"));
+        assertTrue(sql.contains("FINANCE_RECONCILIATION_ITEM"));
+        assertTrue(sql.contains("RECONCILIATION_SOURCE_ITEM_ID"));
+        assertTrue(sql.contains("DECIMAL(19,4)"), "Reconciliation source items must use DECIMAL(19,4) for money");
+        assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
+        assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
+    }
 }

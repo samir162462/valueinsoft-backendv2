@@ -202,14 +202,27 @@ public class DbPosShiftPeriod {
     //  CASH MOVEMENTS
     // ═══════════════════════════════════════════════════
 
-    public void insertCashMovement(int companyId, int shiftId, int branchId,
+    public Long insertCashMovement(int companyId, int shiftId, int branchId,
                                    String movementType, BigDecimal amount,
                                    String actorUserId, String note, Integer clientId, 
                                    String associatedUserId, String referenceType, String referenceId) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.shiftCashMovementTable(companyId) +
                 " (shift_id, branch_id, movement_type, amount, actor_user_id, note, client_id, associated_user_id, reference_type, reference_id) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        jdbcTemplate.update(sql, shiftId, branchId, movementType, amount, actorUserId, note, clientId, associatedUserId, referenceType, referenceId);
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING movement_id";
+        return jdbcTemplate.queryForObject(
+                sql,
+                Long.class,
+                shiftId,
+                branchId,
+                movementType,
+                amount,
+                actorUserId,
+                note,
+                clientId,
+                associatedUserId,
+                referenceType,
+                referenceId
+        );
     }
 
     public List<Map<String, Object>> getCashMovements(int companyId, int shiftId) {

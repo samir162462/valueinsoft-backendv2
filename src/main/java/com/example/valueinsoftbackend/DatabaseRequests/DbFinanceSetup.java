@@ -606,6 +606,24 @@ public class DbFinanceSetup {
         ));
     }
 
+    public UUID findPostingFiscalPeriodIdForDate(int companyId, LocalDate postingDate) {
+        ArrayList<UUID> periodIds = new ArrayList<>(namedParameterJdbcTemplate.query(
+                "SELECT fiscal_period_id " +
+                        "FROM public.finance_fiscal_period " +
+                        "WHERE company_id = :companyId " +
+                        "AND start_date <= :postingDate " +
+                        "AND end_date >= :postingDate " +
+                        "AND status IN ('open', 'soft_locked') " +
+                        "ORDER BY CASE WHEN status = 'open' THEN 0 ELSE 1 END, start_date DESC " +
+                        "LIMIT 1",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("postingDate", postingDate),
+                (rs, rowNum) -> uuid(rs, "fiscal_period_id")
+        ));
+        return periodIds.isEmpty() ? null : periodIds.getFirst();
+    }
+
     public FinanceFiscalPeriodItem getFiscalPeriodById(int companyId, UUID fiscalPeriodId) {
         return namedParameterJdbcTemplate.queryForObject(
                 "SELECT fiscal_period_id, company_id, fiscal_year_id, period_number, name, start_date, end_date, status, " +
@@ -684,6 +702,35 @@ public class DbFinanceSetup {
                         .addValue("accountMappingId", accountMappingId),
                 (rs, rowNum) -> mapAccountMapping(rs)
         );
+    }
+
+    public FinanceAccountMappingItem resolveActiveAccountMapping(int companyId,
+                                                                 Integer branchId,
+                                                                 String mappingKey,
+                                                                 LocalDate effectiveDate) {
+        ArrayList<FinanceAccountMappingItem> mappings = new ArrayList<>(namedParameterJdbcTemplate.query(
+                "SELECT m.account_mapping_id, m.company_id, m.branch_id, m.mapping_key, m.account_id, " +
+                        "a.account_code, a.account_name, m.priority, m.effective_from, m.effective_to, m.status, " +
+                        "m.version, m.created_at, m.created_by, m.updated_at, m.updated_by " +
+                        "FROM public.finance_account_mapping m " +
+                        "JOIN public.finance_account a ON a.company_id = m.company_id AND a.account_id = m.account_id " +
+                        "WHERE m.company_id = :companyId " +
+                        "AND m.mapping_key = :mappingKey " +
+                        "AND m.status = 'active' " +
+                        "AND m.effective_from <= :effectiveDate " +
+                        "AND (m.effective_to IS NULL OR m.effective_to >= :effectiveDate) " +
+                        "AND (m.branch_id = :branchId OR m.branch_id IS NULL) " +
+                        "AND a.status = 'active' " +
+                        "AND a.is_postable = TRUE " +
+                        "ORDER BY CASE WHEN m.branch_id = :branchId THEN 0 ELSE 1 END, m.priority ASC, m.effective_from DESC " +
+                        "LIMIT 1",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("branchId", branchId)
+                        .addValue("mappingKey", mappingKey)
+                        .addValue("effectiveDate", effectiveDate),
+                (rs, rowNum) -> mapAccountMapping(rs)));
+        return mappings.isEmpty() ? null : mappings.getFirst();
     }
 
     public ArrayList<FinanceTaxCodeItem> getTaxCodes(int companyId) {

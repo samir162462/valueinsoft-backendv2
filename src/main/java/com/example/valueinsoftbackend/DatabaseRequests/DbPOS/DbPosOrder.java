@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.lang.reflect.Type;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -83,10 +84,36 @@ public class DbPosOrder {
         insertSoldLedgerEntries(orderId, order, companyId, orderTime);
 
         log.debug("Inserted order {} for company {} branch {}", orderId, companyId, branchId);
-        return new AddOrderResult(orderId, shiftId);
+        return new AddOrderResult(orderId, shiftId, orderTime);
     }
 
-    public static record AddOrderResult(int orderId, Integer shiftId) {}
+    public static record AddOrderResult(int orderId, Integer shiftId, Timestamp orderTime) {}
+
+    public List<OrderFinanceCostLine> getOrderFinanceCostLines(int orderId, int branchId, int companyId) {
+        TenantSqlIdentifiers.requirePositive(orderId, "orderId");
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+
+        String sql = "SELECT od.\"productId\", od.quantity, COALESCE(prod.buying_price, 0) AS unit_cost, " +
+                "(COALESCE(prod.buying_price, 0) * od.quantity) AS total_cost " +
+                "FROM " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) + " od " +
+                "LEFT JOIN " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " prod ON prod.product_id = od.\"productId\" " +
+                "WHERE od.\"orderId\" = ? " +
+                "AND od.\"productId\" > 0 " +
+                "AND COALESCE(od.\"bouncedBack\", 0) = 0 " +
+                "ORDER BY od.\"orderDetailsId\" ASC";
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new OrderFinanceCostLine(
+                rs.getInt("productId"),
+                rs.getInt("quantity"),
+                rs.getBigDecimal("unit_cost"),
+                rs.getBigDecimal("total_cost")
+        ), orderId);
+    }
+
+    public record OrderFinanceCostLine(int productId,
+                                       int quantity,
+                                       BigDecimal unitCost,
+                                       BigDecimal totalCost) {}
 
     public ArrayList<Order> getOrdersByPeriod(int branchId, Timestamp startTime, Timestamp endTime, int companyId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
@@ -225,7 +252,7 @@ public class DbPosOrder {
         );
     }
 
-    public int insertBounceBackLedgerEntry(OrderBounceBackContext context, int branchId, int companyId) {
+    public Long insertBounceBackLedgerEntry(OrderBounceBackContext context, int branchId, int companyId) {
         String sql = """
                 INSERT INTO %s (
                     branch_id, product_id, quantity_delta, movement_type, reference_type, reference_id,
@@ -234,9 +261,10 @@ public class DbPosOrder {
                     :branchId, :productId, :quantityDelta, :movementType, :referenceType, :referenceId,
                     :actorName, :note, :supplierId, :transTotal, :payType, :remainingAmount, CURRENT_TIMESTAMP
                 )
+                RETURNING stock_ledger_id
                 """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
 
-        return namedParameterJdbcTemplate.update(
+        return namedParameterJdbcTemplate.queryForObject(
                 sql,
                 new MapSqlParameterSource()
                         .addValue("branchId", branchId)
@@ -250,8 +278,8 @@ public class DbPosOrder {
                         .addValue("supplierId", 0)
                         .addValue("transTotal", context.getTotal())
                         .addValue("payType", "BounceBack")
-                        .addValue("remainingAmount", 0)
-        );
+                        .addValue("remainingAmount", 0),
+                Long.class);
     }
 
     public int updateOrderBounceBackTotals(int orderId, int branchId, int companyId, int bouncedAmount, int incomeReduction) {

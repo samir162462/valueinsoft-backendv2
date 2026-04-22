@@ -17,6 +17,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -254,6 +255,213 @@ public class DbFinanceJournal {
                         .addValue("postedBy", postedBy));
     }
 
+    public int applyPostedJournalToAccountBalances(int companyId, UUID journalEntryId, int updatedBy) {
+        return applyPostedJournalToBranchAccountBalances(companyId, journalEntryId, updatedBy)
+                + applyPostedJournalToCompanyAccountBalances(companyId, journalEntryId, updatedBy);
+    }
+
+    public boolean journalHasReversal(int companyId, UUID journalEntryId) {
+        Integer count = namedParameterJdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM public.finance_journal_entry " +
+                        "WHERE company_id = :companyId " +
+                        "AND reversal_of_journal_id = :journalEntryId " +
+                        "AND status IN ('validated', 'posted', 'reversed')",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("journalEntryId", journalEntryId),
+                Integer.class);
+        return count != null && count > 0;
+    }
+
+    public String allocateManualReversalJournalNumber(int companyId) {
+        return allocateJournalNumber(companyId, "manual.reversal", "RJ-", 6);
+    }
+
+    public String allocateSourceJournalNumber(int companyId, String sequenceKey, String prefix) {
+        return allocateJournalNumber(companyId, sequenceKey, prefix, 6);
+    }
+
+    private String allocateJournalNumber(int companyId, String sequenceKey, String prefix, int padding) {
+        namedParameterJdbcTemplate.update(
+                "INSERT INTO public.finance_journal_sequence " +
+                        "(company_id, sequence_key, fiscal_year_id, prefix, next_number, padding) " +
+                        "VALUES (:companyId, :sequenceKey, NULL, :prefix, 1, :padding) " +
+                        "ON CONFLICT (company_id, sequence_key) WHERE fiscal_year_id IS NULL DO NOTHING",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("sequenceKey", sequenceKey)
+                        .addValue("prefix", prefix)
+                        .addValue("padding", padding));
+
+        JournalSequenceValue sequence = namedParameterJdbcTemplate.queryForObject(
+                "SELECT journal_sequence_id, prefix, next_number, padding " +
+                        "FROM public.finance_journal_sequence " +
+                        "WHERE company_id = :companyId " +
+                        "AND sequence_key = :sequenceKey " +
+                        "AND fiscal_year_id IS NULL " +
+                        "FOR UPDATE",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("sequenceKey", sequenceKey),
+                (rs, rowNum) -> new JournalSequenceValue(
+                        uuid(rs, "journal_sequence_id"),
+                        rs.getString("prefix"),
+                        rs.getLong("next_number"),
+                        rs.getInt("padding")));
+
+        namedParameterJdbcTemplate.update(
+                "UPDATE public.finance_journal_sequence " +
+                        "SET next_number = next_number + 1, " +
+                        "version = version + 1 " +
+                        "WHERE company_id = :companyId " +
+                        "AND journal_sequence_id = :journalSequenceId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("journalSequenceId", sequence.journalSequenceId()));
+
+        return sequence.prefix() + String.format("%0" + sequence.padding() + "d", sequence.nextNumber());
+    }
+
+    public UUID createPostedSourceJournal(PostedSourceJournalCommand command) {
+        return createPostedSourceJournal(command, false);
+    }
+
+    public UUID createPostedClosingJournal(PostedSourceJournalCommand command) {
+        return createPostedSourceJournal(command, true);
+    }
+
+    private UUID createPostedSourceJournal(PostedSourceJournalCommand command, boolean closingEntry) {
+        UUID journalEntryId = namedParameterJdbcTemplate.queryForObject(
+                "INSERT INTO public.finance_journal_entry " +
+                        "(company_id, branch_id, journal_number, journal_type, source_module, source_type, source_id, " +
+                        "posting_date, fiscal_period_id, description, status, currency_code, exchange_rate, " +
+                        "total_debit, total_credit, is_closing_entry, posted_at, posted_by) " +
+                        "VALUES (:companyId, :branchId, :journalNumber, :journalType, :sourceModule, :sourceType, :sourceId, " +
+                        ":postingDate, :fiscalPeriodId, :description, 'posted', :currencyCode, :exchangeRate, " +
+                        ":totalDebit, :totalCredit, :closingEntry, NOW(), :postedBy) " +
+                        "RETURNING journal_entry_id",
+                new MapSqlParameterSource()
+                        .addValue("companyId", command.companyId())
+                        .addValue("branchId", command.branchId())
+                        .addValue("journalNumber", command.journalNumber())
+                        .addValue("journalType", command.journalType())
+                        .addValue("sourceModule", command.sourceModule())
+                        .addValue("sourceType", command.sourceType())
+                        .addValue("sourceId", command.sourceId())
+                        .addValue("postingDate", command.postingDate())
+                        .addValue("fiscalPeriodId", command.fiscalPeriodId())
+                        .addValue("description", command.description())
+                        .addValue("currencyCode", command.currencyCode())
+                        .addValue("exchangeRate", command.exchangeRate())
+                        .addValue("totalDebit", command.totalDebit())
+                        .addValue("totalCredit", command.totalCredit())
+                        .addValue("closingEntry", closingEntry)
+                        .addValue("postedBy", command.postedBy()),
+                UUID.class);
+
+        int lineNumber = 1;
+        for (PostedSourceJournalLineCommand line : command.lines()) {
+            createPostedSourceJournalLine(command, journalEntryId, lineNumber, line);
+            lineNumber++;
+        }
+        return journalEntryId;
+    }
+
+    private void createPostedSourceJournalLine(PostedSourceJournalCommand command,
+                                               UUID journalEntryId,
+                                               int lineNumber,
+                                               PostedSourceJournalLineCommand line) {
+        namedParameterJdbcTemplate.update(
+                "INSERT INTO public.finance_journal_line " +
+                        "(company_id, journal_entry_id, line_number, account_id, branch_id, posting_date, fiscal_period_id, " +
+                        "debit_amount, credit_amount, currency_code, exchange_rate, description, customer_id, supplier_id, " +
+                        "product_id, inventory_movement_id, payment_id, cost_center_id, tax_code_id, source_module, source_type, source_id) " +
+                        "VALUES (:companyId, :journalEntryId, :lineNumber, :accountId, :branchId, :postingDate, :fiscalPeriodId, " +
+                        ":debitAmount, :creditAmount, :currencyCode, :exchangeRate, :description, :customerId, :supplierId, " +
+                        ":productId, :inventoryMovementId, :paymentId, :costCenterId, :taxCodeId, :sourceModule, :sourceType, :sourceId)",
+                new MapSqlParameterSource()
+                        .addValue("companyId", command.companyId())
+                        .addValue("journalEntryId", journalEntryId)
+                        .addValue("lineNumber", lineNumber)
+                        .addValue("accountId", line.accountId())
+                        .addValue("branchId", line.branchId())
+                        .addValue("postingDate", command.postingDate())
+                        .addValue("fiscalPeriodId", command.fiscalPeriodId())
+                        .addValue("debitAmount", line.debitAmount())
+                        .addValue("creditAmount", line.creditAmount())
+                        .addValue("currencyCode", command.currencyCode())
+                        .addValue("exchangeRate", command.exchangeRate())
+                        .addValue("description", line.description())
+                        .addValue("customerId", line.customerId())
+                        .addValue("supplierId", line.supplierId())
+                        .addValue("productId", line.productId())
+                        .addValue("inventoryMovementId", line.inventoryMovementId())
+                        .addValue("paymentId", line.paymentId())
+                        .addValue("costCenterId", line.costCenterId())
+                        .addValue("taxCodeId", line.taxCodeId())
+                        .addValue("sourceModule", command.sourceModule())
+                        .addValue("sourceType", command.sourceType())
+                        .addValue("sourceId", command.sourceId()));
+    }
+
+    public UUID createPostedManualReversalJournal(FinanceJournalEntryItem original,
+                                                  String journalNumber,
+                                                  LocalDate postingDate,
+                                                  UUID fiscalPeriodId,
+                                                  String reason,
+                                                  int postedBy) {
+        UUID reversalJournalId = namedParameterJdbcTemplate.queryForObject(
+                "INSERT INTO public.finance_journal_entry " +
+                        "(company_id, branch_id, journal_number, journal_type, source_module, source_type, source_id, " +
+                        "posting_date, fiscal_period_id, description, status, currency_code, exchange_rate, " +
+                        "total_debit, total_credit, is_closing_entry, posted_at, posted_by, reversal_of_journal_id) " +
+                        "VALUES (:companyId, :branchId, :journalNumber, 'reversal', 'manual', 'manual_reversal', :sourceId, " +
+                        ":postingDate, :fiscalPeriodId, :description, 'posted', :currencyCode, :exchangeRate, " +
+                        ":totalDebit, :totalCredit, :closingEntry, NOW(), :postedBy, :originalJournalId) " +
+                        "RETURNING journal_entry_id",
+                new MapSqlParameterSource()
+                        .addValue("companyId", original.getCompanyId())
+                        .addValue("branchId", original.getBranchId())
+                        .addValue("journalNumber", journalNumber)
+                        .addValue("sourceId", original.getJournalEntryId().toString())
+                        .addValue("postingDate", postingDate)
+                        .addValue("fiscalPeriodId", fiscalPeriodId)
+                        .addValue("description", reason.trim())
+                        .addValue("currencyCode", original.getCurrencyCode())
+                        .addValue("exchangeRate", original.getExchangeRate())
+                        .addValue("totalDebit", original.getTotalCredit())
+                        .addValue("totalCredit", original.getTotalDebit())
+                        .addValue("closingEntry", original.isClosingEntry())
+                        .addValue("postedBy", postedBy)
+                        .addValue("originalJournalId", original.getJournalEntryId()),
+                UUID.class);
+
+        copyReversalJournalLines(original.getCompanyId(), original.getJournalEntryId(), reversalJournalId, postingDate,
+                fiscalPeriodId, original.getJournalEntryId().toString());
+        return reversalJournalId;
+    }
+
+    public int markOriginalJournalReversed(int companyId,
+                                           UUID originalJournalId,
+                                           UUID reversalJournalId,
+                                           int version) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.finance_journal_entry " +
+                        "SET status = 'reversed', " +
+                        "reversed_by_journal_id = :reversalJournalId, " +
+                        "version = version + 1 " +
+                        "WHERE company_id = :companyId " +
+                        "AND journal_entry_id = :originalJournalId " +
+                        "AND status = 'posted' " +
+                        "AND reversed_by_journal_id IS NULL " +
+                        "AND version = :version",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("originalJournalId", originalJournalId)
+                        .addValue("reversalJournalId", reversalJournalId)
+                        .addValue("version", version));
+    }
+
     public ArrayList<FinanceJournalEntryItem> getJournals(int companyId,
             Integer branchId,
             UUID fiscalPeriodId,
@@ -342,6 +550,96 @@ public class DbFinanceJournal {
                         .addValue("companyId", companyId)
                         .addValue("journalEntryId", journalEntryId),
                 (rs, rowNum) -> mapJournalLine(rs)));
+    }
+
+    private void copyReversalJournalLines(int companyId,
+                                          UUID originalJournalId,
+                                          UUID reversalJournalId,
+                                          LocalDate postingDate,
+                                          UUID fiscalPeriodId,
+                                          String sourceId) {
+        namedParameterJdbcTemplate.update(
+                "INSERT INTO public.finance_journal_line " +
+                        "(company_id, journal_entry_id, line_number, account_id, branch_id, posting_date, fiscal_period_id, " +
+                        "debit_amount, credit_amount, currency_code, exchange_rate, foreign_debit_amount, foreign_credit_amount, " +
+                        "description, customer_id, supplier_id, product_id, inventory_movement_id, payment_id, cost_center_id, " +
+                        "tax_code_id, source_module, source_type, source_id) " +
+                        "SELECT company_id, :reversalJournalId, line_number, account_id, branch_id, :postingDate, :fiscalPeriodId, " +
+                        "credit_amount, debit_amount, currency_code, exchange_rate, foreign_credit_amount, foreign_debit_amount, " +
+                        "description, customer_id, supplier_id, product_id, inventory_movement_id, payment_id, cost_center_id, " +
+                        "tax_code_id, 'manual', 'manual_reversal', :sourceId " +
+                        "FROM public.finance_journal_line " +
+                        "WHERE company_id = :companyId AND journal_entry_id = :originalJournalId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("originalJournalId", originalJournalId)
+                        .addValue("reversalJournalId", reversalJournalId)
+                        .addValue("postingDate", postingDate)
+                        .addValue("fiscalPeriodId", fiscalPeriodId)
+                        .addValue("sourceId", sourceId));
+    }
+
+    private int applyPostedJournalToBranchAccountBalances(int companyId, UUID journalEntryId, int updatedBy) {
+        return namedParameterJdbcTemplate.update(
+                "INSERT INTO public.finance_account_balance " +
+                        "(company_id, fiscal_period_id, account_id, branch_id, currency_code, " +
+                        "period_debit, period_credit, closing_debit, closing_credit, created_by, updated_by) " +
+                        "SELECT l.company_id, l.fiscal_period_id, l.account_id, l.branch_id, l.currency_code, " +
+                        "SUM(l.debit_amount), SUM(l.credit_amount), SUM(l.debit_amount), SUM(l.credit_amount), " +
+                        ":updatedBy, :updatedBy " +
+                        "FROM public.finance_journal_line l " +
+                        "JOIN public.finance_journal_entry j " +
+                        "ON j.company_id = l.company_id AND j.journal_entry_id = l.journal_entry_id " +
+                        "WHERE l.company_id = :companyId " +
+                        "AND l.journal_entry_id = :journalEntryId " +
+                        "AND l.branch_id IS NOT NULL " +
+                        "AND j.status = 'posted' " +
+                        "GROUP BY l.company_id, l.fiscal_period_id, l.account_id, l.branch_id, l.currency_code " +
+                        "ON CONFLICT (company_id, fiscal_period_id, account_id, branch_id, currency_code) " +
+                        "WHERE branch_id IS NOT NULL " +
+                        "DO UPDATE SET " +
+                        "period_debit = public.finance_account_balance.period_debit + EXCLUDED.period_debit, " +
+                        "period_credit = public.finance_account_balance.period_credit + EXCLUDED.period_credit, " +
+                        "closing_debit = public.finance_account_balance.opening_debit " +
+                        "+ public.finance_account_balance.period_debit + EXCLUDED.period_debit, " +
+                        "closing_credit = public.finance_account_balance.opening_credit " +
+                        "+ public.finance_account_balance.period_credit + EXCLUDED.period_credit, " +
+                        "updated_by = :updatedBy",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("journalEntryId", journalEntryId)
+                        .addValue("updatedBy", updatedBy));
+    }
+
+    private int applyPostedJournalToCompanyAccountBalances(int companyId, UUID journalEntryId, int updatedBy) {
+        return namedParameterJdbcTemplate.update(
+                "INSERT INTO public.finance_account_balance " +
+                        "(company_id, fiscal_period_id, account_id, branch_id, currency_code, " +
+                        "period_debit, period_credit, closing_debit, closing_credit, created_by, updated_by) " +
+                        "SELECT l.company_id, l.fiscal_period_id, l.account_id, NULL::INTEGER, l.currency_code, " +
+                        "SUM(l.debit_amount), SUM(l.credit_amount), SUM(l.debit_amount), SUM(l.credit_amount), " +
+                        ":updatedBy, :updatedBy " +
+                        "FROM public.finance_journal_line l " +
+                        "JOIN public.finance_journal_entry j " +
+                        "ON j.company_id = l.company_id AND j.journal_entry_id = l.journal_entry_id " +
+                        "WHERE l.company_id = :companyId " +
+                        "AND l.journal_entry_id = :journalEntryId " +
+                        "AND j.status = 'posted' " +
+                        "GROUP BY l.company_id, l.fiscal_period_id, l.account_id, l.currency_code " +
+                        "ON CONFLICT (company_id, fiscal_period_id, account_id, currency_code) " +
+                        "WHERE branch_id IS NULL " +
+                        "DO UPDATE SET " +
+                        "period_debit = public.finance_account_balance.period_debit + EXCLUDED.period_debit, " +
+                        "period_credit = public.finance_account_balance.period_credit + EXCLUDED.period_credit, " +
+                        "closing_debit = public.finance_account_balance.opening_debit " +
+                        "+ public.finance_account_balance.period_debit + EXCLUDED.period_debit, " +
+                        "closing_credit = public.finance_account_balance.opening_credit " +
+                        "+ public.finance_account_balance.period_credit + EXCLUDED.period_credit, " +
+                        "updated_by = :updatedBy",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("journalEntryId", journalEntryId)
+                        .addValue("updatedBy", updatedBy));
     }
 
     private void createManualDraftJournalLine(FinanceManualJournalCreateRequest request,
@@ -550,5 +848,37 @@ public class DbFinanceJournal {
             LocalDate startDate,
             LocalDate endDate,
             String status) {
+    }
+
+    public record PostedSourceJournalCommand(int companyId,
+                                             Integer branchId,
+                                             String journalNumber,
+                                             String journalType,
+                                             String sourceModule,
+                                             String sourceType,
+                                             String sourceId,
+                                             LocalDate postingDate,
+                                             UUID fiscalPeriodId,
+                                             String description,
+                                             String currencyCode,
+                                             BigDecimal exchangeRate,
+                                             BigDecimal totalDebit,
+                                             BigDecimal totalCredit,
+                                             Integer postedBy,
+                                             List<PostedSourceJournalLineCommand> lines) {
+    }
+
+    public record PostedSourceJournalLineCommand(UUID accountId,
+                                                 Integer branchId,
+                                                 BigDecimal debitAmount,
+                                                 BigDecimal creditAmount,
+                                                 String description,
+                                                 Integer customerId,
+                                                 Integer supplierId,
+                                                 Long productId,
+                                                 Long inventoryMovementId,
+                                                 String paymentId,
+                                                 UUID costCenterId,
+                                                 UUID taxCodeId) {
     }
 }

@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceJournalEntryItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceJournalLineItem;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalUpdateRequest;
+import com.example.valueinsoftbackend.Model.Request.Finance.FinanceJournalReversalRequest;
 import com.example.valueinsoftbackend.Service.FinanceJournalService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -99,6 +100,13 @@ public class FinanceJournalController {
                                                                    @RequestParam("companyId") @Positive int companyId,
                                                                    @RequestParam("version") @Min(1) int version) {
         return financeJournalService.postValidatedManualJournalForAuthenticatedUser(principal.getName(), companyId, journalEntryId, version);
+    }
+
+    @PostMapping("/{journalEntryId}/reverse")
+    public FinanceJournalDetailResponse reversePostedManualJournal(Principal principal,
+                                                                   @PathVariable("journalEntryId") UUID journalEntryId,
+                                                                   @Valid @RequestBody FinanceJournalReversalRequest request) {
+        return financeJournalService.reversePostedManualJournalForAuthenticatedUser(principal.getName(), journalEntryId, request);
     }
 
     @GetMapping("/{journalEntryId}")

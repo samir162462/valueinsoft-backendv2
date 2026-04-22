@@ -11,6 +11,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceJournalLineItem;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalLineRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalUpdateRequest;
+import com.example.valueinsoftbackend.Model.Request.Finance.FinanceJournalReversalRequest;
 import com.example.valueinsoftbackend.Model.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -39,15 +41,18 @@ public class FinanceJournalService {
     private final DbFinanceSetup dbFinanceSetup;
     private final DbUsers dbUsers;
     private final AuthorizationService authorizationService;
+    private final FinanceAuditService financeAuditService;
 
     public FinanceJournalService(DbFinanceJournal dbFinanceJournal,
                                  DbFinanceSetup dbFinanceSetup,
                                  DbUsers dbUsers,
-                                 AuthorizationService authorizationService) {
+                                 AuthorizationService authorizationService,
+                                 FinanceAuditService financeAuditService) {
         this.dbFinanceJournal = dbFinanceJournal;
         this.dbFinanceSetup = dbFinanceSetup;
         this.dbUsers = dbUsers;
         this.authorizationService = authorizationService;
+        this.financeAuditService = financeAuditService;
     }
 
     public ArrayList<FinanceJournalEntryItem> getJournalsForAuthenticatedUser(String authenticatedName,
@@ -215,9 +220,96 @@ public class FinanceJournalService {
                     "Manual journal was updated by another request or is no longer postable");
         }
 
+        dbFinanceJournal.applyPostedJournalToAccountBalances(companyId, journalEntryId, actor.getUserId());
+        FinanceJournalEntryItem postedJournal = dbFinanceJournal.getJournalById(companyId, journalEntryId);
+        ArrayList<FinanceJournalLineItem> postedLines = dbFinanceJournal.getJournalLines(companyId, journalEntryId);
+        financeAuditService.recordEvent(
+                authenticatedName,
+                companyId,
+                postedJournal.getBranchId(),
+                "finance.journal.posted",
+                "finance_journal_entry",
+                journalEntryId.toString(),
+                Map.of(
+                        "journalNumber", postedJournal.getJournalNumber(),
+                        "journalType", postedJournal.getJournalType(),
+                        "fiscalPeriodId", postedJournal.getFiscalPeriodId().toString(),
+                        "postingDate", postedJournal.getPostingDate().toString(),
+                        "currencyCode", postedJournal.getCurrencyCode(),
+                        "totalDebit", postedJournal.getTotalDebit(),
+                        "totalCredit", postedJournal.getTotalCredit(),
+                        "lineCount", postedLines.size()),
+                "Manual journal posted");
+
         return new FinanceJournalDetailResponse(
-                dbFinanceJournal.getJournalById(companyId, journalEntryId),
-                dbFinanceJournal.getJournalLines(companyId, journalEntryId));
+                postedJournal,
+                postedLines);
+    }
+
+    @Transactional
+    public FinanceJournalDetailResponse reversePostedManualJournalForAuthenticatedUser(String authenticatedName,
+                                                                                      UUID journalEntryId,
+                                                                                      FinanceJournalReversalRequest request) {
+        requireCompany(request.getCompanyId());
+        authorizeEdit(authenticatedName, request.getCompanyId(), null);
+        User actor = requireAuthenticatedUser(authenticatedName);
+        FinanceJournalEntryItem original = requireReversibleManualJournal(request.getCompanyId(), journalEntryId);
+
+        if (request.getReason() == null || request.getReason().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_REVERSAL_REASON_REQUIRED",
+                    "Reversal reason is required");
+        }
+
+        validateManualDraftPeriod(request.getCompanyId(), request.getFiscalPeriodId(), request.getPostingDate());
+        validatePersistedDraftLines(original);
+
+        String journalNumber = dbFinanceJournal.allocateManualReversalJournalNumber(request.getCompanyId());
+        UUID reversalJournalId = dbFinanceJournal.createPostedManualReversalJournal(
+                original,
+                journalNumber,
+                request.getPostingDate(),
+                request.getFiscalPeriodId(),
+                request.getReason(),
+                actor.getUserId());
+
+        int rows = dbFinanceJournal.markOriginalJournalReversed(
+                request.getCompanyId(),
+                journalEntryId,
+                reversalJournalId,
+                request.getVersion());
+        if (rows == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_VERSION_CONFLICT",
+                    "Original journal was updated by another request or is no longer reversible");
+        }
+
+        dbFinanceJournal.applyPostedJournalToAccountBalances(
+                request.getCompanyId(),
+                reversalJournalId,
+                actor.getUserId());
+        FinanceJournalEntryItem reversalJournal = dbFinanceJournal.getJournalById(request.getCompanyId(), reversalJournalId);
+        ArrayList<FinanceJournalLineItem> reversalLines = dbFinanceJournal.getJournalLines(request.getCompanyId(), reversalJournalId);
+        financeAuditService.recordEvent(
+                authenticatedName,
+                request.getCompanyId(),
+                reversalJournal.getBranchId(),
+                "finance.journal.reversed",
+                "finance_journal_entry",
+                journalEntryId.toString(),
+                Map.of(
+                        "originalJournalEntryId", journalEntryId.toString(),
+                        "reversalJournalEntryId", reversalJournalId.toString(),
+                        "reversalJournalNumber", reversalJournal.getJournalNumber(),
+                        "fiscalPeriodId", reversalJournal.getFiscalPeriodId().toString(),
+                        "postingDate", reversalJournal.getPostingDate().toString(),
+                        "currencyCode", reversalJournal.getCurrencyCode(),
+                        "totalDebit", reversalJournal.getTotalDebit(),
+                        "totalCredit", reversalJournal.getTotalCredit(),
+                        "lineCount", reversalLines.size()),
+                request.getReason());
+
+        return new FinanceJournalDetailResponse(
+                reversalJournal,
+                reversalLines);
     }
 
     private void validateFilters(int companyId,
@@ -542,6 +634,24 @@ public class FinanceJournalService {
         if (journal.getPostedAt() != null || journal.getPostedBy() != null) {
             throw new ApiException(HttpStatus.CONFLICT, "FINANCE_JOURNAL_ALREADY_POSTED",
                     "Journal already has posting metadata");
+        }
+        return journal;
+    }
+
+    private FinanceJournalEntryItem requireReversibleManualJournal(int companyId, UUID journalEntryId) {
+        requireJournal(companyId, journalEntryId);
+        FinanceJournalEntryItem journal = dbFinanceJournal.getJournalById(companyId, journalEntryId);
+        if (!"manual".equals(journal.getSourceModule()) || !"posted".equals(journal.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_JOURNAL_NOT_REVERSIBLE",
+                    "Only posted manual journals can be reversed by this workflow");
+        }
+        if (journal.getReversalOfJournalId() != null) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_REVERSAL_OF_REVERSAL_BLOCKED",
+                    "Reversal journals cannot be reversed by this workflow");
+        }
+        if (journal.getReversedByJournalId() != null || dbFinanceJournal.journalHasReversal(companyId, journalEntryId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_JOURNAL_ALREADY_REVERSED",
+                    "Journal already has a reversal");
         }
         return journal;
     }
