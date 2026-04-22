@@ -3,7 +3,11 @@ package com.example.valueinsoftbackend.Configuration;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class FlywayMigrationInventoryTest {
 
@@ -49,5 +53,67 @@ class FlywayMigrationInventoryTest {
                     "Missing required migration resource: " + migration
             );
         }
+    }
+
+    @Test
+    void financeFoundationMigrationExistsAndAvoidsFloatingPointMoneyTypes() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V49__finance_fiscal_calendar_and_accounts.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing finance foundation migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("FINANCE_FISCAL_YEAR"));
+        assertTrue(sql.contains("FINANCE_FISCAL_PERIOD"));
+        assertTrue(sql.contains("FINANCE_ACCOUNT"));
+        assertTrue(sql.contains("FINANCE_ACCOUNT_MAPPING"));
+        assertTrue(sql.contains("FINANCE_TAX_CODE"));
+        assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
+        assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
+    }
+
+    @Test
+    void financeJournalCoreMigrationExistsAndUsesDecimalMoneyTypes() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V50__finance_journal_core.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing finance journal core migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("FINANCE_JOURNAL_SEQUENCE"));
+        assertTrue(sql.contains("FINANCE_POSTING_BATCH"));
+        assertTrue(sql.contains("FINANCE_JOURNAL_ENTRY"));
+        assertTrue(sql.contains("FINANCE_POSTING_REQUEST"));
+        assertTrue(sql.contains("FINANCE_JOURNAL_LINE"));
+        assertTrue(sql.contains("FINANCE_TAX_LINE"));
+        assertTrue(sql.contains("DECIMAL(19,4)"), "Journal core must use DECIMAL(19,4) for money");
+        assertTrue(sql.contains("DECIMAL(19,8)"), "Journal core must use DECIMAL(19,8) for exchange rates");
+        assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
+        assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
+    }
+
+    @Test
+    void financeReportingCloseAuditMigrationExistsAndUsesDecimalMoneyTypes() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V51__finance_reporting_reconciliation_close_audit.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing finance reporting/reconciliation/close/audit migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("FINANCE_ACCOUNT_BALANCE"));
+        assertTrue(sql.contains("FINANCE_TRIAL_BALANCE_SNAPSHOT"));
+        assertTrue(sql.contains("FINANCE_RECONCILIATION_RUN"));
+        assertTrue(sql.contains("FINANCE_RECONCILIATION_ITEM"));
+        assertTrue(sql.contains("FINANCE_PERIOD_CLOSE_RUN"));
+        assertTrue(sql.contains("FINANCE_AUDIT_EVENT"));
+        assertTrue(sql.contains("DECIMAL(19,4)"), "Finance reporting/close migration must use DECIMAL(19,4) for money");
+        assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
+        assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
     }
 }
