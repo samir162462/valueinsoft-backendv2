@@ -530,14 +530,14 @@ public class DbFinanceJournal {
 
     public ArrayList<FinanceJournalLineItem> getJournalLines(int companyId, UUID journalEntryId) {
         return new ArrayList<>(namedParameterJdbcTemplate.query(
-                "SELECT l.journal_line_id, l.company_id, l.journal_entry_id, l.line_number, l.account_id, " +
-                        "a.account_code, a.account_name, l.branch_id, l.posting_date, l.fiscal_period_id, " +
-                        "l.debit_amount, l.credit_amount, l.currency_code, l.exchange_rate, " +
-                        "l.foreign_debit_amount, l.foreign_credit_amount, l.description, l.customer_id, " +
-                        "l.supplier_id, l.product_id, l.inventory_movement_id, l.payment_id, l.cost_center_id, " +
-                        "cc.cost_center_code, cc.cost_center_name, l.tax_code_id, tc.code AS tax_code, " +
-                        "l.source_module, l.source_type, l.source_id, l.created_at, l.created_by " +
-                        "FROM public.finance_journal_line l " +
+                  "SELECT l.journal_line_id, l.company_id, l.journal_entry_id, l.line_number, l.account_id, " +
+                          "a.account_code, a.account_name, l.branch_id, l.posting_date, l.fiscal_period_id, " +
+                          "l.debit_amount, l.credit_amount, l.currency_code, l.exchange_rate, " +
+                          "l.foreign_debit_amount, l.foreign_credit_amount, l.description, l.customer_id, " +
+                          "l.supplier_id, l.product_id, l.inventory_movement_id, l.payment_id, l.cost_center_id, " +
+                          "cc.code AS cost_center_code, cc.name AS cost_center_name, l.tax_code_id, tc.code AS tax_code, " +
+                          "l.source_module, l.source_type, l.source_id, l.created_at, l.created_by " +
+                          "FROM public.finance_journal_line l " +
                         "JOIN public.finance_account a ON a.company_id = l.company_id AND a.account_id = l.account_id "
                         +
                         "LEFT JOIN public.finance_cost_center cc ON cc.company_id = l.company_id AND cc.cost_center_id = l.cost_center_id "

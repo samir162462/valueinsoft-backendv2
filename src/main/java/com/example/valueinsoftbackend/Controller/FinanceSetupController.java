@@ -22,6 +22,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -77,6 +78,13 @@ public class FinanceSetupController {
         return financeSetupService.updateFiscalYearForAuthenticatedUser(principal.getName(), fiscalYearId, request);
     }
 
+    @DeleteMapping("/fiscal-years/{fiscalYearId}")
+    public void deleteFiscalYear(Principal principal,
+                                 @PathVariable("fiscalYearId") UUID fiscalYearId,
+                                 @RequestParam("companyId") @Positive int companyId) {
+        financeSetupService.deleteFiscalYearForAuthenticatedUser(principal.getName(), companyId, fiscalYearId);
+    }
+
     @GetMapping("/fiscal-periods")
     public ArrayList<FinanceFiscalPeriodItem> getFiscalPeriods(Principal principal,
                                                                @RequestParam("companyId") @Positive int companyId) {
@@ -96,6 +104,13 @@ public class FinanceSetupController {
         return financeSetupService.updateFiscalPeriodForAuthenticatedUser(principal.getName(), fiscalPeriodId, request);
     }
 
+    @DeleteMapping("/fiscal-periods/{fiscalPeriodId}")
+    public void deleteFiscalPeriod(Principal principal,
+                                   @PathVariable("fiscalPeriodId") UUID fiscalPeriodId,
+                                   @RequestParam("companyId") @Positive int companyId) {
+        financeSetupService.deleteFiscalPeriodForAuthenticatedUser(principal.getName(), companyId, fiscalPeriodId);
+    }
+
     @GetMapping("/accounts")
     public ArrayList<FinanceAccountItem> getAccounts(Principal principal,
                                                      @RequestParam("companyId") @Positive int companyId) {
@@ -113,6 +128,13 @@ public class FinanceSetupController {
                                             @PathVariable("accountId") UUID accountId,
                                             @Valid @RequestBody FinanceAccountUpdateRequest request) {
         return financeSetupService.updateAccountForAuthenticatedUser(principal.getName(), accountId, request);
+    }
+
+    @DeleteMapping("/accounts/{accountId}")
+    public void deleteAccount(Principal principal,
+                              @PathVariable("accountId") UUID accountId,
+                              @RequestParam("companyId") @Positive int companyId) {
+        financeSetupService.deleteAccountForAuthenticatedUser(principal.getName(), companyId, accountId);
     }
 
     @GetMapping("/account-mappings")
@@ -135,6 +157,13 @@ public class FinanceSetupController {
         return financeSetupService.updateAccountMappingForAuthenticatedUser(principal.getName(), accountMappingId, request);
     }
 
+    @DeleteMapping("/account-mappings/{accountMappingId}")
+    public void deleteAccountMapping(Principal principal,
+                                     @PathVariable("accountMappingId") UUID accountMappingId,
+                                     @RequestParam("companyId") @Positive int companyId) {
+        financeSetupService.deleteAccountMappingForAuthenticatedUser(principal.getName(), companyId, accountMappingId);
+    }
+
     @GetMapping("/tax-codes")
     public ArrayList<FinanceTaxCodeItem> getTaxCodes(Principal principal,
                                                      @RequestParam("companyId") @Positive int companyId) {
@@ -152,5 +181,12 @@ public class FinanceSetupController {
                                             @PathVariable("taxCodeId") UUID taxCodeId,
                                             @Valid @RequestBody FinanceTaxCodeUpdateRequest request) {
         return financeSetupService.updateTaxCodeForAuthenticatedUser(principal.getName(), taxCodeId, request);
+    }
+
+    @DeleteMapping("/tax-codes/{taxCodeId}")
+    public void deleteTaxCode(Principal principal,
+                              @PathVariable("taxCodeId") UUID taxCodeId,
+                              @RequestParam("companyId") @Positive int companyId) {
+        financeSetupService.deleteTaxCodeForAuthenticatedUser(principal.getName(), companyId, taxCodeId);
     }
 }

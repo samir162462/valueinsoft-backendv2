@@ -12,15 +12,23 @@ import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliatio
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationSourceImportItemRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationSourceImportRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -60,17 +68,20 @@ public class FinanceReconciliationService {
     private final DbFinanceSetup dbFinanceSetup;
     private final AuthorizationService authorizationService;
     private final FinanceAuditService financeAuditService;
+    private final FinanceOperationalPostingService financeOperationalPostingService;
     private final ObjectMapper objectMapper;
 
     public FinanceReconciliationService(DbFinanceReconciliation dbFinanceReconciliation,
                                         DbFinanceSetup dbFinanceSetup,
                                         AuthorizationService authorizationService,
                                         FinanceAuditService financeAuditService,
+                                        FinanceOperationalPostingService financeOperationalPostingService,
                                         ObjectMapper objectMapper) {
         this.dbFinanceReconciliation = dbFinanceReconciliation;
         this.dbFinanceSetup = dbFinanceSetup;
         this.authorizationService = authorizationService;
         this.financeAuditService = financeAuditService;
+        this.financeOperationalPostingService = financeOperationalPostingService;
         this.objectMapper = objectMapper;
     }
 
@@ -154,6 +165,8 @@ public class FinanceReconciliationService {
                 rawPayloadJson,
                 actorUserId);
 
+        enqueueImportedSettlementPostingRequests(request, imported);
+
         FinanceReconciliationSourceImportResponse response = new FinanceReconciliationSourceImportResponse(
                 request.getCompanyId(),
                 request.getBranchId(),
@@ -175,6 +188,87 @@ public class FinanceReconciliationService {
                         "importedCount", imported.size()),
                 "Finance reconciliation source items imported");
         return response;
+    }
+
+    private void enqueueImportedSettlementPostingRequests(FinanceReconciliationSourceImportRequest request,
+                                                          List<FinanceReconciliationSourceItem> imported) {
+        if (!"card_settlement".equals(request.getReconciliationType()) || imported == null || imported.isEmpty()) {
+            return;
+        }
+
+        for (FinanceReconciliationSourceItem sourceItem : imported) {
+            try {
+                Map<String, Object> rawPayload = parseRawPayload(sourceItem.getRawPayloadJson());
+                String sourceType = importedSettlementSourceType(rawPayload);
+                BigDecimal grossAmount = firstPositiveAmount(rawPayload,
+                        "grossAmount",
+                        "settlementGrossAmount",
+                        "clearingAmount",
+                        "expectedAmount",
+                        "amount");
+                if (grossAmount == null) {
+                    grossAmount = positiveOrNull(sourceItem.getAmount());
+                }
+                if (grossAmount == null) {
+                    continue;
+                }
+
+                BigDecimal feeAmount = firstAmountOrZero(rawPayload,
+                        "feeAmount",
+                        "providerFeeAmount",
+                        "processingFeeAmount");
+                BigDecimal netAmount = firstPositiveAmount(rawPayload,
+                        "netAmount",
+                        "settledAmount",
+                        "depositAmount",
+                        "bankAmount",
+                        "cashAmount");
+                if (grossAmount == null && netAmount != null) {
+                    grossAmount = netAmount.add(feeAmount).setScale(4, java.math.RoundingMode.HALF_UP);
+                }
+                if (netAmount == null) {
+                    netAmount = grossAmount.subtract(feeAmount).setScale(4, java.math.RoundingMode.HALF_UP);
+                }
+                if (netAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+
+                String settlementMethod = importedSettlementMethod(rawPayload, sourceType);
+                String destination = importedSettlementDestination(rawPayload, settlementMethod);
+                String paymentId = firstText(rawPayload,
+                        "paymentId",
+                        "settlementId",
+                        "providerSettlementId",
+                        "providerReference",
+                        "externalReference");
+                if (paymentId == null) {
+                    paymentId = sourceItem.getExternalReference();
+                }
+
+                LinkedHashMap<String, Object> extraPayload = new LinkedHashMap<>();
+                extraPayload.put("sourceSystem", sourceItem.getSourceSystem());
+                extraPayload.put("externalReference", sourceItem.getExternalReference());
+                extraPayload.put("reconciliationSourceItemId", sourceItem.getReconciliationSourceItemId());
+                extraPayload.put("description", sourceItem.getDescription());
+
+                financeOperationalPostingService.enqueueImportedProviderSettlement(
+                        request.getCompanyId(),
+                        sourceItem.getBranchId(),
+                        sourceType,
+                        settlementPostingSourceId(sourceItem),
+                        grossAmount,
+                        feeAmount,
+                        netAmount,
+                        settlementMethod,
+                        destination,
+                        paymentId,
+                        Timestamp.valueOf(sourceItem.getSourceDate().atStartOfDay()),
+                        "system",
+                        extraPayload);
+            } catch (RuntimeException exception) {
+                // Keep reconciliation import successful even when finance setup or payload normalization is incomplete.
+            }
+        }
     }
 
     public ArrayList<FinanceReconciliationSourceItem> getSourceItemsForAuthenticatedUser(String authenticatedName,
@@ -383,8 +477,97 @@ public class FinanceReconciliationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_SOURCE_ITEMS_TOO_MANY",
                     "A single import request cannot exceed 500 source items");
         }
+        normalizeImportedSourceItems(request);
         for (FinanceReconciliationSourceImportItemRequest item : request.getItems()) {
             validateSourceImportItem(item);
+        }
+    }
+
+    private void normalizeImportedSourceItems(FinanceReconciliationSourceImportRequest request) {
+        String sourceSystem = request.getSourceSystem();
+        if (sourceSystem == null || request.getItems() == null || request.getItems().isEmpty()) {
+            return;
+        }
+
+        for (FinanceReconciliationSourceImportItemRequest item : request.getItems()) {
+            normalizeImportedSourceItem(sourceSystem, item);
+        }
+    }
+
+    private void normalizeImportedSourceItem(String sourceSystem, FinanceReconciliationSourceImportItemRequest item) {
+        if (item == null) {
+            return;
+        }
+
+        Map<String, Object> rawPayload = item.getRawPayload();
+        if (rawPayload == null || rawPayload.isEmpty()) {
+            return;
+        }
+
+        if ("paymob".equals(sourceSystem)) {
+            normalizePayMobImportItem(item, rawPayload);
+        }
+    }
+
+    private void normalizePayMobImportItem(FinanceReconciliationSourceImportItemRequest item,
+                                           Map<String, Object> rawPayload) {
+        if (isBlank(item.getExternalReference())) {
+            String externalReference = firstNestedText(rawPayload,
+                    "providerEventId",
+                    "transactionId",
+                    "id",
+                    "obj.id",
+                    "order.id",
+                    "obj.order.id");
+            if (externalReference != null) {
+                item.setExternalReference(externalReference);
+            }
+        }
+
+        if (item.getSourceDate() == null) {
+            LocalDate sourceDate = firstNestedDate(rawPayload,
+                    "sourceDate",
+                    "createdAt",
+                    "created_at",
+                    "obj.createdAt",
+                    "obj.created_at");
+            if (sourceDate != null) {
+                item.setSourceDate(sourceDate);
+            }
+        }
+
+        if (item.getAmount() == null) {
+            BigDecimal amount = firstNestedAmount(rawPayload,
+                    "amount",
+                    "obj.amount",
+                    "amount_cents",
+                    "obj.amount_cents");
+            if (amount != null) {
+                item.setAmount(amount);
+            }
+        }
+
+        if (item.getCurrencyCode() == null || item.getCurrencyCode().isBlank()) {
+            String currencyCode = firstNestedText(rawPayload,
+                    "currency",
+                    "obj.currency");
+            if (currencyCode != null) {
+                item.setCurrencyCode(currencyCode.trim().toUpperCase(Locale.ROOT));
+            }
+        }
+
+        if (item.getDescription() == null || item.getDescription().isBlank()) {
+            String method = normalizePaymentMethod(firstNestedText(rawPayload,
+                    "settlementMethod",
+                    "paymentMethod",
+                    "method",
+                    "source_data.type",
+                    "obj.source_data.type",
+                    "source_data.sub_type",
+                    "obj.source_data.sub_type"));
+            if (method != null) {
+                item.setDescription("PayMob " + method + " settlement");
+            }
         }
     }
 
@@ -506,6 +689,233 @@ public class FinanceReconciliationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_SOURCE_PAYLOAD_INVALID",
                     "Reconciliation source item raw payload is not valid JSON");
         }
+    }
+
+    private Map<String, Object> parseRawPayload(String rawPayloadJson) {
+        if (rawPayloadJson == null || rawPayloadJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(rawPayloadJson, new TypeReference<>() {});
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_SOURCE_PAYLOAD_INVALID",
+                    "Reconciliation source item raw payload is not valid JSON");
+        }
+    }
+
+    private Object nestedValue(Map<String, Object> payload, String path) {
+        if (payload == null || path == null || path.isBlank()) {
+            return null;
+        }
+
+        Object current = payload;
+        for (String segment : path.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map)) {
+                return null;
+            }
+            current = map.get(segment);
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
+    }
+
+    private String importedSettlementSourceType(Map<String, Object> rawPayload) {
+        String settlementMethod = importedSettlementMethod(rawPayload, null);
+        if ("wallet".equals(settlementMethod)) {
+            return "wallet_settlement";
+        }
+        if ("bank".equals(settlementMethod)) {
+            return "bank_settlement";
+        }
+        return "card_settlement";
+    }
+
+    private String importedSettlementMethod(Map<String, Object> rawPayload, String sourceType) {
+        String explicitMethod = normalizePaymentMethod(firstText(rawPayload, "settlementMethod", "paymentMethod", "method"));
+        if (explicitMethod != null) {
+            return explicitMethod;
+        }
+        if ("wallet_settlement".equals(sourceType)) {
+            return "wallet";
+        }
+        if ("bank_settlement".equals(sourceType)) {
+            return "bank";
+        }
+        return "card";
+    }
+
+    private String importedSettlementDestination(Map<String, Object> rawPayload, String settlementMethod) {
+        String explicitDestination = normalizeDestination(firstText(rawPayload, "destination", "depositTo"));
+        if (explicitDestination != null) {
+            return explicitDestination;
+        }
+        return "cash".equals(settlementMethod) ? "safe" : "bank";
+    }
+
+    private String normalizePaymentMethod(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim().toLowerCase();
+        if ("card".equals(normalized) || "visa".equals(normalized) || "mastercard".equals(normalized)) {
+            return "card";
+        }
+        if ("wallet".equals(normalized) || "mobile_wallet".equals(normalized) || "instapay".equals(normalized)) {
+            return "wallet";
+        }
+        if ("bank".equals(normalized) || "bank_transfer".equals(normalized) || "transfer".equals(normalized)) {
+            return "bank";
+        }
+        if ("cash".equals(normalized)) {
+            return "cash";
+        }
+        return normalized;
+    }
+
+    private String normalizeDestination(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim().toLowerCase();
+        if ("bank".equals(normalized) || "bank_account".equals(normalized) || "deposit_bank".equals(normalized)) {
+            return "bank";
+        }
+        if ("cash".equals(normalized) || "drawer".equals(normalized)) {
+            return "cash";
+        }
+        if ("safe".equals(normalized) || "cash_safe".equals(normalized) || "vault".equals(normalized)) {
+            return "safe";
+        }
+        return normalized;
+    }
+
+    private BigDecimal firstPositiveAmount(Map<String, Object> rawPayload, String... keys) {
+        for (String key : keys) {
+            BigDecimal amount = amount(rawPayload.get(key));
+            if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
+                return amount;
+            }
+        }
+        return null;
+    }
+
+    private BigDecimal firstAmountOrZero(Map<String, Object> rawPayload, String... keys) {
+        for (String key : keys) {
+            BigDecimal amount = amount(rawPayload.get(key));
+            if (amount != null) {
+                return amount;
+            }
+        }
+        return BigDecimal.ZERO.setScale(4, java.math.RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal amount(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            BigDecimal amount = new BigDecimal(String.valueOf(value)).setScale(4, java.math.RoundingMode.HALF_UP);
+            return amount.compareTo(BigDecimal.ZERO) < 0 ? null : amount;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private BigDecimal firstNestedAmount(Map<String, Object> payload, String... keys) {
+        for (String key : keys) {
+            Object value = nestedValue(payload, key);
+            if (value == null) {
+                continue;
+            }
+            BigDecimal amount = amount(value);
+            if (amount == null) {
+                continue;
+            }
+            if (key.endsWith("amount_cents")) {
+                return amount.movePointLeft(2).setScale(4, java.math.RoundingMode.HALF_UP);
+            }
+            return amount;
+        }
+        return null;
+    }
+
+    private BigDecimal positiveOrNull(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return value.setScale(4, java.math.RoundingMode.HALF_UP);
+    }
+
+    private String firstText(Map<String, Object> payload, String... keys) {
+        for (String key : keys) {
+            Object value = payload.get(key);
+            if (value != null) {
+                String text = String.valueOf(value).trim();
+                if (!text.isEmpty() && !"null".equalsIgnoreCase(text)) {
+                    return text;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String firstNestedText(Map<String, Object> payload, String... keys) {
+        for (String key : keys) {
+            Object value = nestedValue(payload, key);
+            if (value != null) {
+                String text = String.valueOf(value).trim();
+                if (!text.isEmpty() && !"null".equalsIgnoreCase(text)) {
+                    return text;
+                }
+            }
+        }
+        return null;
+    }
+
+    private LocalDate firstNestedDate(Map<String, Object> payload, String... keys) {
+        for (String key : keys) {
+            Object value = nestedValue(payload, key);
+            LocalDate date = parseDateValue(value);
+            if (date != null) {
+                return date;
+            }
+        }
+        return null;
+    }
+
+    private LocalDate parseDateValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(text);
+        } catch (DateTimeParseException ignored) {
+            // Try broader timestamp formats next.
+        }
+        try {
+            return OffsetDateTime.parse(text).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+            // Fall through to local datetime parsing.
+        }
+        try {
+            return LocalDateTime.parse(text.replace(' ', 'T')).toLocalDate();
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private String settlementPostingSourceId(FinanceReconciliationSourceItem sourceItem) {
+        return "reconciliation-source:" + sourceItem.getSourceSystem() + ":" + sourceItem.getExternalReference();
     }
 
     private int normalizeLimit(Integer limit) {

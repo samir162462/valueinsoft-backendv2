@@ -48,6 +48,7 @@ class FinanceReconciliationServiceTest {
     private DbFinanceSetup dbFinanceSetup;
     private AuthorizationService authorizationService;
     private FinanceAuditService financeAuditService;
+    private FinanceOperationalPostingService financeOperationalPostingService;
     private FinanceReconciliationService service;
 
     @BeforeEach
@@ -56,11 +57,13 @@ class FinanceReconciliationServiceTest {
         dbFinanceSetup = Mockito.mock(DbFinanceSetup.class);
         authorizationService = Mockito.mock(AuthorizationService.class);
         financeAuditService = Mockito.mock(FinanceAuditService.class);
+        financeOperationalPostingService = Mockito.mock(FinanceOperationalPostingService.class);
         service = new FinanceReconciliationService(
                 dbFinanceReconciliation,
                 dbFinanceSetup,
                 authorizationService,
                 financeAuditService,
+                financeOperationalPostingService,
                 new ObjectMapper());
 
         when(dbFinanceSetup.companyExists(COMPANY_ID)).thenReturn(true);
@@ -169,6 +172,131 @@ class FinanceReconciliationServiceTest {
                 service.importSourceItemsForAuthenticatedUser("sam", request));
 
         assertEquals("FINANCE_CURRENCY_INVALID", exception.getCode());
+    }
+
+    @Test
+    void importSourceItemsNormalizesPayMobRawPayloadWhenStandardFieldsAreMissing() {
+        FinanceReconciliationSourceImportItemRequest item = new FinanceReconciliationSourceImportItemRequest(
+                null,
+                null,
+                null,
+                null,
+                null,
+                Map.of(
+                        "obj", Map.of(
+                                "id", 998877,
+                                "created_at", "2026-04-21T09:15:30Z",
+                                "amount_cents", 12345,
+                                "currency", "egp",
+                                "source_data", Map.of("type", "wallet")),
+                        "providerCode", "paymob"));
+        FinanceReconciliationSourceImportRequest request = new FinanceReconciliationSourceImportRequest(
+                COMPANY_ID,
+                BRANCH_ID,
+                "Card_Settlement",
+                " PayMob ",
+                new ArrayList<>(List.of(item)));
+        FinanceReconciliationSourceItem imported = new FinanceReconciliationSourceItem(
+                SOURCE_ITEM_ID,
+                COMPANY_ID,
+                BRANCH_ID,
+                "card_settlement",
+                "paymob",
+                "998877",
+                LocalDate.of(2026, 4, 21),
+                new BigDecimal("123.4500"),
+                "EGP",
+                "PayMob wallet settlement",
+                "{\"obj\":{\"id\":998877,\"created_at\":\"2026-04-21T09:15:30Z\",\"amount_cents\":12345,\"currency\":\"egp\",\"source_data\":{\"type\":\"wallet\"}},\"providerCode\":\"paymob\"}",
+                "imported",
+                Instant.now(),
+                17,
+                Instant.now(),
+                17);
+        when(dbFinanceReconciliation.importSourceItems(
+                eq(COMPANY_ID),
+                eq(BRANCH_ID),
+                eq("card_settlement"),
+                eq("paymob"),
+                eq(request.getItems()),
+                any(),
+                eq(17))).thenReturn(new ArrayList<>(List.of(imported)));
+
+        FinanceReconciliationSourceImportResponse response = service.importSourceItemsForAuthenticatedUser("sam", request);
+
+        assertEquals("998877", item.getExternalReference());
+        assertEquals(LocalDate.of(2026, 4, 21), item.getSourceDate());
+        assertEquals(new BigDecimal("123.4500"), item.getAmount());
+        assertEquals("EGP", item.getCurrencyCode());
+        assertEquals("PayMob wallet settlement", item.getDescription());
+        assertEquals("paymob", response.getSourceSystem());
+    }
+
+    @Test
+    void importSourceItemsAutoEnqueuesCardSettlementPostingRequest() {
+        FinanceReconciliationSourceImportRequest request = sourceImportRequest();
+        when(dbFinanceReconciliation.importSourceItems(
+                eq(COMPANY_ID),
+                eq(BRANCH_ID),
+                eq("card_settlement"),
+                eq("stripe"),
+                eq(request.getItems()),
+                any(),
+                eq(17))).thenReturn(new ArrayList<>(List.of(sourceItem())));
+
+        service.importSourceItemsForAuthenticatedUser("sam", request);
+
+        verify(financeOperationalPostingService).enqueueImportedProviderSettlement(
+                eq(COMPANY_ID),
+                eq(BRANCH_ID),
+                eq("card_settlement"),
+                eq("reconciliation-source:stripe:settle-1"),
+                eq(new BigDecimal("100.1200")),
+                eq(new BigDecimal("0.0000")),
+                eq(new BigDecimal("100.1200")),
+                eq("card"),
+                eq("bank"),
+                eq("settle-1"),
+                any(),
+                eq("system"),
+                any());
+    }
+
+    @Test
+    void importSourceItemsAutoEnqueuesWalletSettlementWhenRawPayloadSaysWallet() {
+        FinanceReconciliationSourceImportRequest request = sourceImportRequest();
+        request.getItems().getFirst().setRawPayload(Map.of(
+                "settlementMethod", "wallet",
+                "settledAmount", 490.0,
+                "providerFeeAmount", 10.0,
+                "providerReference", "wallet-settle-1"));
+        FinanceReconciliationSourceItem imported = sourceItem();
+        imported.setRawPayloadJson("{\"settlementMethod\":\"wallet\",\"settledAmount\":490.0,\"providerFeeAmount\":10.0,\"providerReference\":\"wallet-settle-1\"}");
+        when(dbFinanceReconciliation.importSourceItems(
+                eq(COMPANY_ID),
+                eq(BRANCH_ID),
+                eq("card_settlement"),
+                eq("stripe"),
+                eq(request.getItems()),
+                any(),
+                eq(17))).thenReturn(new ArrayList<>(List.of(imported)));
+
+        service.importSourceItemsForAuthenticatedUser("sam", request);
+
+        verify(financeOperationalPostingService).enqueueImportedProviderSettlement(
+                eq(COMPANY_ID),
+                eq(BRANCH_ID),
+                eq("wallet_settlement"),
+                eq("reconciliation-source:stripe:settle-1"),
+                eq(new BigDecimal("100.1200")),
+                eq(new BigDecimal("10.0000")),
+                eq(new BigDecimal("490.0000")),
+                eq("wallet"),
+                eq("bank"),
+                eq("wallet-settle-1"),
+                any(),
+                eq("system"),
+                any());
     }
 
     @Test

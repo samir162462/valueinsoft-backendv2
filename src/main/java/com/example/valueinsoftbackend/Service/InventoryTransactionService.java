@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @Slf4j
@@ -96,13 +97,23 @@ public class InventoryTransactionService {
                     inventoryMovementId
             );
         } else if (request.getNumItems() < 0) {
-            enqueueFinanceInventoryAdjustmentAfterCommit(
-                    request.getCompanyId(),
-                    request.getBranchId(),
-                    inventoryTransaction,
-                    insertedTransaction.transactionId(),
-                    inventoryMovementId
-            );
+            if (isExplicitPurchaseReturn(inventoryTransaction)) {
+                enqueueFinancePurchaseReturnAfterCommit(
+                        request.getCompanyId(),
+                        request.getBranchId(),
+                        inventoryTransaction,
+                        insertedTransaction.transactionId(),
+                        inventoryMovementId
+                );
+            } else {
+                enqueueFinanceInventoryAdjustmentAfterCommit(
+                        request.getCompanyId(),
+                        request.getBranchId(),
+                        inventoryTransaction,
+                        insertedTransaction.transactionId(),
+                        inventoryMovementId
+                );
+            }
         }
 
         log.info(
@@ -196,6 +207,74 @@ public class InventoryTransactionService {
                 enqueue.run();
             }
         });
+    }
+
+    private void enqueueFinancePurchaseReturnAfterCommit(int companyId,
+                                                         int branchId,
+                                                         InventoryTransaction inventoryTransaction,
+                                                         int inventoryTransactionId,
+                                                         Long inventoryMovementId) {
+        if (inventoryTransaction.getTransTotal() == 0 || inventoryTransaction.getNumItems() >= 0) {
+            return;
+        }
+
+        Runnable enqueue = () -> {
+            try {
+                financeOperationalPostingService.enqueuePurchaseReturnInventoryTransaction(
+                        companyId,
+                        branchId,
+                        inventoryTransaction,
+                        inventoryTransactionId,
+                        inventoryMovementId
+                );
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Purchase return transaction {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                        inventoryTransactionId,
+                        companyId,
+                        branchId,
+                        exception.getMessage()
+                );
+            }
+        };
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            enqueue.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                enqueue.run();
+            }
+        });
+    }
+
+    private boolean isExplicitPurchaseReturn(InventoryTransaction inventoryTransaction) {
+        if (inventoryTransaction == null || inventoryTransaction.getNumItems() >= 0) {
+            return false;
+        }
+
+        String transactionType = inventoryTransaction.getTransactionType();
+        if (transactionType == null || transactionType.isBlank()) {
+            return false;
+        }
+
+        String normalized = transactionType
+                .trim()
+                .toLowerCase(Locale.ROOT)
+                .replace('_', ' ')
+                .replace('-', ' ');
+        normalized = normalized.replaceAll("\\s+", " ");
+
+        return normalized.contains("purchase return")
+                || normalized.contains("supplier return")
+                || normalized.contains("vendor return")
+                || normalized.contains("return supplier")
+                || normalized.contains("return vendor")
+                || normalized.contains("return to supplier")
+                || normalized.contains("return to vendor");
     }
 
     public List<InventoryTransaction> getTransactions(InventoryTransactionQueryRequest request) {

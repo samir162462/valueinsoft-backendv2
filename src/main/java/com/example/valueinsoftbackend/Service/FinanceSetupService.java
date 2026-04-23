@@ -19,6 +19,7 @@ import com.example.valueinsoftbackend.Model.Request.Finance.FinanceFiscalYearCre
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceFiscalYearUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceTaxCodeCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceTaxCodeUpdateRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -185,6 +186,29 @@ public class FinanceSetupService {
         return updated;
     }
 
+    public void deleteTaxCodeForAuthenticatedUser(String authenticatedName, int companyId, UUID taxCodeId) {
+        requireCompany(companyId);
+        authorizeEdit(authenticatedName, companyId);
+
+        if (!dbFinanceSetup.taxCodeExists(companyId, taxCodeId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FINANCE_TAX_CODE_NOT_FOUND",
+                    "Tax code does not exist");
+        }
+
+        FinanceTaxCodeItem existing = dbFinanceSetup.getTaxCodeById(companyId, taxCodeId);
+        deleteWithIntegrityHandling(
+                () -> dbFinanceSetup.deleteTaxCode(companyId, taxCodeId),
+                "FINANCE_TAX_CODE_DELETE_BLOCKED",
+                "Tax code is still referenced and cannot be deleted");
+        recordSetupAudit(
+                authenticatedName,
+                companyId,
+                "finance.setup.tax_code.deleted",
+                "finance_tax_code",
+                taxCodeId,
+                setupState("code", existing.getCode(), "status", "deleted"));
+    }
+
     public FinanceAccountMappingItem createAccountMappingForAuthenticatedUser(String authenticatedName,
             FinanceAccountMappingCreateRequest request) {
         requireCompany(request.getCompanyId());
@@ -248,6 +272,33 @@ public class FinanceSetupService {
                 updated.getAccountMappingId(),
                 setupState("mappingKey", updated.getMappingKey(), "status", updated.getStatus()));
         return updated;
+    }
+
+    public void deleteAccountMappingForAuthenticatedUser(String authenticatedName,
+            int companyId,
+            UUID accountMappingId) {
+        requireCompany(companyId);
+        authorizeEdit(authenticatedName, companyId);
+
+        if (!dbFinanceSetup.accountMappingExists(companyId, accountMappingId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FINANCE_ACCOUNT_MAPPING_NOT_FOUND",
+                    "Account mapping does not exist");
+        }
+
+        FinanceAccountMappingItem existing = dbFinanceSetup.getAccountMappingById(companyId, accountMappingId);
+        int rows = dbFinanceSetup.deleteAccountMapping(companyId, accountMappingId);
+        if (rows == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_ACCOUNT_MAPPING_DELETE_FAILED",
+                    "Account mapping could not be deleted");
+        }
+
+        recordSetupAudit(
+                authenticatedName,
+                companyId,
+                "finance.setup.account_mapping.deleted",
+                "finance_account_mapping",
+                accountMappingId,
+                setupState("mappingKey", existing.getMappingKey(), "status", "deleted"));
     }
 
     public FinanceAccountItem createAccountForAuthenticatedUser(String authenticatedName,
@@ -337,6 +388,32 @@ public class FinanceSetupService {
         return updated;
     }
 
+    public void deleteAccountForAuthenticatedUser(String authenticatedName, int companyId, UUID accountId) {
+        requireCompany(companyId);
+        authorizeEdit(authenticatedName, companyId);
+
+        if (!dbFinanceSetup.accountExists(companyId, accountId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FINANCE_ACCOUNT_NOT_FOUND", "Account does not exist");
+        }
+        if (dbFinanceSetup.accountHasChildren(companyId, accountId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_ACCOUNT_DELETE_BLOCKED",
+                    "Delete or move child accounts first");
+        }
+
+        FinanceAccountItem existing = dbFinanceSetup.getAccountById(companyId, accountId);
+        deleteWithIntegrityHandling(
+                () -> dbFinanceSetup.deleteAccount(companyId, accountId),
+                "FINANCE_ACCOUNT_DELETE_BLOCKED",
+                "Account is still referenced and cannot be deleted");
+        recordSetupAudit(
+                authenticatedName,
+                companyId,
+                "finance.setup.account.deleted",
+                "finance_account",
+                accountId,
+                setupState("accountCode", existing.getAccountCode(), "status", "deleted"));
+    }
+
     public FinanceFiscalYearItem createFiscalYearForAuthenticatedUser(String authenticatedName,
             FinanceFiscalYearCreateRequest request) {
         requireCompany(request.getCompanyId());
@@ -399,6 +476,33 @@ public class FinanceSetupService {
         return updated;
     }
 
+    public void deleteFiscalYearForAuthenticatedUser(String authenticatedName, int companyId, UUID fiscalYearId) {
+        requireCompany(companyId);
+        authorizeEdit(authenticatedName, companyId);
+
+        if (!dbFinanceSetup.fiscalYearExists(companyId, fiscalYearId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FINANCE_FISCAL_YEAR_NOT_FOUND",
+                    "Fiscal year does not exist");
+        }
+        if (dbFinanceSetup.fiscalYearHasPeriods(companyId, fiscalYearId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_FISCAL_YEAR_DELETE_BLOCKED",
+                    "Delete fiscal periods inside this fiscal year first");
+        }
+
+        FinanceFiscalYearItem existing = dbFinanceSetup.getFiscalYearById(companyId, fiscalYearId);
+        deleteWithIntegrityHandling(
+                () -> dbFinanceSetup.deleteFiscalYear(companyId, fiscalYearId),
+                "FINANCE_FISCAL_YEAR_DELETE_BLOCKED",
+                "Fiscal year is still referenced and cannot be deleted");
+        recordSetupAudit(
+                authenticatedName,
+                companyId,
+                "finance.setup.fiscal_year.deleted",
+                "finance_fiscal_year",
+                fiscalYearId,
+                setupState("name", existing.getName(), "status", "deleted"));
+    }
+
     public FinanceFiscalPeriodItem createFiscalPeriodForAuthenticatedUser(String authenticatedName,
             FinanceFiscalPeriodCreateRequest request) {
         requireCompany(request.getCompanyId());
@@ -458,6 +562,29 @@ public class FinanceSetupService {
         return updated;
     }
 
+    public void deleteFiscalPeriodForAuthenticatedUser(String authenticatedName, int companyId, UUID fiscalPeriodId) {
+        requireCompany(companyId);
+        authorizeEdit(authenticatedName, companyId);
+
+        if (!dbFinanceSetup.fiscalPeriodExists(companyId, fiscalPeriodId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FINANCE_FISCAL_PERIOD_NOT_FOUND",
+                    "Fiscal period does not exist");
+        }
+
+        FinanceFiscalPeriodItem existing = dbFinanceSetup.getFiscalPeriodById(companyId, fiscalPeriodId);
+        deleteWithIntegrityHandling(
+                () -> dbFinanceSetup.deleteFiscalPeriod(companyId, fiscalPeriodId),
+                "FINANCE_FISCAL_PERIOD_DELETE_BLOCKED",
+                "Fiscal period is still referenced and cannot be deleted");
+        recordSetupAudit(
+                authenticatedName,
+                companyId,
+                "finance.setup.fiscal_period.deleted",
+                "finance_fiscal_period",
+                fiscalPeriodId,
+                setupState("name", existing.getName(), "status", "deleted"));
+    }
+
     private void recordSetupAudit(String authenticatedName,
                                   int companyId,
                                   String eventType,
@@ -473,6 +600,19 @@ public class FinanceSetupService {
                 entityId.toString(),
                 afterState,
                 "Finance setup changed");
+    }
+
+    private void deleteWithIntegrityHandling(DeleteOperation deleteOperation,
+                                             String errorCode,
+                                             String errorMessage) {
+        try {
+            int rows = deleteOperation.execute();
+            if (rows == 0) {
+                throw new ApiException(HttpStatus.CONFLICT, errorCode, errorMessage);
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, errorCode, errorMessage);
+        }
     }
 
     private Map<String, Object> setupState(String firstKey, Object firstValue, String secondKey, Object secondValue) {
@@ -765,5 +905,10 @@ public class FinanceSetupService {
     }
 
     private record AccountHierarchy(String accountPath, int accountLevel) {
+    }
+
+    @FunctionalInterface
+    private interface DeleteOperation {
+        int execute();
     }
 }

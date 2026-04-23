@@ -6,6 +6,8 @@ import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.DamagedItem;
 import com.example.valueinsoftbackend.Model.Order;
+import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
+import com.example.valueinsoftbackend.Model.Sales.SupplierReceipt;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinancePostingRequestCreateRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -126,6 +128,37 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(transaction.getUserName(), request);
     }
 
+    public void enqueuePurchaseReturnInventoryTransaction(int companyId,
+                                                          int branchId,
+                                                          InventoryTransaction transaction,
+                                                          int inventoryTransactionId,
+                                                          Long inventoryMovementId) {
+        if (transaction.getTransTotal() == 0 || transaction.getNumItems() >= 0) {
+            return;
+        }
+
+        LocalDate postingDate = transaction.getTime().toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for purchase return posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "purchase",
+                "purchase_return",
+                "inventory-transaction-" + inventoryTransactionId,
+                postingDate,
+                fiscalPeriodId,
+                buildPurchaseReturnPayload(transaction, inventoryTransactionId, inventoryMovementId));
+
+        financePostingRequestService.createPostingRequestFromSystem(transaction.getUserName(), request);
+    }
+
     public void enqueueInventoryAdjustmentTransaction(int companyId,
                                                       int branchId,
                                                       InventoryTransaction transaction,
@@ -188,6 +221,56 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(damagedItem.getCashierUser(), request);
     }
 
+    public void enqueueBranchStockTransfer(int companyId,
+                                           int sourceBranchId,
+                                           int destinationBranchId,
+                                           String transferSourceId,
+                                           int productId,
+                                           int quantity,
+                                           BigDecimal transferAmount,
+                                           Long sourceInventoryMovementId,
+                                           Long destinationInventoryMovementId,
+                                           Timestamp transferTime,
+                                           String actorName) {
+        if (transferAmount == null || transferAmount.compareTo(BigDecimal.ZERO) <= 0 || quantity <= 0) {
+            return;
+        }
+        if (sourceBranchId <= 0 || destinationBranchId <= 0 || sourceBranchId == destinationBranchId) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "FINANCE_STOCK_TRANSFER_BRANCH_INVALID",
+                    "Branch stock transfer requires different positive source and destination branches");
+        }
+
+        LocalDate postingDate = transferTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for stock transfer posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                null,
+                "inventory",
+                "stock_transfer",
+                transferSourceId,
+                postingDate,
+                fiscalPeriodId,
+                buildBranchStockTransferPayload(
+                        sourceBranchId,
+                        destinationBranchId,
+                        productId,
+                        quantity,
+                        transferAmount,
+                        sourceInventoryMovementId,
+                        destinationInventoryMovementId));
+
+        financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
     public void enqueueCashSafeDrop(int companyId,
                                     int branchId,
                                     int shiftId,
@@ -228,6 +311,108 @@ public class FinanceOperationalPostingService {
                 movementTime,
                 actorName,
                 Map.of("shiftId", shiftId, "cashMovementId", cashMovementId));
+    }
+
+    public void enqueueImportedProviderSettlement(int companyId,
+                                                  Integer branchId,
+                                                  String sourceType,
+                                                  String sourceId,
+                                                  BigDecimal grossAmount,
+                                                  BigDecimal feeAmount,
+                                                  BigDecimal netAmount,
+                                                  String settlementMethod,
+                                                  String destination,
+                                                  String paymentId,
+                                                  Timestamp settlementTime,
+                                                  String actorName,
+                                                  Map<String, Object> extraPayload) {
+        if (grossAmount == null || grossAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        LocalDate postingDate = settlementTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for provider settlement posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "payment",
+                sourceType,
+                sourceId,
+                postingDate,
+                fiscalPeriodId,
+                buildImportedProviderSettlementPayload(
+                        grossAmount,
+                        feeAmount,
+                        netAmount,
+                        settlementMethod,
+                        destination,
+                        paymentId,
+                        extraPayload));
+
+        financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
+    public void enqueueClientReceipt(int companyId, ClientReceipt receipt) {
+        if (receipt == null || receipt.getAmount() == null || receipt.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        Timestamp receiptTime = receipt.getTime() == null ? new Timestamp(System.currentTimeMillis()) : receipt.getTime();
+        LocalDate postingDate = receiptTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for customer receipt posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                receipt.getBranchId(),
+                "payment",
+                "customer_receipt",
+                "client-receipt-" + receipt.getCrId(),
+                postingDate,
+                fiscalPeriodId,
+                buildClientReceiptPayload(receipt));
+
+        financePostingRequestService.createPostingRequestFromSystem(receipt.getUserName(), request);
+    }
+
+    public void enqueueSupplierPayment(int companyId, SupplierReceipt receipt) {
+        if (receipt == null || receipt.getAmountPaid() == null || receipt.getAmountPaid().compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        Timestamp receiptTime = receipt.getReceiptTime() == null ? new Timestamp(System.currentTimeMillis()) : receipt.getReceiptTime();
+        LocalDate postingDate = receiptTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for supplier payment posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                receipt.getBranchId(),
+                "payment",
+                "supplier_payment",
+                "supplier-receipt-" + receipt.getSrId(),
+                postingDate,
+                fiscalPeriodId,
+                buildSupplierPaymentPayload(receipt));
+
+        financePostingRequestService.createPostingRequestFromSystem(receipt.getUserRecived(), request);
     }
 
     private void enqueuePaymentSettlement(int companyId,
@@ -347,12 +532,51 @@ public class FinanceOperationalPostingService {
         return payload;
     }
 
+    private Map<String, Object> buildPurchaseReturnPayload(InventoryTransaction transaction,
+                                                           int inventoryTransactionId,
+                                                           Long inventoryMovementId) {
+        BigDecimal returnAmount = money(BigDecimal.valueOf(Math.abs((long) transaction.getTransTotal())));
+        BigDecimal outstandingAmount = money(Math.max(transaction.getRemainingAmount(), 0));
+        BigDecimal refundedAmount = returnAmount.subtract(outstandingAmount).setScale(4, RoundingMode.HALF_UP);
+        if (refundedAmount.compareTo(BigDecimal.ZERO) < 0) {
+            refundedAmount = BigDecimal.ZERO.setScale(4);
+        }
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("inventoryTransactionId", inventoryTransactionId);
+        payload.put("supplierId", positiveOrNull(transaction.getSupplierId()));
+        payload.put("inventoryAmount", returnAmount);
+        payload.put("returnAmount", returnAmount);
+        payload.put("taxAmount", money(0));
+        payload.put("grossAmount", returnAmount);
+        payload.put("refundedAmount", refundedAmount);
+        payload.put("paymentMethod", transaction.getPayType());
+        payload.put("paymentId", refundedAmount.compareTo(BigDecimal.ZERO) > 0
+                ? "inventory-transaction-" + inventoryTransactionId
+                : null);
+        payload.put("inventoryMovementId", inventoryMovementId);
+        payload.put("returnReason", transaction.getTransactionType());
+        payload.put("items", buildPurchaseReturnItemPayload(transaction, inventoryMovementId));
+        return payload;
+    }
+
     private List<Map<String, Object>> buildPurchaseItemPayload(InventoryTransaction transaction,
                                                                Long inventoryMovementId) {
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         item.put("productId", transaction.getProductId());
         item.put("quantity", transaction.getNumItems());
         item.put("totalCost", money(transaction.getTransTotal()));
+        item.put("inventoryMovementId", inventoryMovementId);
+        return List.of(item);
+    }
+
+    private List<Map<String, Object>> buildPurchaseReturnItemPayload(InventoryTransaction transaction,
+                                                                     Long inventoryMovementId) {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("productId", transaction.getProductId());
+        item.put("quantity", Math.abs(transaction.getNumItems()));
+        item.put("totalCost", money(BigDecimal.valueOf(Math.abs((long) transaction.getTransTotal()))));
         item.put("inventoryMovementId", inventoryMovementId);
         return List.of(item);
     }
@@ -402,6 +626,47 @@ public class FinanceOperationalPostingService {
         return payload;
     }
 
+    private Map<String, Object> buildBranchStockTransferPayload(int sourceBranchId,
+                                                                int destinationBranchId,
+                                                                int productId,
+                                                                int quantity,
+                                                                BigDecimal transferAmount,
+                                                                Long sourceInventoryMovementId,
+                                                                Long destinationInventoryMovementId) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("sourceBranchId", sourceBranchId);
+        payload.put("destinationBranchId", destinationBranchId);
+        payload.put("transferAmount", money(transferAmount));
+        payload.put("items", buildBranchStockTransferItems(
+                sourceBranchId,
+                destinationBranchId,
+                productId,
+                quantity,
+                transferAmount,
+                sourceInventoryMovementId,
+                destinationInventoryMovementId));
+        return payload;
+    }
+
+    private List<Map<String, Object>> buildBranchStockTransferItems(int sourceBranchId,
+                                                                    int destinationBranchId,
+                                                                    int productId,
+                                                                    int quantity,
+                                                                    BigDecimal transferAmount,
+                                                                    Long sourceInventoryMovementId,
+                                                                    Long destinationInventoryMovementId) {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("productId", productId > 0 ? productId : null);
+        item.put("sourceBranchId", sourceBranchId);
+        item.put("destinationBranchId", destinationBranchId);
+        item.put("quantity", quantity);
+        item.put("totalCost", money(transferAmount));
+        item.put("sourceInventoryMovementId", sourceInventoryMovementId);
+        item.put("destinationInventoryMovementId", destinationInventoryMovementId);
+        return List.of(item);
+    }
+
     private List<Map<String, Object>> buildInventoryAdjustmentItemPayload(int productId,
                                                                          int quantityDelta,
                                                                          BigDecimal adjustmentAmount,
@@ -430,6 +695,52 @@ public class FinanceOperationalPostingService {
         if (extraPayload != null) {
             payload.putAll(extraPayload);
         }
+        return payload;
+    }
+
+    private Map<String, Object> buildImportedProviderSettlementPayload(BigDecimal grossAmount,
+                                                                       BigDecimal feeAmount,
+                                                                       BigDecimal netAmount,
+                                                                       String settlementMethod,
+                                                                       String destination,
+                                                                       String paymentId,
+                                                                       Map<String, Object> extraPayload) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("grossAmount", money(grossAmount));
+        payload.put("netAmount", money(netAmount));
+        payload.put("feeAmount", money(feeAmount));
+        payload.put("settlementMethod", settlementMethod);
+        payload.put("destination", destination);
+        payload.put("paymentId", paymentId);
+        if (extraPayload != null) {
+            payload.putAll(extraPayload);
+        }
+        return payload;
+    }
+
+    private Map<String, Object> buildClientReceiptPayload(ClientReceipt receipt) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("customerId", receipt.getClientId());
+        payload.put("amount", money(receipt.getAmount()));
+        payload.put("paymentMethod", "cash");
+        payload.put("paymentId", "client-receipt-" + receipt.getCrId());
+        payload.put("clientReceiptId", receipt.getCrId());
+        payload.put("receiptType", receipt.getType());
+        return payload;
+    }
+
+    private Map<String, Object> buildSupplierPaymentPayload(SupplierReceipt receipt) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("supplierId", receipt.getSupplierId());
+        payload.put("amountPaid", money(receipt.getAmountPaid()));
+        payload.put("paymentMethod", "cash");
+        payload.put("paymentId", "supplier-receipt-" + receipt.getSrId());
+        payload.put("supplierReceiptId", receipt.getSrId());
+        payload.put("inventoryTransactionId", receipt.getTransId());
+        payload.put("receiptType", receipt.getType());
         return payload;
     }
 

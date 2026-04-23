@@ -23,7 +23,7 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(4);
     private static final BigDecimal ONE = BigDecimal.ONE.setScale(8);
-    private static final Set<String> ADJUSTMENT_SOURCE_TYPES = Set.of(
+    private static final Set<String> INVENTORY_SOURCE_TYPES = Set.of(
             "adjustment",
             "inventory_adjustment",
             "stock_adjustment",
@@ -31,7 +31,10 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
             "damage",
             "damaged",
             "write_off",
-            "writeoff");
+            "writeoff",
+            "stock_transfer",
+            "branch_transfer",
+            "interbranch_transfer");
 
     private final DbFinanceSetup dbFinanceSetup;
     private final DbFinanceJournal dbFinanceJournal;
@@ -52,12 +55,20 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
 
     @Override
     public UUID post(FinancePostingRequestItem request) {
-        if (!ADJUSTMENT_SOURCE_TYPES.contains(request.getSourceType())) {
+        if (!INVENTORY_SOURCE_TYPES.contains(request.getSourceType())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_INVENTORY_SOURCE_TYPE_UNSUPPORTED",
-                    "Inventory posting adapter currently supports adjustment, damage, and write-off source types only");
+                    "Inventory posting adapter currently supports adjustment, damage, write-off, and stock transfer source types only");
         }
 
         JsonNode payload = parsePayload(request);
+        if (isStockTransferSourceType(request.getSourceType())) {
+            return postStockTransfer(request, payload);
+        }
+
+        return postInventoryAdjustment(request, payload);
+    }
+
+    private UUID postInventoryAdjustment(FinancePostingRequestItem request, JsonNode payload) {
         String currencyCode = text(payload, "currencyCode", "EGP");
         if (!currencyCode.matches("^[A-Z]{3}$")) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_CURRENCY_INVALID",
@@ -167,6 +178,126 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
                         request.getPostingDate(),
                         request.getFiscalPeriodId(),
                         "Inventory adjustment " + request.getSourceId(),
+                        currencyCode,
+                        ONE,
+                        totalDebit,
+                        totalCredit,
+                        postedBy,
+                        lines));
+        dbFinanceJournal.applyPostedJournalToAccountBalances(request.getCompanyId(), journalEntryId, postedBy);
+        return journalEntryId;
+    }
+
+    private UUID postStockTransfer(FinancePostingRequestItem request, JsonNode payload) {
+        String currencyCode = text(payload, "currencyCode", "EGP");
+        if (!currencyCode.matches("^[A-Z]{3}$")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_CURRENCY_INVALID",
+                    "Currency code must use three uppercase letters");
+        }
+
+        Integer sourceBranchId = integerValue(payload, "sourceBranchId");
+        Integer destinationBranchId = integerValue(payload, "destinationBranchId");
+        if (sourceBranchId == null || destinationBranchId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_STOCK_TRANSFER_BRANCH_REQUIRED",
+                    "Stock transfer posting requires sourceBranchId and destinationBranchId");
+        }
+        if (sourceBranchId.equals(destinationBranchId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_STOCK_TRANSFER_BRANCH_CONFLICT",
+                    "Stock transfer source and destination branch must differ");
+        }
+
+        BigDecimal transferAmount = firstOptionalAmount(payload,
+                "transferAmount",
+                "inventoryAmount",
+                "valuationAmount",
+                "amount");
+        List<StockTransferLine> transferLines = stockTransferLinesFromItems(payload, sourceBranchId, destinationBranchId);
+        BigDecimal itemTransferAmount = ZERO;
+        for (StockTransferLine transferLine : transferLines) {
+            itemTransferAmount = itemTransferAmount.add(transferLine.amount());
+        }
+
+        if (transferAmount.compareTo(ZERO) > 0
+                && itemTransferAmount.compareTo(ZERO) > 0
+                && transferAmount.compareTo(itemTransferAmount) != 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_STOCK_TRANSFER_TOTAL_MISMATCH",
+                    "Stock transfer amount must match item valuation total when both are provided");
+        }
+        if (itemTransferAmount.compareTo(ZERO) == 0 && transferAmount.compareTo(ZERO) > 0) {
+            transferLines = List.of(new StockTransferLine(
+                    transferAmount,
+                    sourceBranchId,
+                    destinationBranchId,
+                    longValue(payload, "productId"),
+                    longValue(payload, "inventoryMovementId"),
+                    firstOptionalLong(payload, "destinationInventoryMovementId", "toInventoryMovementId", "inboundInventoryMovementId")));
+            itemTransferAmount = transferAmount;
+        }
+        if (itemTransferAmount.compareTo(ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_STOCK_TRANSFER_AMOUNT_REQUIRED",
+                    "Stock transfer posting requires a positive valuation amount");
+        }
+
+        ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
+        for (StockTransferLine transferLine : transferLines) {
+            FinanceAccountMappingItem sourceInventoryMapping = resolveMapping(request, transferLine.sourceBranchId(), "inventory.asset");
+            FinanceAccountMappingItem destinationInventoryMapping = resolveMapping(request, transferLine.destinationBranchId(), "inventory.asset");
+            lines.add(new DbFinanceJournal.PostedSourceJournalLineCommand(
+                    destinationInventoryMapping.getAccountId(),
+                    transferLine.destinationBranchId(),
+                    transferLine.amount(),
+                    ZERO,
+                    "Branch stock transfer receipt",
+                    null,
+                    null,
+                    transferLine.productId(),
+                    transferLine.destinationInventoryMovementId(),
+                    null,
+                    null,
+                    null));
+            lines.add(new DbFinanceJournal.PostedSourceJournalLineCommand(
+                    sourceInventoryMapping.getAccountId(),
+                    transferLine.sourceBranchId(),
+                    ZERO,
+                    transferLine.amount(),
+                    "Branch stock transfer issue",
+                    null,
+                    null,
+                    transferLine.productId(),
+                    transferLine.sourceInventoryMovementId(),
+                    null,
+                    null,
+                    null));
+        }
+
+        BigDecimal totalDebit = totalDebit(lines);
+        BigDecimal totalCredit = totalCredit(lines);
+        if (totalDebit.compareTo(totalCredit) != 0 || totalDebit.compareTo(ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_STOCK_TRANSFER_JOURNAL_UNBALANCED",
+                    "Stock transfer posting lines are not balanced");
+        }
+
+        String journalNumber = dbFinanceJournal.allocateSourceJournalNumber(
+                request.getCompanyId(),
+                "inventory.transfer",
+                "BT-");
+        Integer postedBy = request.getUpdatedBy() == null ? request.getCreatedBy() : request.getUpdatedBy();
+        if (postedBy == null) {
+            postedBy = 0;
+        }
+
+        UUID journalEntryId = dbFinanceJournal.createPostedSourceJournal(
+                new DbFinanceJournal.PostedSourceJournalCommand(
+                        request.getCompanyId(),
+                        null,
+                        journalNumber,
+                        "inventory",
+                        request.getSourceModule(),
+                        request.getSourceType(),
+                        request.getSourceId(),
+                        request.getPostingDate(),
+                        request.getFiscalPeriodId(),
+                        "Branch stock transfer " + request.getSourceId(),
                         currencyCode,
                         ONE,
                         totalDebit,
@@ -340,9 +471,13 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
     }
 
     private FinanceAccountMappingItem resolveMapping(FinancePostingRequestItem request, String mappingKey) {
+        return resolveMapping(request, request.getBranchId(), mappingKey);
+    }
+
+    private FinanceAccountMappingItem resolveMapping(FinancePostingRequestItem request, Integer branchId, String mappingKey) {
         FinanceAccountMappingItem mapping = dbFinanceSetup.resolveActiveAccountMapping(
                 request.getCompanyId(),
-                request.getBranchId(),
+                branchId,
                 mappingKey,
                 request.getPostingDate());
         if (mapping == null) {
@@ -481,6 +616,85 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
         return null;
     }
 
+    private Integer integerValue(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (!value.isNumber() && !value.isTextual()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_INVENTORY_IDENTIFIER_INVALID",
+                    "Inventory identifier must be numeric: " + field);
+        }
+        try {
+            int intValue = Integer.parseInt(value.asText());
+            return intValue > 0 ? intValue : null;
+        } catch (NumberFormatException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_INVENTORY_IDENTIFIER_INVALID",
+                    "Inventory identifier must be numeric: " + field);
+        }
+    }
+
+    private List<StockTransferLine> stockTransferLinesFromItems(JsonNode payload,
+                                                                Integer headerSourceBranchId,
+                                                                Integer headerDestinationBranchId) {
+        JsonNode items = payload.get("items");
+        if (items == null || !items.isArray() || items.isEmpty()) {
+            return List.of();
+        }
+
+        ArrayList<StockTransferLine> transferLines = new ArrayList<>();
+        for (JsonNode item : items) {
+            Integer sourceBranchId = integerValue(item, "sourceBranchId");
+            if (sourceBranchId == null) {
+                sourceBranchId = headerSourceBranchId;
+            }
+            Integer destinationBranchId = integerValue(item, "destinationBranchId");
+            if (destinationBranchId == null) {
+                destinationBranchId = headerDestinationBranchId;
+            }
+            if (sourceBranchId == null || destinationBranchId == null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_STOCK_TRANSFER_BRANCH_REQUIRED",
+                        "Each stock transfer item requires source and destination branch");
+            }
+            if (sourceBranchId.equals(destinationBranchId)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_STOCK_TRANSFER_BRANCH_CONFLICT",
+                        "Stock transfer source and destination branch must differ");
+            }
+
+            BigDecimal totalCost = optionalAmount(item, "totalCost");
+            if (totalCost.compareTo(ZERO) == 0) {
+                BigDecimal valuationAmount = firstOptionalAmount(item, "transferAmount", "valuationAmount", "amount");
+                if (valuationAmount.compareTo(ZERO) > 0) {
+                    totalCost = valuationAmount;
+                }
+            }
+            if (totalCost.compareTo(ZERO) == 0) {
+                BigDecimal quantity = abs(optionalDecimal(item, "quantity", 8));
+                BigDecimal unitCost = firstOptionalAmount(item, "unitCost", "cost");
+                if (quantity.compareTo(ZERO) > 0 && unitCost.compareTo(ZERO) > 0) {
+                    totalCost = quantity.multiply(unitCost).setScale(4, RoundingMode.HALF_UP);
+                }
+            }
+            if (totalCost.compareTo(ZERO) == 0) {
+                continue;
+            }
+            transferLines.add(new StockTransferLine(
+                    totalCost,
+                    sourceBranchId,
+                    destinationBranchId,
+                    longValue(item, "productId"),
+                    firstOptionalLong(item, "sourceInventoryMovementId", "inventoryMovementId", "outboundInventoryMovementId", "stockLedgerId"),
+                    firstOptionalLong(item, "destinationInventoryMovementId", "toInventoryMovementId", "inboundInventoryMovementId")));
+        }
+        return transferLines;
+    }
+
+    private boolean isStockTransferSourceType(String sourceType) {
+        return "stock_transfer".equals(sourceType)
+                || "branch_transfer".equals(sourceType)
+                || "interbranch_transfer".equals(sourceType);
+    }
+
     private BigDecimal totalDebit(List<DbFinanceJournal.PostedSourceJournalLineCommand> lines) {
         BigDecimal total = ZERO;
         for (DbFinanceJournal.PostedSourceJournalLineCommand line : lines) {
@@ -498,5 +712,13 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
     }
 
     private record InventoryAdjustmentLine(BigDecimal amount, Long productId, Long inventoryMovementId) {
+    }
+
+    private record StockTransferLine(BigDecimal amount,
+                                     Integer sourceBranchId,
+                                     Integer destinationBranchId,
+                                     Long productId,
+                                     Long sourceInventoryMovementId,
+                                     Long destinationInventoryMovementId) {
     }
 }

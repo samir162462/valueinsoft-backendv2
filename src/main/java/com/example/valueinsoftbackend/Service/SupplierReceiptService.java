@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
 import java.util.List;
 
 @Service
@@ -18,9 +19,12 @@ import java.util.List;
 public class SupplierReceiptService {
 
     private final DBMSupplierReceipt supplierReceiptRepository;
+    private final FinanceOperationalPostingService financeOperationalPostingService;
 
-    public SupplierReceiptService(DBMSupplierReceipt supplierReceiptRepository) {
+    public SupplierReceiptService(DBMSupplierReceipt supplierReceiptRepository,
+                                  FinanceOperationalPostingService financeOperationalPostingService) {
         this.supplierReceiptRepository = supplierReceiptRepository;
+        this.financeOperationalPostingService = financeOperationalPostingService;
     }
 
     public List<SupplierReceipt> getSupplierReceipts(int companyId, int supplierId) {
@@ -35,20 +39,21 @@ public class SupplierReceiptService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "SUPPLIER_RECEIPT_INVALID_REMAINING", "remainingAmount must be zero or greater");
         }
 
+        Timestamp receiptTime = new Timestamp(System.currentTimeMillis());
         SupplierReceipt supplierReceipt = new SupplierReceipt(
                 0,
                 request.getTransId(),
                 request.getAmountPaid(),
                 request.getRemainingAmount(),
-                null,
+                receiptTime,
                 request.getUserRecived().trim(),
                 request.getSupplierId(),
                 request.getType().trim(),
                 request.getBranchId()
         );
 
-        int receiptRows = supplierReceiptRepository.insertSupplierReceipt(companyId, supplierReceipt);
-        if (receiptRows != 1) {
+        SupplierReceipt created = supplierReceiptRepository.createSupplierReceipt(companyId, supplierReceipt);
+        if (created == null) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SUPPLIER_RECEIPT_INSERT_FAILED", "the ReceiptUser not added -> error in server!");
         }
 
@@ -65,6 +70,7 @@ public class SupplierReceiptService {
                 request.getAmountPaid()
         );
         supplierReceiptRepository.verifyDependentRows(inventoryRows, supplierRows);
+        enqueueFinanceSupplierReceipt(companyId, created);
 
         log.info(
                 "Recorded supplier receipt for company {} branch {} supplier {} transaction {}",
@@ -74,5 +80,23 @@ public class SupplierReceiptService {
                 request.getTransId()
         );
         return "the Client Receipt Added Successfully : " + request.getSupplierId();
+    }
+
+    private void enqueueFinanceSupplierReceipt(int companyId, SupplierReceipt receipt) {
+        if (receipt == null || receipt.getAmountPaid() == null || receipt.getAmountPaid().signum() <= 0) {
+            return;
+        }
+
+        try {
+            financeOperationalPostingService.enqueueSupplierPayment(companyId, receipt);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Supplier receipt {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                    receipt.getSrId(),
+                    companyId,
+                    receipt.getBranchId(),
+                    exception.getMessage()
+            );
+        }
     }
 }

@@ -59,6 +59,28 @@ public class DBMSupplierReceipt {
         );
     }
 
+    public SupplierReceipt createSupplierReceipt(int companyId, SupplierReceipt supplierReceipt) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.supplierReceiptsTable(companyId) +
+                " (\"transId\", \"amountPaid\", \"remainingAmount\", \"receiptTime\", \"userRecived\", \"supplierId\", type, \"branchId\") " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+                "RETURNING \"srId\", \"transId\", \"amountPaid\"::money::numeric AS \"amountPaid\", " +
+                "\"remainingAmount\"::money::numeric AS \"remainingAmount\", \"receiptTime\", \"userRecived\", " +
+                "\"supplierId\", type, \"branchId\"";
+
+        return jdbcTemplate.queryForObject(
+                sql,
+                supplierReceiptRowMapper,
+                supplierReceipt.getTransId(),
+                supplierReceipt.getAmountPaid(),
+                supplierReceipt.getRemainingAmount(),
+                supplierReceipt.getReceiptTime(),
+                supplierReceipt.getUserRecived(),
+                supplierReceipt.getSupplierId(),
+                supplierReceipt.getType(),
+                supplierReceipt.getBranchId()
+        );
+    }
+
     public int updateInventoryRemainingAmount(int companyId, int branchId, int transId, java.math.BigDecimal remainingAmount) {
         String sql = "UPDATE " + TenantSqlIdentifiers.inventoryStockLedgerTable(companyId) +
                 " SET remaining_amount = ? WHERE branch_id = ? AND stock_ledger_id = ?";

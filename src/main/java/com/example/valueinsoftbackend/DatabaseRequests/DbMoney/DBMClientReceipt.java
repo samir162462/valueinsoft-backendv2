@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.List;
 
 @Repository
 public class DBMClientReceipt {
@@ -23,13 +22,13 @@ public class DBMClientReceipt {
     }
 
     public ArrayList<ClientReceipt> getClientReceipts(int companyId, int clientId) {
-        String sql = "SELECT \"crId\", type, amount::money::numeric::float8, \"time\", \"userName\", \"clientId\", \"branchId\" " +
+        String sql = "SELECT \"crId\", type, amount::money::numeric AS amount, \"time\", \"userName\", \"clientId\", \"branchId\" " +
                 "FROM " + TenantSqlIdentifiers.clientReceiptsTable(companyId) + " WHERE \"clientId\" = ?";
 
         return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> new ClientReceipt(
                 rs.getInt("crId"),
                 rs.getString("type"),
-                rs.getBigDecimal(3),
+                rs.getBigDecimal("amount"),
                 rs.getTimestamp("time"),
                 rs.getString("userName"),
                 rs.getInt("clientId"),
@@ -38,14 +37,14 @@ public class DBMClientReceipt {
     }
 
     public ArrayList<ClientReceipt> getClientReceiptsByTime(int companyId, int branchId, Timestamp startTime, Timestamp endTime) {
-        String sql = "SELECT \"crId\", type, amount::money::numeric::float8, \"time\", \"userName\", \"clientId\", \"branchId\" " +
+        String sql = "SELECT \"crId\", type, amount::money::numeric AS amount, \"time\", \"userName\", \"clientId\", \"branchId\" " +
                 "FROM " + TenantSqlIdentifiers.clientReceiptsTable(companyId) +
                 " WHERE \"branchId\" = ? AND \"time\" BETWEEN ? AND ?";
 
         return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> new ClientReceipt(
                 rs.getInt("crId"),
                 rs.getString("type"),
-                rs.getBigDecimal(3),
+                rs.getBigDecimal("amount"),
                 rs.getTimestamp("time"),
                 rs.getString("userName"),
                 rs.getInt("clientId"),
@@ -53,12 +52,21 @@ public class DBMClientReceipt {
         ), branchId, startTime, endTime));
     }
 
-    public int insertClientReceipt(int companyId, ClientReceipt clientReceipt) {
+    public ClientReceipt createClientReceipt(int companyId, ClientReceipt clientReceipt) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.clientReceiptsTable(companyId) +
-                " (type, amount, \"time\", \"userName\", \"clientId\", \"branchId\") VALUES (?, ?, ?, ?, ?, ?)";
+                " (type, amount, \"time\", \"userName\", \"clientId\", \"branchId\") VALUES (?, ?, ?, ?, ?, ?) " +
+                "RETURNING \"crId\", type, amount::money::numeric AS amount, \"time\", \"userName\", \"clientId\", \"branchId\"";
 
-        return jdbcTemplate.update(
+        return jdbcTemplate.queryForObject(
                 sql,
+                (rs, rowNum) -> new ClientReceipt(
+                        rs.getInt("crId"),
+                        rs.getString("type"),
+                        rs.getBigDecimal("amount"),
+                        rs.getTimestamp("time"),
+                        rs.getString("userName"),
+                        rs.getInt("clientId"),
+                        rs.getInt("branchId")),
                 clientReceipt.getType(),
                 clientReceipt.getAmount(),
                 clientReceipt.getTime(),

@@ -23,12 +23,16 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(4);
     private static final BigDecimal ONE = BigDecimal.ONE.setScale(8);
-    private static final Set<String> PURCHASE_INVOICE_SOURCE_TYPES = Set.of(
+    private static final Set<String> PURCHASE_SOURCE_TYPES = Set.of(
             "purchase",
             "purchase_invoice",
             "supplier_invoice",
             "goods_receipt",
-            "stock_receipt");
+            "stock_receipt",
+            "purchase_return",
+            "supplier_return",
+            "vendor_return",
+            "return_to_supplier");
 
     private final DbFinanceSetup dbFinanceSetup;
     private final DbFinanceJournal dbFinanceJournal;
@@ -49,12 +53,13 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
 
     @Override
     public UUID post(FinancePostingRequestItem request) {
-        if (!PURCHASE_INVOICE_SOURCE_TYPES.contains(request.getSourceType())) {
+        if (!PURCHASE_SOURCE_TYPES.contains(request.getSourceType())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PURCHASE_SOURCE_TYPE_UNSUPPORTED",
-                    "Purchase posting adapter currently supports purchase invoice and goods receipt source types only");
+                    "Purchase posting adapter currently supports purchase invoices, goods receipts, and purchase returns");
         }
 
         JsonNode payload = parsePayload(request);
+        boolean purchaseReturn = isPurchaseReturn(request);
         String currencyCode = text(payload, "currencyCode", "EGP");
         if (!currencyCode.matches("^[A-Z]{3}$")) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_CURRENCY_INVALID",
@@ -69,6 +74,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
 
         BigDecimal inventoryAmount = firstOptionalAmount(payload,
                 "inventoryAmount",
+                "returnAmount",
                 "goodsAmount",
                 "subtotalAmount",
                 "purchaseAmount");
@@ -106,62 +112,114 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                     "Purchase gross amount must equal inventory amount plus tax amount");
         }
 
-        BigDecimal paidAmount = firstOptionalAmount(payload, "paidAmount", "paymentAmount", "amountPaid");
-        if (paidAmount.compareTo(grossAmount) > 0) {
+        BigDecimal settledAmount = purchaseReturn
+                ? firstOptionalAmount(payload, "refundedAmount", "refundAmount", "paymentAmount", "amountPaid")
+                : firstOptionalAmount(payload, "paidAmount", "paymentAmount", "amountPaid");
+        if (settledAmount.compareTo(grossAmount) > 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PURCHASE_PAYMENT_AMOUNT_INVALID",
-                    "Purchase paid amount cannot exceed gross amount");
+                    purchaseReturn
+                            ? "Purchase return refund amount cannot exceed gross amount"
+                            : "Purchase paid amount cannot exceed gross amount");
         }
-        BigDecimal payableAmount = grossAmount.subtract(paidAmount).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal payableAmount = grossAmount.subtract(settledAmount).setScale(4, RoundingMode.HALF_UP);
 
         ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
         FinanceAccountMappingItem inventoryMapping = resolveMapping(request, "purchase.inventory");
         for (PurchaseInventoryLine inventoryLine : inventoryLines) {
-            lines.add(debitLine(
-                    inventoryMapping,
-                    request,
-                    inventoryLine.amount(),
-                    "Purchase inventory receipt",
-                    supplierId,
-                    inventoryLine.productId(),
-                    inventoryLine.inventoryMovementId(),
-                    null));
+            if (purchaseReturn) {
+                lines.add(creditLine(
+                        inventoryMapping,
+                        request,
+                        inventoryLine.amount(),
+                        "Purchase return inventory reduction",
+                        supplierId,
+                        inventoryLine.productId(),
+                        inventoryLine.inventoryMovementId(),
+                        null));
+            } else {
+                lines.add(debitLine(
+                        inventoryMapping,
+                        request,
+                        inventoryLine.amount(),
+                        "Purchase inventory receipt",
+                        supplierId,
+                        inventoryLine.productId(),
+                        inventoryLine.inventoryMovementId(),
+                        null));
+            }
         }
         if (taxAmount.compareTo(ZERO) > 0) {
-            lines.add(debitLine(
-                    resolveMapping(request, "purchase.input_vat"),
-                    request,
-                    taxAmount,
-                    "Purchase input VAT",
-                    supplierId,
-                    null,
-                    null,
-                    null));
+            if (purchaseReturn) {
+                lines.add(creditLine(
+                        resolveMapping(request, "purchase.input_vat"),
+                        request,
+                        taxAmount,
+                        "Purchase return VAT reversal",
+                        supplierId,
+                        null,
+                        null,
+                        null));
+            } else {
+                lines.add(debitLine(
+                        resolveMapping(request, "purchase.input_vat"),
+                        request,
+                        taxAmount,
+                        "Purchase input VAT",
+                        supplierId,
+                        null,
+                        null,
+                        null));
+            }
         }
-        if (paidAmount.compareTo(ZERO) > 0) {
+        if (settledAmount.compareTo(ZERO) > 0) {
             String paymentMethod = normalizePaymentMethod(text(payload, "paymentMethod", "cash"));
-            lines.add(creditLine(
-                    resolveMapping(request, "purchase." + paymentMethod),
-                    request,
-                    paidAmount,
-                    "Purchase " + paymentMethod + " payment",
-                    supplierId,
-                    null,
-                    null,
-                    text(payload, "paymentId", null)));
+            if (purchaseReturn) {
+                lines.add(debitLine(
+                        resolveMapping(request, "purchase." + paymentMethod),
+                        request,
+                        settledAmount,
+                        "Purchase return " + paymentMethod + " refund",
+                        supplierId,
+                        null,
+                        null,
+                        text(payload, "paymentId", null)));
+            } else {
+                lines.add(creditLine(
+                        resolveMapping(request, "purchase." + paymentMethod),
+                        request,
+                        settledAmount,
+                        "Purchase " + paymentMethod + " payment",
+                        supplierId,
+                        null,
+                        null,
+                        text(payload, "paymentId", null)));
+            }
         }
         if (payableAmount.compareTo(ZERO) > 0) {
-            String payableMappingKey = isGoodsReceipt(request)
+            String payableMappingKey = !purchaseReturn && isGoodsReceipt(request)
                     ? "purchase.grni"
                     : "purchase.payable";
-            lines.add(creditLine(
-                    resolveMapping(request, payableMappingKey),
-                    request,
-                    payableAmount,
-                    isGoodsReceipt(request) ? "Purchase goods received not invoiced" : "Purchase supplier payable",
-                    supplierId,
-                    null,
-                    null,
-                    null));
+            if (purchaseReturn) {
+                lines.add(debitLine(
+                        resolveMapping(request, payableMappingKey),
+                        request,
+                        payableAmount,
+                        "Purchase return supplier credit",
+                        supplierId,
+                        null,
+                        null,
+                        null));
+            } else {
+                lines.add(creditLine(
+                        resolveMapping(request, payableMappingKey),
+                        request,
+                        payableAmount,
+                        isGoodsReceipt(request) ? "Purchase goods received not invoiced" : "Purchase supplier payable",
+                        supplierId,
+                        null,
+                        null,
+                        null));
+            }
         }
 
         BigDecimal totalDebit = totalDebit(lines);
@@ -173,8 +231,8 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
 
         String journalNumber = dbFinanceJournal.allocateSourceJournalNumber(
                 request.getCompanyId(),
-                "purchase.invoice",
-                "PI-");
+                purchaseReturn ? "purchase.return" : "purchase.invoice",
+                purchaseReturn ? "PR-" : "PI-");
         Integer postedBy = request.getUpdatedBy() == null ? request.getCreatedBy() : request.getUpdatedBy();
         if (postedBy == null) {
             postedBy = 0;
@@ -185,13 +243,13 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         request.getCompanyId(),
                         request.getBranchId(),
                         journalNumber,
-                        "purchase",
+                        purchaseReturn ? "purchase_return" : "purchase",
                         request.getSourceModule(),
                         request.getSourceType(),
                         request.getSourceId(),
                         request.getPostingDate(),
                         request.getFiscalPeriodId(),
-                        "Purchase " + request.getSourceId(),
+                        (purchaseReturn ? "Purchase return " : "Purchase ") + request.getSourceId(),
                         currencyCode,
                         ONE,
                         totalDebit,
@@ -408,6 +466,13 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
     private boolean isGoodsReceipt(FinancePostingRequestItem request) {
         return "goods_receipt".equals(request.getSourceType())
                 || "stock_receipt".equals(request.getSourceType());
+    }
+
+    private boolean isPurchaseReturn(FinancePostingRequestItem request) {
+        return "purchase_return".equals(request.getSourceType())
+                || "supplier_return".equals(request.getSourceType())
+                || "vendor_return".equals(request.getSourceType())
+                || "return_to_supplier".equals(request.getSourceType());
     }
 
     private BigDecimal totalDebit(List<DbFinanceJournal.PostedSourceJournalLineCommand> lines) {

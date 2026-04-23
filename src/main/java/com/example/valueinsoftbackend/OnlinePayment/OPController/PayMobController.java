@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackRequest;
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.TransactionProcessedCallback;
 import com.example.valueinsoftbackend.Service.BillingProviderEventService;
+import com.example.valueinsoftbackend.Service.PaymentProviderFinanceIntegrationService;
 import com.example.valueinsoftbackend.Service.PaymentProvider;
 import com.example.valueinsoftbackend.Service.PaymentAttemptService;
 import com.example.valueinsoftbackend.Service.PaymentProviderResolver;
@@ -30,6 +31,7 @@ public class PayMobController {
     private final PaymentAttemptService paymentAttemptService;
     private final SubscriptionService subscriptionService;
     private final BillingProviderEventService billingProviderEventService;
+    private final PaymentProviderFinanceIntegrationService paymentProviderFinanceIntegrationService;
     private final PayMobService payMobService;
     private final ObjectMapper objectMapper;
 
@@ -37,12 +39,14 @@ public class PayMobController {
                             PaymentAttemptService paymentAttemptService,
                             SubscriptionService subscriptionService,
                             BillingProviderEventService billingProviderEventService,
+                            PaymentProviderFinanceIntegrationService paymentProviderFinanceIntegrationService,
                             PayMobService payMobService,
                             ObjectMapper objectMapper) {
         this.paymentProviderResolver = paymentProviderResolver;
         this.paymentAttemptService = paymentAttemptService;
         this.subscriptionService = subscriptionService;
         this.billingProviderEventService = billingProviderEventService;
+        this.paymentProviderFinanceIntegrationService = paymentProviderFinanceIntegrationService;
         this.payMobService = payMobService;
         this.objectMapper = objectMapper;
     }
@@ -114,6 +118,11 @@ public class PayMobController {
 
             if (callback.isSuccess()) {
                 subscriptionService.markBranchSubscriptionStatusSuccess(callback.getSubId());
+                paymentProviderFinanceIntegrationService.enqueuePayMobSettlement(
+                        providerCode,
+                        externalOrderId,
+                        providerEventId,
+                        callbackRequest);
             } else {
                 paymentAttemptService.markFailed(
                         providerCode,

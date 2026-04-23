@@ -14,15 +14,28 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Set;
 
 @Service
 @Slf4j
 public class ClientReceiptService {
 
-    private final DBMClientReceipt clientReceiptRepository;
+    private static final Set<String> FINANCE_PAYMENT_TYPES = Set.of(
+            "payment",
+            "paidin",
+            "paid_in",
+            "receivevmoney",
+            "receivemoney",
+            "receipt",
+            "collection");
 
-    public ClientReceiptService(DBMClientReceipt clientReceiptRepository) {
+    private final DBMClientReceipt clientReceiptRepository;
+    private final FinanceOperationalPostingService financeOperationalPostingService;
+
+    public ClientReceiptService(DBMClientReceipt clientReceiptRepository,
+                                FinanceOperationalPostingService financeOperationalPostingService) {
         this.clientReceiptRepository = clientReceiptRepository;
+        this.financeOperationalPostingService = financeOperationalPostingService;
     }
 
     public ArrayList<ClientReceipt> getClientReceipts(int companyId, int clientId) {
@@ -46,22 +59,52 @@ public class ClientReceiptService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CLIENT_RECEIPT_INVALID_AMOUNT", "amount must not be zero");
         }
 
+        Timestamp receiptTime = new Timestamp(System.currentTimeMillis());
         ClientReceipt clientReceipt = new ClientReceipt(
                 0,
                 request.getType().trim(),
                 request.getAmount(),
-                new Timestamp(System.currentTimeMillis()),
+                receiptTime,
                 request.getUserName().trim(),
                 request.getClientId(),
                 request.getBranchId()
         );
 
-        int rows = clientReceiptRepository.insertClientReceipt(companyId, clientReceipt);
-        if (rows != 1) {
+        ClientReceipt created = clientReceiptRepository.createClientReceipt(companyId, clientReceipt);
+        if (created == null) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "CLIENT_RECEIPT_INSERT_FAILED", "the ReceiptUser not added -> error in server!");
         }
+        enqueueFinanceClientReceipt(companyId, created);
 
         log.info("Recorded client receipt for company {} branch {} client {}", companyId, request.getBranchId(), request.getClientId());
         return "the Client Receipt Added Successfully : " + request.getClientId();
+    }
+
+    private void enqueueFinanceClientReceipt(int companyId, ClientReceipt receipt) {
+        if (receipt == null || receipt.getAmount() == null || receipt.getAmount().signum() <= 0) {
+            return;
+        }
+        if (!FINANCE_PAYMENT_TYPES.contains(normalizeReceiptType(receipt.getType()))) {
+            return;
+        }
+
+        try {
+            financeOperationalPostingService.enqueueClientReceipt(companyId, receipt);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Client receipt {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                    receipt.getCrId(),
+                    companyId,
+                    receipt.getBranchId(),
+                    exception.getMessage()
+            );
+        }
+    }
+
+    private String normalizeReceiptType(String type) {
+        if (type == null) {
+            return "";
+        }
+        return type.replaceAll("[^A-Za-z0-9]", "").toLowerCase();
     }
 }

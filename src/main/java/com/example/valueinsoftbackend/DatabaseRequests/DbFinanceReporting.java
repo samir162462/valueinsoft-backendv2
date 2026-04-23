@@ -127,7 +127,7 @@ public class DbFinanceReporting {
                         "OVER (ORDER BY l.posting_date ASC, j.journal_number ASC, l.line_number ASC, l.journal_line_id ASC " +
                         "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS running_balance, " +
                         "l.currency_code, l.description, l.source_module, l.source_type, l.source_id, " +
-                        "l.cost_center_id, cc.cost_center_code, cc.cost_center_name, l.tax_code_id, tc.code AS tax_code " +
+                        "l.cost_center_id, cc.code AS cost_center_code, cc.name AS cost_center_name, l.tax_code_id, tc.code AS tax_code " +
                         "FROM public.finance_journal_line l " +
                         "JOIN public.finance_journal_entry j " +
                         "ON j.company_id = l.company_id AND j.journal_entry_id = l.journal_entry_id " +

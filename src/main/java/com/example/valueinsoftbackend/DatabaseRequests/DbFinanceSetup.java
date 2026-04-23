@@ -223,6 +223,17 @@ public class DbFinanceSetup {
         return rows == 0 ? null : getFiscalYearById(request.getCompanyId(), fiscalYearId);
     }
 
+    public int deleteFiscalYear(int companyId, UUID fiscalYearId) {
+        return namedParameterJdbcTemplate.update(
+                "DELETE FROM public.finance_fiscal_year " +
+                        "WHERE company_id = :companyId " +
+                        "AND fiscal_year_id = :fiscalYearId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("fiscalYearId", fiscalYearId)
+        );
+    }
+
     public FinanceFiscalPeriodItem createFiscalPeriod(FinanceFiscalPeriodCreateRequest request) {
         UUID fiscalPeriodId = namedParameterJdbcTemplate.queryForObject(
                 "INSERT INTO public.finance_fiscal_period " +
@@ -267,6 +278,29 @@ public class DbFinanceSetup {
                         .addValue("version", request.getVersion())
         );
         return rows == 0 ? null : getFiscalPeriodById(request.getCompanyId(), fiscalPeriodId);
+    }
+
+    public int deleteFiscalPeriod(int companyId, UUID fiscalPeriodId) {
+        return namedParameterJdbcTemplate.update(
+                "DELETE FROM public.finance_fiscal_period " +
+                        "WHERE company_id = :companyId " +
+                        "AND fiscal_period_id = :fiscalPeriodId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("fiscalPeriodId", fiscalPeriodId)
+        );
+    }
+
+    public boolean fiscalYearHasPeriods(int companyId, UUID fiscalYearId) {
+        Integer count = namedParameterJdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM public.finance_fiscal_period " +
+                        "WHERE company_id = :companyId AND fiscal_year_id = :fiscalYearId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("fiscalYearId", fiscalYearId),
+                Integer.class
+        );
+        return count != null && count > 0;
     }
 
     public boolean accountExists(int companyId, UUID accountId) {
@@ -368,6 +402,17 @@ public class DbFinanceSetup {
         return rows == 0 ? null : getAccountById(request.getCompanyId(), accountId);
     }
 
+    public int deleteAccount(int companyId, UUID accountId) {
+        return namedParameterJdbcTemplate.update(
+                "DELETE FROM public.finance_account " +
+                        "WHERE company_id = :companyId " +
+                        "AND account_id = :accountId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("accountId", accountId)
+        );
+    }
+
     public int updateDescendantAccountPaths(int companyId, String oldPathPrefix, String newPathPrefix, int levelDelta) {
         return namedParameterJdbcTemplate.update(
                 "UPDATE public.finance_account " +
@@ -408,11 +453,18 @@ public class DbFinanceSetup {
                                                    UUID excludedAccountMappingId) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("companyId", companyId)
-                .addValue("branchId", branchId)
                 .addValue("mappingKey", mappingKey)
                 .addValue("effectiveFrom", effectiveFrom)
                 .addValue("effectiveTo", effectiveTo)
                 .addValue("excludedAccountMappingId", excludedAccountMappingId);
+
+        String branchClause;
+        if (branchId == null) {
+            branchClause = "AND branch_id IS NULL ";
+        } else {
+            branchClause = "AND branch_id = :branchId ";
+            params.addValue("branchId", branchId);
+        }
 
         String excludeClause = excludedAccountMappingId == null
                 ? ""
@@ -423,7 +475,7 @@ public class DbFinanceSetup {
                         "WHERE company_id = :companyId " +
                         "AND mapping_key = :mappingKey " +
                         "AND status = 'active' " +
-                        "AND ((branch_id IS NULL AND :branchId IS NULL) OR branch_id = :branchId) " +
+                        branchClause +
                         excludeClause +
                         "AND effective_from <= COALESCE(:effectiveTo, DATE '9999-12-31') " +
                         "AND COALESCE(effective_to, DATE '9999-12-31') >= :effectiveFrom",
@@ -464,6 +516,17 @@ public class DbFinanceSetup {
                         .addValue("version", request.getVersion())
         );
         return rows == 0 ? null : getAccountMappingById(request.getCompanyId(), accountMappingId);
+    }
+
+    public int deleteAccountMapping(int companyId, UUID accountMappingId) {
+        return namedParameterJdbcTemplate.update(
+                "DELETE FROM public.finance_account_mapping " +
+                        "WHERE company_id = :companyId " +
+                        "AND account_mapping_id = :accountMappingId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("accountMappingId", accountMappingId)
+        );
     }
 
     public boolean taxCodeExists(int companyId, UUID taxCodeId) {
@@ -567,6 +630,17 @@ public class DbFinanceSetup {
                         .addValue("version", request.getVersion())
         );
         return rows == 0 ? null : getTaxCodeById(request.getCompanyId(), taxCodeId);
+    }
+
+    public int deleteTaxCode(int companyId, UUID taxCodeId) {
+        return namedParameterJdbcTemplate.update(
+                "DELETE FROM public.finance_tax_code " +
+                        "WHERE company_id = :companyId " +
+                        "AND tax_code_id = :taxCodeId",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("taxCodeId", taxCodeId)
+        );
     }
 
     public ArrayList<FinanceFiscalYearItem> getFiscalYears(int companyId) {

@@ -125,6 +125,50 @@ class FinancePurchasePostingAdapterTest {
     }
 
     @Test
+    void postPurchaseReturnCreatesSupplierCreditAndInventoryReductionLines() {
+        when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "purchase.return", "PR-"))
+                .thenReturn("PR-000001");
+
+        UUID journalId = adapter.post(request("purchase_return", """
+                {
+                  "currencyCode": "EGP",
+                  "supplierId": 88,
+                  "returnAmount": 200.0000,
+                  "taxAmount": 30.0000,
+                  "refundedAmount": 50.0000,
+                  "paymentMethod": "cash",
+                  "paymentId": "cash-refund-1",
+                  "items": [
+                    {"productId": 701, "quantity": 2, "unitCost": 60.0000, "inventoryMovementId": 3001},
+                    {"productId": 702, "totalCost": 80.0000, "stockLedgerId": 3002}
+                  ]
+                }
+                """));
+
+        assertEquals(JOURNAL_ID, journalId);
+
+        ArgumentCaptor<DbFinanceJournal.PostedSourceJournalCommand> commandCaptor =
+                ArgumentCaptor.forClass(DbFinanceJournal.PostedSourceJournalCommand.class);
+        verify(dbFinanceJournal).createPostedSourceJournal(commandCaptor.capture());
+
+        DbFinanceJournal.PostedSourceJournalCommand command = commandCaptor.getValue();
+        assertEquals("PR-000001", command.journalNumber());
+        assertEquals("purchase_return", command.journalType());
+        assertEquals("purchase_return", command.sourceType());
+        assertEquals(money("230.0000"), command.totalDebit());
+        assertEquals(money("230.0000"), command.totalCredit());
+        assertEquals(5, command.lines().size());
+
+        assertLine(command.lines().get(0), INVENTORY_ACCOUNT_ID, money("0.0000"), money("120.0000"), 88, 701L, 3001L, null);
+        assertLine(command.lines().get(1), INVENTORY_ACCOUNT_ID, money("0.0000"), money("80.0000"), 88, 702L, 3002L, null);
+        assertLine(command.lines().get(2), INPUT_VAT_ACCOUNT_ID, money("0.0000"), money("30.0000"), 88, null, null, null);
+        assertLine(command.lines().get(3), CASH_ACCOUNT_ID, money("50.0000"), money("0.0000"), 88, null, null, "cash-refund-1");
+        assertLine(command.lines().get(4), PAYABLE_ACCOUNT_ID, money("180.0000"), money("0.0000"), 88, null, null, null);
+
+        verify(dbFinanceJournal).applyPostedJournalToAccountBalances(COMPANY_ID, JOURNAL_ID, 17);
+    }
+
+    @Test
     void postRejectsMissingSupplier() {
         ApiException exception = assertThrows(ApiException.class, () -> adapter.post(request("purchase_invoice", """
                 {

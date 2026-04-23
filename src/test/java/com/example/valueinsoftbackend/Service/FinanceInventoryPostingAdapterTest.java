@@ -33,6 +33,7 @@ class FinanceInventoryPostingAdapterTest {
     private static final UUID EXPENSE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000003103");
     private static final UUID DAMAGE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000003104");
     private static final UUID WRITEOFF_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000003105");
+    private static final int DESTINATION_BRANCH_ID = 4;
 
     private DbFinanceSetup dbFinanceSetup;
     private DbFinanceJournal dbFinanceJournal;
@@ -49,8 +50,11 @@ class FinanceInventoryPostingAdapterTest {
         stubMapping("inventory.adjustment_expense", EXPENSE_ACCOUNT_ID);
         stubMapping("inventory.damage_expense", DAMAGE_ACCOUNT_ID);
         stubMapping("inventory.writeoff_expense", WRITEOFF_ACCOUNT_ID);
+        stubMappingForBranch(DESTINATION_BRANCH_ID, "inventory.asset", INVENTORY_ACCOUNT_ID);
         when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "inventory.adjustment", "IA-"))
                 .thenReturn("IA-000001");
+        when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "inventory.transfer", "BT-"))
+                .thenReturn("BT-000001");
         when(dbFinanceJournal.createPostedSourceJournal(any())).thenReturn(JOURNAL_ID);
     }
 
@@ -182,6 +186,51 @@ class FinanceInventoryPostingAdapterTest {
         assertEquals("FINANCE_INVENTORY_TOTAL_MISMATCH", exception.getCode());
     }
 
+    @Test
+    void postStockTransferMovesInventoryBetweenBranchesWithoutPnlImpact() {
+        adapter.post(request("stock_transfer", """
+                {
+                  "sourceBranchId": 3,
+                  "destinationBranchId": 4,
+                  "transferAmount": 80.0000,
+                  "items": [
+                    {
+                      "productId": 901,
+                      "quantity": 2,
+                      "unitCost": 40.0000,
+                      "sourceInventoryMovementId": 5001,
+                      "destinationInventoryMovementId": 5002
+                    }
+                  ]
+                }
+                """));
+
+        DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
+        assertEquals(null, command.branchId());
+        assertEquals("BT-000001", command.journalNumber());
+        assertEquals("inventory", command.journalType());
+        assertEquals("stock_transfer", command.sourceType());
+        assertEquals(money("80.0000"), command.totalDebit());
+        assertEquals(money("80.0000"), command.totalCredit());
+        assertEquals(2, command.lines().size());
+
+        DbFinanceJournal.PostedSourceJournalLineCommand debitLine = command.lines().get(0);
+        assertEquals(INVENTORY_ACCOUNT_ID, debitLine.accountId());
+        assertEquals(DESTINATION_BRANCH_ID, debitLine.branchId());
+        assertEquals(money("80.0000"), debitLine.debitAmount());
+        assertEquals(money("0.0000"), debitLine.creditAmount());
+        assertEquals(901L, debitLine.productId());
+        assertEquals(5002L, debitLine.inventoryMovementId());
+
+        DbFinanceJournal.PostedSourceJournalLineCommand creditLine = command.lines().get(1);
+        assertEquals(INVENTORY_ACCOUNT_ID, creditLine.accountId());
+        assertEquals(BRANCH_ID, creditLine.branchId());
+        assertEquals(money("0.0000"), creditLine.debitAmount());
+        assertEquals(money("80.0000"), creditLine.creditAmount());
+        assertEquals(901L, creditLine.productId());
+        assertEquals(5001L, creditLine.inventoryMovementId());
+    }
+
     private DbFinanceJournal.PostedSourceJournalCommand capturedCommand() {
         ArgumentCaptor<DbFinanceJournal.PostedSourceJournalCommand> commandCaptor =
                 ArgumentCaptor.forClass(DbFinanceJournal.PostedSourceJournalCommand.class);
@@ -204,15 +253,19 @@ class FinanceInventoryPostingAdapterTest {
     }
 
     private void stubMapping(String mappingKey, UUID accountId) {
-        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, BRANCH_ID, mappingKey,
-                LocalDate.of(2026, 4, 7))).thenReturn(mapping(mappingKey, accountId));
+        stubMappingForBranch(BRANCH_ID, mappingKey, accountId);
     }
 
-    private FinanceAccountMappingItem mapping(String mappingKey, UUID accountId) {
+    private void stubMappingForBranch(Integer branchId, String mappingKey, UUID accountId) {
+        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, branchId, mappingKey,
+                LocalDate.of(2026, 4, 7))).thenReturn(mapping(branchId, mappingKey, accountId));
+    }
+
+    private FinanceAccountMappingItem mapping(Integer branchId, String mappingKey, UUID accountId) {
         return new FinanceAccountMappingItem(
                 UUID.randomUUID(),
                 COMPANY_ID,
-                BRANCH_ID,
+                branchId,
                 mappingKey,
                 accountId,
                 mappingKey,

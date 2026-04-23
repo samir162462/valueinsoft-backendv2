@@ -34,6 +34,8 @@ class FinancePaymentPostingAdapterTest {
     private static final UUID WALLET_CLEARING_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004104");
     private static final UUID CASH_DRAWER_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004105");
     private static final UUID FEE_EXPENSE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004106");
+    private static final UUID RECEIVABLE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004107");
+    private static final UUID PAYABLE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004108");
 
     private DbFinanceSetup dbFinanceSetup;
     private DbFinanceJournal dbFinanceJournal;
@@ -51,8 +53,14 @@ class FinancePaymentPostingAdapterTest {
         stubMapping("payment.wallet_clearing", WALLET_CLEARING_ACCOUNT_ID);
         stubMapping("payment.cash_drawer", CASH_DRAWER_ACCOUNT_ID);
         stubMapping("payment.fee_expense", FEE_EXPENSE_ACCOUNT_ID);
+        stubMapping("pos.receivable", RECEIVABLE_ACCOUNT_ID);
+        stubMapping("purchase.payable", PAYABLE_ACCOUNT_ID);
         when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "payment.settlement", "PM-"))
                 .thenReturn("PM-000001");
+        when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "payment.customer_receipt", "RC-"))
+                .thenReturn("RC-000001");
+        when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "payment.supplier_payment", "SP-"))
+                .thenReturn("SP-000001");
         when(dbFinanceJournal.createPostedSourceJournal(any())).thenReturn(JOURNAL_ID);
     }
 
@@ -81,9 +89,9 @@ class FinancePaymentPostingAdapterTest {
         assertEquals(money("1000.0000"), command.totalDebit());
         assertEquals(money("1000.0000"), command.totalCredit());
         assertEquals(3, command.lines().size());
-        assertLine(command.lines().get(0), BANK_ACCOUNT_ID, money("975.0000"), money("0.0000"), "SETTLE-CARD-1");
-        assertLine(command.lines().get(1), FEE_EXPENSE_ACCOUNT_ID, money("25.0000"), money("0.0000"), "SETTLE-CARD-1");
-        assertLine(command.lines().get(2), CARD_CLEARING_ACCOUNT_ID, money("0.0000"), money("1000.0000"), "SETTLE-CARD-1");
+        assertLine(command.lines().get(0), BANK_ACCOUNT_ID, money("975.0000"), money("0.0000"), "SETTLE-CARD-1", null, null);
+        assertLine(command.lines().get(1), FEE_EXPENSE_ACCOUNT_ID, money("25.0000"), money("0.0000"), "SETTLE-CARD-1", null, null);
+        assertLine(command.lines().get(2), CARD_CLEARING_ACCOUNT_ID, money("0.0000"), money("1000.0000"), "SETTLE-CARD-1", null, null);
         verify(dbFinanceJournal).applyPostedJournalToAccountBalances(COMPANY_ID, JOURNAL_ID, 17);
     }
 
@@ -100,8 +108,8 @@ class FinancePaymentPostingAdapterTest {
         DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
         assertEquals("cash_safe_drop", command.sourceType());
         assertEquals(2, command.lines().size());
-        assertLine(command.lines().get(0), CASH_SAFE_ACCOUNT_ID, money("600.0000"), money("0.0000"), "SAFE-DROP-1");
-        assertLine(command.lines().get(1), CASH_DRAWER_ACCOUNT_ID, money("0.0000"), money("600.0000"), "SAFE-DROP-1");
+        assertLine(command.lines().get(0), CASH_SAFE_ACCOUNT_ID, money("600.0000"), money("0.0000"), "SAFE-DROP-1", null, null);
+        assertLine(command.lines().get(1), CASH_DRAWER_ACCOUNT_ID, money("0.0000"), money("600.0000"), "SAFE-DROP-1", null, null);
     }
 
     @Test
@@ -117,9 +125,9 @@ class FinancePaymentPostingAdapterTest {
         DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
         assertEquals(money("500.0000"), command.totalDebit());
         assertEquals(money("500.0000"), command.totalCredit());
-        assertLine(command.lines().get(0), BANK_ACCOUNT_ID, money("490.0000"), money("0.0000"), "WALLET-SETTLE-1");
-        assertLine(command.lines().get(1), FEE_EXPENSE_ACCOUNT_ID, money("10.0000"), money("0.0000"), "WALLET-SETTLE-1");
-        assertLine(command.lines().get(2), WALLET_CLEARING_ACCOUNT_ID, money("0.0000"), money("500.0000"), "WALLET-SETTLE-1");
+        assertLine(command.lines().get(0), BANK_ACCOUNT_ID, money("490.0000"), money("0.0000"), "WALLET-SETTLE-1", null, null);
+        assertLine(command.lines().get(1), FEE_EXPENSE_ACCOUNT_ID, money("10.0000"), money("0.0000"), "WALLET-SETTLE-1", null, null);
+        assertLine(command.lines().get(2), WALLET_CLEARING_ACCOUNT_ID, money("0.0000"), money("500.0000"), "WALLET-SETTLE-1", null, null);
     }
 
     @Test
@@ -163,6 +171,50 @@ class FinancePaymentPostingAdapterTest {
         assertEquals("FINANCE_ACCOUNT_MAPPING_MISSING", exception.getCode());
     }
 
+    @Test
+    void postCustomerReceiptDebitsDrawerAndCreditsReceivable() {
+        adapter.post(request("customer_receipt", """
+                {
+                  "customerId": 44,
+                  "amount": 275.0000,
+                  "paymentMethod": "cash",
+                  "paymentId": "client-receipt-81"
+                }
+                """));
+
+        DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
+        assertEquals("receipt", command.journalType());
+        assertEquals("customer_receipt", command.sourceType());
+        assertEquals("RC-000001", command.journalNumber());
+        assertEquals(money("275.0000"), command.totalDebit());
+        assertEquals(money("275.0000"), command.totalCredit());
+        assertEquals(2, command.lines().size());
+        assertLine(command.lines().get(0), CASH_DRAWER_ACCOUNT_ID, money("275.0000"), money("0.0000"), "client-receipt-81", 44, null);
+        assertLine(command.lines().get(1), RECEIVABLE_ACCOUNT_ID, money("0.0000"), money("275.0000"), "client-receipt-81", 44, null);
+    }
+
+    @Test
+    void postSupplierPaymentDebitsPayableAndCreditsDrawer() {
+        adapter.post(request("supplier_payment", """
+                {
+                  "supplierId": 88,
+                  "amountPaid": 410.0000,
+                  "paymentMethod": "cash",
+                  "paymentId": "supplier-receipt-91"
+                }
+                """));
+
+        DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
+        assertEquals("supplier_payment", command.journalType());
+        assertEquals("supplier_payment", command.sourceType());
+        assertEquals("SP-000001", command.journalNumber());
+        assertEquals(money("410.0000"), command.totalDebit());
+        assertEquals(money("410.0000"), command.totalCredit());
+        assertEquals(2, command.lines().size());
+        assertLine(command.lines().get(0), PAYABLE_ACCOUNT_ID, money("410.0000"), money("0.0000"), "supplier-receipt-91", null, 88);
+        assertLine(command.lines().get(1), CASH_DRAWER_ACCOUNT_ID, money("0.0000"), money("410.0000"), "supplier-receipt-91", null, 88);
+    }
+
     private DbFinanceJournal.PostedSourceJournalCommand capturedCommand() {
         ArgumentCaptor<DbFinanceJournal.PostedSourceJournalCommand> commandCaptor =
                 ArgumentCaptor.forClass(DbFinanceJournal.PostedSourceJournalCommand.class);
@@ -174,12 +226,16 @@ class FinancePaymentPostingAdapterTest {
                             UUID accountId,
                             BigDecimal debit,
                             BigDecimal credit,
-                            String paymentId) {
+                            String paymentId,
+                            Integer customerId,
+                            Integer supplierId) {
         assertEquals(accountId, line.accountId());
         assertEquals(BRANCH_ID, line.branchId());
         assertEquals(debit, line.debitAmount());
         assertEquals(credit, line.creditAmount());
         assertEquals(paymentId, line.paymentId());
+        assertEquals(customerId, line.customerId());
+        assertEquals(supplierId, line.supplierId());
     }
 
     private void stubMapping(String mappingKey, UUID accountId) {
