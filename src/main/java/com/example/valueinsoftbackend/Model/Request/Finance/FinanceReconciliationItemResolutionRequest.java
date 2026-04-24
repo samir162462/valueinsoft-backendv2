@@ -11,4 +11,8 @@ public class FinanceReconciliationItemResolutionRequest {
     private int companyId;
     private String resolutionStatus;
     private String resolutionNote;
+    private String proofFileKey;
+    private String proofFileName;
+    private String proofFileType;
+    private Long proofFileSize;
 }

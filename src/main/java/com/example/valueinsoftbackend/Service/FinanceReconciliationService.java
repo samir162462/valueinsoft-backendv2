@@ -69,6 +69,7 @@ public class FinanceReconciliationService {
     private final AuthorizationService authorizationService;
     private final FinanceAuditService financeAuditService;
     private final FinanceOperationalPostingService financeOperationalPostingService;
+    private final StorageService storageService;
     private final ObjectMapper objectMapper;
 
     public FinanceReconciliationService(DbFinanceReconciliation dbFinanceReconciliation,
@@ -76,12 +77,14 @@ public class FinanceReconciliationService {
                                         AuthorizationService authorizationService,
                                         FinanceAuditService financeAuditService,
                                         FinanceOperationalPostingService financeOperationalPostingService,
+                                        StorageService storageService,
                                         ObjectMapper objectMapper) {
         this.dbFinanceReconciliation = dbFinanceReconciliation;
         this.dbFinanceSetup = dbFinanceSetup;
         this.authorizationService = authorizationService;
         this.financeAuditService = financeAuditService;
         this.financeOperationalPostingService = financeOperationalPostingService;
+        this.storageService = storageService;
         this.objectMapper = objectMapper;
     }
 
@@ -402,17 +405,38 @@ public class FinanceReconciliationService {
                     "Resolved or dismissed reconciliation items require a resolution note");
         }
 
+        if (request.getProofFileKey() != null) {
+            String expectedPrefix = String.format("finance/reconciliation/%d/%s/%s/",
+                    request.getCompanyId(),
+                    reconciliationRunId,
+                    reconciliationItemId);
+            if (!request.getProofFileKey().startsWith(expectedPrefix)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_PROOF_KEY_INVALID",
+                        "Proof file key does not match the reconciliation item context");
+            }
+        }
+
         Integer actorUserId = financeAuditService.resolveActorUserId(authenticatedName);
         FinanceReconciliationItemItem updated = dbFinanceReconciliation.updateItemResolution(
                 request.getCompanyId(),
                 reconciliationItemId,
                 resolutionStatus,
                 note,
+                request,
                 actorUserId);
         dbFinanceReconciliation.refreshRunDifference(
                 request.getCompanyId(),
                 updated.getReconciliationRunId(),
                 actorUserId);
+
+        Map<String, Object> auditPayload = new LinkedHashMap<>();
+        auditPayload.put("reconciliationRunId", updated.getReconciliationRunId().toString());
+        auditPayload.put("resolutionStatus", updated.getResolutionStatus());
+        auditPayload.put("matchStatus", updated.getMatchStatus());
+        if (updated.getResolutionProofFileKey() != null) {
+            auditPayload.put("proofFileKey", updated.getResolutionProofFileKey());
+            auditPayload.put("proofFileName", updated.getResolutionProofFileName());
+        }
 
         financeAuditService.recordEvent(
                 authenticatedName,
@@ -421,12 +445,72 @@ public class FinanceReconciliationService {
                 "finance.reconciliation.item.resolution_updated",
                 "finance_reconciliation_item",
                 updated.getReconciliationItemId().toString(),
-                Map.of(
-                        "reconciliationRunId", updated.getReconciliationRunId().toString(),
-                        "resolutionStatus", updated.getResolutionStatus(),
-                        "matchStatus", updated.getMatchStatus()),
-                "Finance reconciliation item resolution updated");
+                auditPayload,
+                "Finance reconciliation item resolution updated" + (updated.getResolutionProofFileKey() != null ? " with proof" : ""));
         return updated;
+    }
+
+    public com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationProofUploadResponse prepareProofUploadForAuthenticatedUser(
+            String authenticatedName,
+            UUID reconciliationRunId,
+            UUID reconciliationItemId,
+            com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationProofUploadRequest request) {
+        requireCompany(request.getCompanyId());
+        FinanceReconciliationItemItem item = requireItem(request.getCompanyId(), reconciliationItemId);
+        if (!item.getReconciliationRunId().equals(reconciliationRunId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_ITEM_RUN_MISMATCH",
+                    "Reconciliation item does not belong to the requested run");
+        }
+        FinanceReconciliationRunItem run = requireRun(request.getCompanyId(), item.getReconciliationRunId());
+        authorizeEdit(authenticatedName, request.getCompanyId(), run.getBranchId());
+
+        // Validate metadata
+        if (request.getFileSize() > 1024 * 1024) { // 1MB
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_PROOF_TOO_LARGE",
+                    "Proof file size cannot exceed 1MB");
+        }
+        String contentType = request.getContentType().toLowerCase();
+        if (!Set.of("image/jpeg", "image/png", "image/webp", "application/pdf").contains(contentType)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_PROOF_TYPE_INVALID",
+                    "Only JPEG, PNG, WebP and PDF files are allowed as proofs");
+        }
+
+        String extension = switch (contentType) {
+            case "image/jpeg" -> "jpg";
+            case "image/png" -> "png";
+            case "image/webp" -> "webp";
+            case "application/pdf" -> "pdf";
+            default -> "bin";
+        };
+
+        String fileKey = String.format("finance/reconciliation/%d/%s/%s/%s.%s",
+                request.getCompanyId(),
+                reconciliationRunId,
+                reconciliationItemId,
+                UUID.randomUUID(),
+                extension);
+
+        java.net.URL uploadUrl = storageService.generatePresignedUploadUrl(fileKey, contentType);
+        
+        return new com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationProofUploadResponse(
+                fileKey,
+                uploadUrl.toString());
+    }
+
+    public String generateProofDownloadUrlForAuthenticatedUser(String authenticatedName,
+                                                               int companyId,
+                                                               UUID reconciliationItemId) {
+        requireCompany(companyId);
+        FinanceReconciliationItemItem item = requireItem(companyId, reconciliationItemId);
+        FinanceReconciliationRunItem run = requireRun(companyId, item.getReconciliationRunId());
+        authorizeRead(authenticatedName, companyId, run.getBranchId());
+
+        if (item.getResolutionProofFileKey() == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "FINANCE_RECONCILIATION_PROOF_NOT_FOUND",
+                    "No proof file attached to this reconciliation item");
+        }
+
+        return storageService.generatePresignedDownloadUrl(item.getResolutionProofFileKey()).toString();
     }
 
     private void validateCreateRequest(FinanceReconciliationRunCreateRequest request) {

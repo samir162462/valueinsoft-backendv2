@@ -4,6 +4,8 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationItemIte
 import com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationRunItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationSourceImportResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationSourceItem;
+import com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationProofUploadResponse;
+import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationProofUploadRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationItemResolutionRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationRunCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationSourceImportRequest;
@@ -128,5 +130,29 @@ public class FinanceReconciliationController {
                 reconciliationRunId,
                 reconciliationItemId,
                 request);
+    }
+
+    @PostMapping("/{reconciliationRunId}/items/{reconciliationItemId}/prepare-upload")
+    public FinanceReconciliationProofUploadResponse prepareProofUpload(
+            Principal principal,
+            @PathVariable("reconciliationRunId") UUID reconciliationRunId,
+            @PathVariable("reconciliationItemId") UUID reconciliationItemId,
+            @Valid @RequestBody FinanceReconciliationProofUploadRequest request) {
+        return financeReconciliationService.prepareProofUploadForAuthenticatedUser(
+                principal.getName(),
+                reconciliationRunId,
+                reconciliationItemId,
+                request);
+    }
+
+    @GetMapping("/items/{reconciliationItemId}/proof-url")
+    public String generateProofDownloadUrl(
+            Principal principal,
+            @PathVariable("reconciliationItemId") UUID reconciliationItemId,
+            @RequestParam("companyId") @Positive int companyId) {
+        return financeReconciliationService.generateProofDownloadUrlForAuthenticatedUser(
+                principal.getName(),
+                companyId,
+                reconciliationItemId);
     }
 }

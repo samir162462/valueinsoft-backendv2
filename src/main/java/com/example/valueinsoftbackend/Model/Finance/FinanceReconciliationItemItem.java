@@ -23,6 +23,12 @@ public class FinanceReconciliationItemItem {
     private BigDecimal differenceAmount;
     private String resolutionStatus;
     private String resolutionNote;
+    private String resolutionProofFileKey;
+    private String resolutionProofFileName;
+    private String resolutionProofFileType;
+    private Long resolutionProofFileSize;
+    private Instant resolutionProofUploadedAt;
+    private Integer resolutionProofUploadedBy;
     private Instant createdAt;
     private Integer createdBy;
     private Instant updatedAt;

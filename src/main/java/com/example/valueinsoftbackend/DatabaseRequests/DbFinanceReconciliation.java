@@ -401,11 +401,18 @@ public class DbFinanceReconciliation {
                                                               UUID reconciliationItemId,
                                                               String resolutionStatus,
                                                               String resolutionNote,
+                                                              com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationItemResolutionRequest request,
                                                               Integer actorUserId) {
         UUID itemId = namedParameterJdbcTemplate.queryForObject(
                 "UPDATE public.finance_reconciliation_item " +
                         "SET resolution_status = :resolutionStatus, " +
                         "resolution_note = :resolutionNote, " +
+                        "resolution_proof_file_key = :proofFileKey, " +
+                        "resolution_proof_file_name = :proofFileName, " +
+                        "resolution_proof_file_type = :proofFileType, " +
+                        "resolution_proof_file_size = :proofFileSize, " +
+                        "resolution_proof_uploaded_at = CASE WHEN :proofFileKey IS NOT NULL THEN NOW() ELSE resolution_proof_uploaded_at END, " +
+                        "resolution_proof_uploaded_by = CASE WHEN :proofFileKey IS NOT NULL THEN :actorUserId ELSE resolution_proof_uploaded_by END, " +
                         "updated_by = :actorUserId " +
                         "WHERE company_id = :companyId " +
                         "AND reconciliation_item_id = :reconciliationItemId " +
@@ -415,6 +422,10 @@ public class DbFinanceReconciliation {
                         .addValue("reconciliationItemId", reconciliationItemId)
                         .addValue("resolutionStatus", resolutionStatus)
                         .addValue("resolutionNote", resolutionNote)
+                        .addValue("proofFileKey", request.getProofFileKey())
+                        .addValue("proofFileName", request.getProofFileName())
+                        .addValue("proofFileType", request.getProofFileType())
+                        .addValue("proofFileSize", request.getProofFileSize())
                         .addValue("actorUserId", actorUserId),
                 UUID.class);
         return getItemById(companyId, itemId);
@@ -463,7 +474,10 @@ public class DbFinanceReconciliation {
     private String itemSelectSql() {
         return "SELECT reconciliation_item_id, company_id, reconciliation_run_id, reconciliation_source_item_id, " +
                 "source_type, source_id, ledger_line_id, " +
-                "match_status, difference_amount, resolution_status, resolution_note, created_at, created_by, updated_at, updated_by " +
+                "match_status, difference_amount, resolution_status, resolution_note, " +
+                "resolution_proof_file_key, resolution_proof_file_name, resolution_proof_file_type, " +
+                "resolution_proof_file_size, resolution_proof_uploaded_at, resolution_proof_uploaded_by, " +
+                "created_at, created_by, updated_at, updated_by " +
                 "FROM public.finance_reconciliation_item ";
     }
 
@@ -506,6 +520,12 @@ public class DbFinanceReconciliation {
                 rs.getBigDecimal("difference_amount"),
                 rs.getString("resolution_status"),
                 rs.getString("resolution_note"),
+                rs.getString("resolution_proof_file_key"),
+                rs.getString("resolution_proof_file_name"),
+                rs.getString("resolution_proof_file_type"),
+                nullableLong(rs, "resolution_proof_file_size"),
+                instant(rs, "resolution_proof_uploaded_at"),
+                nullableInteger(rs, "resolution_proof_uploaded_by"),
                 instant(rs, "created_at"),
                 nullableInteger(rs, "created_by"),
                 instant(rs, "updated_at"),
@@ -548,6 +568,11 @@ public class DbFinanceReconciliation {
 
     private Integer nullableInteger(ResultSet rs, String column) throws SQLException {
         int value = rs.getInt(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    private Long nullableLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
         return rs.wasNull() ? null : value;
     }
 }
