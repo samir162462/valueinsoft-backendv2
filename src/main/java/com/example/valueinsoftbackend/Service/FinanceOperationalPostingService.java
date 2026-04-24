@@ -221,6 +221,38 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(damagedItem.getCashierUser(), request);
     }
 
+    public void enqueueDamagedItemSettlement(int companyId,
+                                            int branchId,
+                                            DamagedItem damagedItem,
+                                            int damagedItemId) {
+        if (damagedItem.getAmountTP() <= 0) {
+            return;
+        }
+
+        LocalDate postingDate = LocalDate.now();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            return; // Or handle as error
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "payment",
+                "damage_settlement",
+                "damaged-item-settlement-" + damagedItemId,
+                postingDate,
+                fiscalPeriodId,
+                Map.of(
+                        "amount", money(damagedItem.getAmountTP()),
+                        "damagedItemId", damagedItemId,
+                        "productName", damagedItem.getProductName(),
+                        "settledBy", damagedItem.getCashierUser()
+                ));
+
+        financePostingRequestService.createPostingRequestFromSystem(damagedItem.getCashierUser(), request);
+    }
+
     public void enqueueBranchStockTransfer(int companyId,
                                            int sourceBranchId,
                                            int destinationBranchId,

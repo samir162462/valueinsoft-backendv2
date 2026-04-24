@@ -7,6 +7,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 public class CreateDamagedItemRequest {
 
     @PositiveOrZero(message = "DId must be zero or greater")
+    @com.fasterxml.jackson.annotation.JsonProperty("DId")
     private int DId;
 
     @Positive(message = "productId must be positive")
@@ -41,6 +42,7 @@ public class CreateDamagedItemRequest {
     public CreateDamagedItemRequest() {
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("DId")
     public int getDId() {
         return DId;
     }

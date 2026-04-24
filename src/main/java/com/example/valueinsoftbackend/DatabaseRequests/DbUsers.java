@@ -90,6 +90,16 @@ public class DbUsers {
         return jdbcTemplate.query(sql, userRowMapper);
     }
 
+    public List<User> searchUsersByName(String name, int branchId) {
+        String sql = "SELECT " + USER_SELECT_COLUMNS + " FROM public.users WHERE (\"firstName\" ILIKE ? OR \"lastName\" ILIKE ? OR \"userName\" ILIKE ?)";
+        String query = "%" + name + "%";
+        if (branchId != 0) {
+            sql += " AND \"branchId\" = ?";
+            return jdbcTemplate.query(sql, userRowMapper, query, query, query, branchId);
+        }
+        return jdbcTemplate.query(sql, userRowMapper, query, query, query);
+    }
+
     public String getUserImg(String userName) {
         String sql = "SELECT \"imgFile\" FROM public.users WHERE \"userName\" = ?";
         List<String> images = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("imgFile"), userName);

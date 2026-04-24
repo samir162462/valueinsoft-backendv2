@@ -150,4 +150,18 @@ public class DbPosDamagedList {
                 " WHERE \"DId\" = ? AND \"branchId\" = ?";
         return jdbcTemplate.update(sql, damagedId, branchId) == 1;
     }
+
+    public boolean updateDamagedItemPaymentStatus(int companyId, int branchId, int damagedId, boolean paid) {
+        String sql = "UPDATE " + TenantSqlIdentifiers.damagedListTable(companyId) +
+                " SET \"Paid\" = ? WHERE \"DId\" = ? AND \"branchId\" = ?";
+        return jdbcTemplate.update(sql, paid, damagedId, branchId) == 1;
+    }
+
+    public DamagedItem getDamagedItemById(int companyId, int branchId, int damagedId) {
+        String sql = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", " +
+                "\"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\", \"quantity\" " +
+                "FROM " + TenantSqlIdentifiers.damagedListTable(companyId) + " WHERE \"branchId\" = ? AND \"DId\" = ?";
+        List<DamagedItem> items = jdbcTemplate.query(sql, DAMAGED_ITEM_ROW_MAPPER, branchId, damagedId);
+        return items.isEmpty() ? null : items.get(0);
+    }
 }

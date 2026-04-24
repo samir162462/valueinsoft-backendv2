@@ -375,7 +375,7 @@ public class DbCompany {
                 "    \"ProductId\" integer NOT NULL,\n" +
                 "    \"ProductName\" character varying COLLATE pg_catalog.\"default\" NOT NULL,\n" +
                 "    \"Time\" timestamp without time zone NOT NULL,\n" +
-                "    \"Reason\" character varying(15) COLLATE pg_catalog.\"default\",\n" +
+                "    \"Reason\" character varying(255) COLLATE pg_catalog.\"default\",\n" +
                 "    \"Damaged by\" character varying COLLATE pg_catalog.\"default\",\n" +
                 "    \"Cashier user\" character varying COLLATE pg_catalog.\"default\",\n" +
                 "    \"AmountTP\" integer,\n" +
@@ -761,6 +761,9 @@ public class DbCompany {
         statements.add("INSERT INTO " + schemaName + ".inventory_uom_conversion (from_uom_code, to_uom_code, multiplier) VALUES " +
                 "('KILOGRAM', 'GRAM', 1000.000000), ('LITER', 'ML', 1000.000000) " +
                 "ON CONFLICT (from_uom_code, to_uom_code) DO UPDATE SET multiplier = EXCLUDED.multiplier");
+        statements.add("INSERT INTO " + schemaName + ".inventory_uom_conversion (from_uom_code, to_uom_code, multiplier) VALUES " +
+                "('KILOGRAM', 'GRAM', 1000.000000), ('LITER', 'ML', 1000.000000) " +
+                "ON CONFLICT (from_uom_code, to_uom_code) DO UPDATE SET multiplier = EXCLUDED.multiplier");
         statements.add("INSERT INTO " + schemaName + ".inventory_pricing_policy (pricing_policy_code, display_name, strategy_type, config_json) VALUES " +
                 "('FIXED_RETAIL', 'Fixed Retail Price', 'FIXED', '{}'::jsonb), " +
                 "('MARKUP_COST', 'Markup From Cost', 'MARKUP', '{\"base\":\"buying_price\"}'::jsonb), " +
@@ -778,4 +781,3 @@ public class DbCompany {
         return statements;
     }
 }
-

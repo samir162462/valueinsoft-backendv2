@@ -7,6 +7,7 @@ package com.example.valueinsoftbackend.Model;
 import java.sql.Timestamp;
 
 public class DamagedItem {
+    @com.fasterxml.jackson.annotation.JsonProperty("DId")
     int DId;
     int productId;
     String productName;
@@ -41,6 +42,7 @@ public class DamagedItem {
         this.quantity = quantity;
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("DId")
     public int getDId() {
         return DId;
     }

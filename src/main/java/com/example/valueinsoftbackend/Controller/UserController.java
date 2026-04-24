@@ -71,6 +71,21 @@ public class UserController {
         return (ArrayList<User>) dbUsers.getAllUsers(branchId);
     }
 
+    @RequestMapping(value = "/{companyId}/{branchId}/searchUsers/{name}", method = RequestMethod.GET)
+    @ResponseBody
+    public ArrayList<User> searchUsers(@PathVariable("branchId") int branchId,
+                                       @PathVariable("companyId") int companyId,
+                                       @PathVariable("name") String name,
+                                       Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "users.account.read"
+        );
+        return (ArrayList<User>) dbUsers.searchUsersByName(name, branchId);
+    }
+
     @RequestMapping(value = "/checkUserEmail/{Email}", method = RequestMethod.GET)
     @ResponseBody
     public boolean checkUserEmail(@PathVariable("Email") String email) {

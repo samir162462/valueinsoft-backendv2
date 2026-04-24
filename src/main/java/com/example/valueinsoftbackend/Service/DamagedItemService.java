@@ -147,4 +147,60 @@ public class DamagedItemService {
         log.info("Deleted damaged-item {} for company {} branch {}: {}", damagedId, companyId, branchId, deleted);
         return deleted;
     }
+
+    @Transactional
+    public boolean settleDamagedItem(int companyId, int branchId, int damagedId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        TenantSqlIdentifiers.requirePositive(damagedId, "DId");
+        
+        DamagedItem item = dbPosDamagedList.getDamagedItemById(companyId, branchId, damagedId);
+        if (item == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "DAMAGED_ITEM_NOT_FOUND", "Damaged item not found");
+        }
+
+        boolean updated = dbPosDamagedList.updateDamagedItemPaymentStatus(companyId, branchId, damagedId, true);
+        if (updated) {
+            enqueueFinanceDamagedItemSettlementAfterCommit(companyId, branchId, item, damagedId);
+        }
+        
+        log.info("Settled damaged-item {} for company {} branch {}: {}", damagedId, companyId, branchId, updated);
+        return updated;
+    }
+
+    private void enqueueFinanceDamagedItemSettlementAfterCommit(int companyId,
+                                                               int branchId,
+                                                               DamagedItem item,
+                                                               int damagedItemId) {
+        Runnable enqueue = () -> {
+            try {
+                financeOperationalPostingService.enqueueDamagedItemSettlement(
+                        companyId,
+                        branchId,
+                        item,
+                        damagedItemId
+                );
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Damaged item settlement {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                        damagedItemId,
+                        companyId,
+                        branchId,
+                        exception.getMessage()
+                );
+            }
+        };
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            enqueue.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                enqueue.run();
+            }
+        });
+    }
 }

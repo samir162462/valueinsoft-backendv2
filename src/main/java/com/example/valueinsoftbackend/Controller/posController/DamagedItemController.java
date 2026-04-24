@@ -78,23 +78,22 @@ public class DamagedItemController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(res);
     }
 
-    @RequestMapping(value = "{companyId}/{branchId}/update/{id}", method = RequestMethod.PUT)
-    public Map<String, String> updateSupplier(
-            @Valid @RequestBody SupplierUpdateRequest supplier,
+    @PutMapping("{companyName}/{branchId}/settle/{DId}")
+    public Map<String, Boolean> settleDamagedItem(
+            @PathVariable(value = "DId") @Positive int DId,
+            @PathVariable("companyName") @Positive int companyId,
             @PathVariable @Positive int branchId,
-            @PathVariable @Positive int companyId,
-            @PathVariable("id") @Positive int supplierId,
             Principal principal
-
     ) {
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
                 companyId,
                 branchId,
-                "suppliers.account.edit"
+                "inventory.adjustment.edit"
         );
-        Map<String, String> response = new HashMap<>();
-        response.put("Response", supplierService.updateSupplier(companyId, branchId, supplierId, supplier));
+        Map<String, Boolean> response = new HashMap<>();
+        boolean bol = damagedItemService.settleDamagedItem(companyId, branchId, DId);
+        response.put("settled", bol);
         return response;
     }
 
