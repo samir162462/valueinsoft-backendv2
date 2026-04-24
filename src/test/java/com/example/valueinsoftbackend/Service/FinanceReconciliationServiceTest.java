@@ -49,6 +49,7 @@ class FinanceReconciliationServiceTest {
     private AuthorizationService authorizationService;
     private FinanceAuditService financeAuditService;
     private FinanceOperationalPostingService financeOperationalPostingService;
+    private StorageService storageService;
     private FinanceReconciliationService service;
 
     @BeforeEach
@@ -58,12 +59,14 @@ class FinanceReconciliationServiceTest {
         authorizationService = Mockito.mock(AuthorizationService.class);
         financeAuditService = Mockito.mock(FinanceAuditService.class);
         financeOperationalPostingService = Mockito.mock(FinanceOperationalPostingService.class);
+        storageService = Mockito.mock(StorageService.class);
         service = new FinanceReconciliationService(
                 dbFinanceReconciliation,
                 dbFinanceSetup,
                 authorizationService,
                 financeAuditService,
                 financeOperationalPostingService,
+                storageService,
                 new ObjectMapper());
 
         when(dbFinanceSetup.companyExists(COMPANY_ID)).thenReturn(true);
@@ -309,7 +312,7 @@ class FinanceReconciliationServiceTest {
                         "sam",
                         RUN_ID,
                         ITEM_ID,
-                        new FinanceReconciliationItemResolutionRequest(COMPANY_ID, "resolved", " ")));
+                        new FinanceReconciliationItemResolutionRequest(COMPANY_ID, "resolved", " ", null, null, null, null)));
 
         assertEquals("FINANCE_RECONCILIATION_RESOLUTION_NOTE_REQUIRED", exception.getCode());
     }
@@ -323,7 +326,7 @@ class FinanceReconciliationServiceTest {
                         "sam",
                         RUN_ID,
                         ITEM_ID,
-                        new FinanceReconciliationItemResolutionRequest(COMPANY_ID, "proposed", null)));
+                        new FinanceReconciliationItemResolutionRequest(COMPANY_ID, "proposed", null, null, null, null, null)));
 
         assertEquals("FINANCE_RECONCILIATION_ITEM_RUN_MISMATCH", exception.getCode());
     }
@@ -336,12 +339,15 @@ class FinanceReconciliationServiceTest {
         updated.setResolutionNote("Matched with provider support evidence");
         when(dbFinanceReconciliation.getItemById(COMPANY_ID, ITEM_ID)).thenReturn(existing);
         when(dbFinanceReconciliation.getRunById(COMPANY_ID, RUN_ID)).thenReturn(run("completed_with_exceptions", "bank"));
+        FinanceReconciliationItemResolutionRequest request = new FinanceReconciliationItemResolutionRequest(
+                COMPANY_ID, "resolved", "Matched with provider support evidence", null, null, null, null);
         when(dbFinanceReconciliation.updateItemResolution(
-                COMPANY_ID,
-                ITEM_ID,
-                "resolved",
-                "Matched with provider support evidence",
-                17)).thenReturn(updated);
+                eq(COMPANY_ID),
+                eq(ITEM_ID),
+                eq("resolved"),
+                eq("Matched with provider support evidence"),
+                any(),
+                eq(17))).thenReturn(updated);
 
         FinanceReconciliationItemItem response = service.updateItemResolutionForAuthenticatedUser(
                 "sam",
@@ -350,7 +356,8 @@ class FinanceReconciliationServiceTest {
                 new FinanceReconciliationItemResolutionRequest(
                         COMPANY_ID,
                         "resolved",
-                        " Matched with provider support evidence "));
+                        " Matched with provider support evidence ",
+                        null, null, null, null));
 
         assertEquals("resolved", response.getResolutionStatus());
         verify(dbFinanceReconciliation).refreshRunDifference(COMPANY_ID, RUN_ID, 17);
@@ -433,6 +440,12 @@ class FinanceReconciliationServiceTest {
                 "difference",
                 new BigDecimal("12.3400"),
                 "unresolved",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null,
                 Instant.now(),
                 17,
