@@ -447,6 +447,43 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(receipt.getUserRecived(), request);
     }
 
+    public void enqueueExpense(int companyId,
+                               int branchId,
+                               com.example.valueinsoftbackend.Model.Expenses expense,
+                               String actorName) {
+        if (expense == null || expense.getAmount() == null || expense.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        LocalDate postingDate = expense.getTime().toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for expense posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "expense",
+                "operational_expense",
+                "expense-" + expense.getEId(),
+                postingDate,
+                fiscalPeriodId,
+                Map.of(
+                        "amount", money(expense.getAmount()),
+                        "expenseAccountId", expense.getExpenseAccountId(),
+                        "paymentAccountId", expense.getPaymentAccountId(),
+                        "description", expense.getName(),
+                        "userName", expense.getUser(),
+                        "type", expense.getType()
+                ));
+
+        financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
     private void enqueuePaymentSettlement(int companyId,
                                           int branchId,
                                           String sourceType,

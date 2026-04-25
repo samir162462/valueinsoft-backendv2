@@ -54,4 +54,46 @@ public class ExpensesStaticController {
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(expensesService.createExpense(companyId, branchId, body, true));
     }
+
+    @PostMapping("{companyId}/{branchId}/update")
+    public ResponseEntity<Object> update(@PathVariable @Positive int companyId,
+                                         @PathVariable @Positive int branchId,
+                                         @Valid @RequestBody ExpenseUpsertRequest body,
+                                         Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "finance.entry.create"
+        );
+        return ResponseEntity.ok(expensesService.updateExpense(companyId, branchId, body));
+    }
+
+    @PostMapping("{companyId}/{branchId}/post/{eId}")
+    public ResponseEntity<Object> post(@PathVariable @Positive int companyId,
+                                       @PathVariable @Positive int branchId,
+                                       @PathVariable @Positive int eId,
+                                       Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "finance.entry.create"
+        );
+        return ResponseEntity.ok(expensesService.postExpense(companyId, branchId, eId, principal.getName(), true));
+    }
+
+    @GetMapping("{companyId}/{branchId}/history/{eId}")
+    public ResponseEntity<Object> getHistory(@PathVariable @Positive int companyId,
+                                             @PathVariable @Positive int branchId,
+                                             @PathVariable @Positive int eId,
+                                             Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "finance.entry.read"
+        );
+        return ResponseEntity.ok(expensesService.getStaticExpenseHistory(companyId, branchId, eId));
+    }
 }

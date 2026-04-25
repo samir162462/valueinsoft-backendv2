@@ -25,7 +25,11 @@ public class DbPlatformAdminFinanceReadModels {
             rs.getInt("branchId"),
             rs.getString("user"),
             rs.getString("name"),
-            rs.getString("period")
+            rs.getString("period"),
+            rs.getObject("expense_account_id", java.util.UUID.class),
+            rs.getObject("payment_account_id", java.util.UUID.class),
+            rs.getObject("posted_journal_entry_id", java.util.UUID.class),
+            rs.getObject("next_due_date") != null ? rs.getDate("next_due_date").toLocalDate() : null
     );
 
     private static final RowMapper<ClientReceipt> CLIENT_RECEIPT_ROW_MAPPER = (rs, rowNum) -> new ClientReceipt(
@@ -61,7 +65,8 @@ public class DbPlatformAdminFinanceReadModels {
         String whereClause = buildBranchWhereClause(branchId);
         String table = TenantSqlIdentifiers.expensesTable(companyId, false);
         String countSql = "SELECT COUNT(*) FROM " + table + whereClause;
-        String dataSql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name, period " +
+        String dataSql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name, period, " +
+                "expense_account_id, payment_account_id, posted_journal_entry_id, next_due_date " +
                 "FROM " + table + whereClause +
                 " ORDER BY \"time\" DESC, \"eId\" DESC LIMIT :limit OFFSET :offset";
 

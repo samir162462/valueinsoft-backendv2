@@ -24,7 +24,11 @@ public final class TenantSqlIdentifiers {
     }
 
     public static String expensesTable(int companyId, boolean isStatic) {
-        return companySchema(companyId) + ".\"" + (isStatic ? "ExpensesStatic" : "Expenses") + "\"";
+        return companySchema(companyId) + "." + (isStatic ? "\"ExpensesStatic\"" : "\"Expenses\"");
+    }
+
+    public static String expensesStaticHistoryTable(int companyId) {
+        return companySchema(companyId) + ".\"ExpensesStaticHistory\"";
     }
 
     public static String inventoryTransactionsTable(int companyId, int branchId) {
