@@ -130,17 +130,11 @@ public class DbPosOrder {
         TenantSqlIdentifiers.requirePositive(spId, "spId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
 
-        String shiftTable = TenantSqlIdentifiers.shiftPeriodTable(companyId);
-        String sql = "WITH sales AS (" +
-                " SELECT \"ShiftStartTime\", \"ShiftEndTime\" FROM " + shiftTable +
-                " WHERE \"branchId\" = ? AND \"PosSOID\" = ?" +
-                ") " +
-                buildOrdersWithDetailsSelect(companyId, branchId) +
-                " WHERE ord.\"orderTime\" BETWEEN (SELECT \"ShiftStartTime\" FROM sales) " +
-                "AND COALESCE((SELECT \"ShiftEndTime\" FROM sales), CURRENT_TIMESTAMP) " +
-                "ORDER BY ord.\"orderId\" DESC";
+        // Using direct shift_id linkage is more reliable than time-based BETWEEN
+        String sql = buildOrdersWithDetailsSelect(companyId, branchId) +
+                " WHERE ord.shift_id = ? ORDER BY ord.\"orderId\" DESC";
 
-        return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> mapOrder(rs, branchId), branchId, spId));
+        return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> mapOrder(rs, branchId), spId));
     }
 
     public ArrayList<Order> getOrdersByClientId(int clientId, int branchId, int companyId) {

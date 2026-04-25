@@ -11,6 +11,8 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -158,6 +160,21 @@ public class DbClient {
         } catch (Exception e) {
             log.error("Failed to delete client {} for company {} branch {}", clientId, companyId, branchId, e);
             return false;
+        }
+    }
+
+    public int countNewClientsByDay(int companyId, int branchId, String dateStr) {
+        try {
+            LocalDate date = LocalDate.parse(dateStr);
+            LocalDateTime dayStart = date.atStartOfDay();
+            LocalDateTime dayEnd = dayStart.plusDays(1);
+
+            String sql = "SELECT COUNT(*)::integer FROM " + TenantSqlIdentifiers.clientTable(companyId) +
+                    " WHERE \"branchId\" = ? AND \"registeredTime\" >= ? AND \"registeredTime\" < ?";
+            return jdbcTemplate.queryForObject(sql, Integer.class, branchId, Timestamp.valueOf(dayStart), Timestamp.valueOf(dayEnd));
+        } catch (Exception e) {
+            log.error("Failed to count new clients for company {} branch {} on {}", companyId, branchId, dateStr, e);
+            return 0;
         }
     }
 

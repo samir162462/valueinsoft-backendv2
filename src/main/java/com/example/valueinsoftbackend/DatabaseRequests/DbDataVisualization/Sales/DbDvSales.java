@@ -11,6 +11,9 @@ import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
@@ -22,27 +25,62 @@ public class DbDvSales {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public List<DvSales> getMonthlySales(int companyId, String currentMonth, int branchId) {
+    public List<DvSales> getMonthlySales(Integer companyId, Integer branchId, String dateStr) {
+        LocalDate date = LocalDate.parse(dateStr);
+        LocalDateTime monthStart = date.withDayOfMonth(1).atStartOfDay();
+        LocalDateTime monthEnd = monthStart.plusMonths(1);
+
         String sql = "SELECT DATE(\"orderTime\") AS salesDate, " +
-                "CAST(date_trunc('month', ?::date) AS date) AS firstDay, " +
-                "(date_trunc('month', ?::date) + interval '1 month' - interval '1 day')::date AS lastDay, " +
-                "COALESCE((SUM(\"orderTotal\") - SUM(\"orderBouncedBack\")), 0)::integer AS sum " +
+                "CAST(date_trunc('month', ?::timestamp) AS date) AS firstDay, " +
+                "(date_trunc('month', ?::timestamp) + interval '1 month' - interval '1 day')::date AS lastDay, " +
+                "COALESCE(SUM(\"orderTotal\"), 0) - COALESCE(SUM(\"orderBouncedBack\"), 0) AS sum, " +
+                "COALESCE(SUM(\"orderIncome\"), 0)::integer AS income, " +
+                "COUNT(\"orderId\")::integer AS count " +
                 "FROM " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " " +
-                "WHERE \"orderTime\"::date >= CAST(date_trunc('month', ?::date) AS date) " +
-                "AND \"orderTime\"::date < (date_trunc('month', ?::date) + interval '1 month')::date " +
-                "GROUP BY DATE(\"orderTime\") ORDER BY DATE(\"orderTime\") ASC";
-        return jdbcTemplate.query(
-                sql,
-                (rs, rowNum) -> new DvSales(rs.getDate("firstDay"), rs.getDate("lastDay"), rs.getDate("salesDate"), rs.getInt("sum")),
-                currentMonth,
-                currentMonth,
-                currentMonth,
-                currentMonth
-        );
+                "WHERE \"orderTime\" >= ? AND \"orderTime\" < ? " +
+                "GROUP BY DATE(\"orderTime\") " +
+                "ORDER BY DATE(\"orderTime\") ASC";
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new DvSales(
+                rs.getDate("firstDay"),
+                rs.getDate("lastDay"),
+                rs.getDate("salesDate"),
+                rs.getInt("sum"),
+                rs.getInt("income"),
+                rs.getInt("count")
+        ), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthEnd));
+    }
+
+    public DvSales getDailyKpis(Integer companyId, Integer branchId, String dateStr) {
+        LocalDate date = LocalDate.parse(dateStr);
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd = dayStart.plusDays(1);
+
+        String sql = "SELECT " +
+                "COALESCE(SUM(\"orderTotal\"), 0) - COALESCE(SUM(\"orderBouncedBack\"), 0) AS total, " +
+                "COALESCE(SUM(\"orderIncome\"), 0)::integer AS income, " +
+                "COUNT(\"orderId\")::integer AS count " +
+                "FROM " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " " +
+                "WHERE \"orderTime\" >= ? AND \"orderTime\" < ?";
+
+        try {
+            Timestamp lastOrder = jdbcTemplate.queryForObject("SELECT MAX(\"orderTime\") FROM " + TenantSqlIdentifiers.orderTable(companyId, branchId), Timestamp.class);
+            System.out.println("DEBUG: Latest Order in DB for Branch " + branchId + " is: " + lastOrder);
+        } catch (Exception e) {}
+
+        Timestamp start = Timestamp.valueOf(dayStart);
+        Timestamp end = Timestamp.valueOf(dayEnd);
+        System.out.println("DEBUG: SQL Range -> Start: " + start + " End: " + end);
+
+        return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> new DvSales(
+                rs.getInt("total"),
+                rs.getInt("income"),
+                rs.getInt("count")
+        ), start, end);
     }
 
     public List<DVSalesYearly> getYearlySales(int companyId, int currentYear, int branchId) {
-        String sql = "SELECT COALESCE((SUM(\"orderTotal\") - SUM(\"orderBouncedBack\")), 0)::integer AS sum, " +
+        String sql = "SELECT COALESCE(SUM(\"orderTotal\"), 0) - COALESCE(SUM(\"orderBouncedBack\"), 0) AS sum, " +
                 "to_char(date_trunc('month', \"orderTime\"), 'Mon ') AS month, " +
                 "EXTRACT(MONTH FROM date_trunc('month', \"orderTime\"))::integer AS num, " +
                 "COALESCE(SUM(\"orderIncome\"), 0)::integer AS income " +
@@ -62,7 +100,7 @@ public class DbDvSales {
                 "COALESCE(SUM(od.\"total\"), 0)::integer AS sumTotal " +
                 "FROM " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) + " od " +
                 "JOIN " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " o ON od.\"orderId\" = o.\"orderId\" " +
-                "WHERE od.\"bouncedBack\" < 1 AND o.\"orderTime\"::date >= ?::date AND o.\"orderTime\"::date <= ?::date " +
+                "WHERE od.\"bouncedBack\" < 1 AND o.\"orderTime\" >= ?::timestamp AND o.\"orderTime\" <= ?::timestamp " +
                 "GROUP BY od.\"itemName\" ORDER BY SumQuantity DESC, NumberOfOrders";
         return jdbcTemplate.query(
                 sql,

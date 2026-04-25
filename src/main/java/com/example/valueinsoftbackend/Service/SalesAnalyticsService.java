@@ -54,7 +54,7 @@ public class SalesAnalyticsService {
         TenantSqlIdentifiers.requirePositive(request.getCompanyId(), "companyId");
         TenantSqlIdentifiers.requirePositive(request.getBranchId(), "branchId");
         RequestDateParser.parseSqlDate(request.getCurrentMonth(), "currentMonth");
-        return dbDvSales.getMonthlySales(request.getCompanyId(), request.getCurrentMonth().trim(), request.getBranchId());
+        return dbDvSales.getMonthlySales(request.getCompanyId(), request.getBranchId(), request.getCurrentMonth().trim());
     }
 
     public List<DVSalesYearly> getYearlySales(SalesOfYearRequest request) {
