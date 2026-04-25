@@ -450,6 +450,61 @@ public class FinanceReconciliationService {
         return updated;
     }
 
+    public com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationItemItem uploadProofRelay(
+            String authenticatedName,
+            UUID reconciliationRunId,
+            UUID reconciliationItemId,
+            int companyId,
+            String resolutionStatus,
+            String resolutionNote,
+            org.springframework.web.multipart.MultipartFile file) {
+        
+        requireCompany(companyId);
+        FinanceReconciliationItemItem item = requireItem(companyId, reconciliationItemId);
+        if (!item.getReconciliationRunId().equals(reconciliationRunId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_ITEM_RUN_MISMATCH",
+                    "Reconciliation item does not belong to the requested run");
+        }
+        FinanceReconciliationRunItem run = requireRun(companyId, item.getReconciliationRunId());
+        authorizeEdit(authenticatedName, companyId, run.getBranchId());
+
+        if (file.getSize() > 1024 * 1024) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_PROOF_TOO_LARGE", "Max 1MB");
+        }
+
+        String contentType = file.getContentType();
+        String extension = contentType.contains("pdf") ? "pdf" : "jpg";
+        String fileKey = String.format(java.util.Locale.ROOT, "finance/reconciliation/%d/%s/%s/%s.%s",
+                companyId, reconciliationRunId, reconciliationItemId, UUID.randomUUID(), extension);
+
+        try {
+            // Internal upload to S3
+            storageService.uploadFile(fileKey, file.getBytes(), contentType);
+            
+            // Resolve actual user ID for the foreign key
+            Integer actorUserId = financeAuditService.resolveActorUserId(authenticatedName);
+
+            // Update database
+            return dbFinanceReconciliation.updateItemResolution(
+                    companyId,
+                    reconciliationItemId,
+                    resolutionStatus,
+                    resolutionNote,
+                    new com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationItemResolutionRequest(
+                            companyId,
+                            resolutionStatus,
+                            resolutionNote,
+                            fileKey,
+                            file.getOriginalFilename(),
+                            contentType,
+                            file.getSize()
+                    ),
+                    actorUserId); 
+        } catch (java.io.IOException e) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "UPLOAD_FAILED", "Failed to relay upload to S3");
+        }
+    }
+
     public com.example.valueinsoftbackend.Model.Finance.FinanceReconciliationProofUploadResponse prepareProofUploadForAuthenticatedUser(
             String authenticatedName,
             UUID reconciliationRunId,
@@ -483,7 +538,7 @@ public class FinanceReconciliationService {
             default -> "bin";
         };
 
-        String fileKey = String.format("finance/reconciliation/%d/%s/%s/%s.%s",
+        String fileKey = String.format(java.util.Locale.ROOT, "finance/reconciliation/%d/%s/%s/%s.%s",
                 request.getCompanyId(),
                 reconciliationRunId,
                 reconciliationItemId,

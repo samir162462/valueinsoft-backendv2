@@ -21,6 +21,15 @@ public interface StorageService {
     URL generatePresignedDownloadUrl(String key);
 
     /**
+     * Uploads a file directly to storage.
+     *
+     * @param key         The destination key (path).
+     * @param content     The byte content of the file.
+     * @param contentType The MIME type.
+     */
+    void uploadFile(String key, byte[] content, String contentType);
+
+    /**
      * Deletes a file from storage.
      *
      * @param key The key (path) of the file to delete.

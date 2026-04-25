@@ -50,6 +50,19 @@ public class S3StorageService implements StorageService {
     }
 
     @Override
+    public void uploadFile(String key, byte[] content, String contentType) {
+        log.info("Uploading file to S3: {}, size: {} bytes", key, content.length);
+        
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket(s3Properties.getBucketName())
+                .key(key)
+                .contentType(contentType)
+                .build();
+
+        s3Client.putObject(putObjectRequest, software.amazon.awssdk.core.sync.RequestBody.fromBytes(content));
+    }
+
+    @Override
     public URL generatePresignedDownloadUrl(String key) {
         log.info("Generating presigned download URL for key: {}", key);
         

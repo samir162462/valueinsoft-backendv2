@@ -155,4 +155,23 @@ public class FinanceReconciliationController {
                 companyId,
                 reconciliationItemId);
     }
+
+    @PostMapping("/{reconciliationRunId}/items/{reconciliationItemId}/upload-proof")
+    public FinanceReconciliationItemItem uploadProof(
+            Principal principal,
+            @PathVariable("reconciliationRunId") UUID reconciliationRunId,
+            @PathVariable("reconciliationItemId") UUID reconciliationItemId,
+            @RequestParam("companyId") int companyId,
+            @RequestParam("resolutionStatus") String resolutionStatus,
+            @RequestParam("resolutionNote") String resolutionNote,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return financeReconciliationService.uploadProofRelay(
+                principal.getName(),
+                reconciliationRunId,
+                reconciliationItemId,
+                companyId,
+                resolutionStatus,
+                resolutionNote,
+                file);
+    }
 }

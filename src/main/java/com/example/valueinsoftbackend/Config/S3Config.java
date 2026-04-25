@@ -34,9 +34,28 @@ public class S3Config {
         }
 
         if (s3Properties.getEndpoint() != null && !s3Properties.getEndpoint().isBlank()) {
-            builder.endpointOverride(URI.create(s3Properties.getEndpoint()))
-                   .forcePathStyle(true);
+            builder.endpointOverride(URI.create(s3Properties.getEndpoint()));
         }
+        
+        // Comprehensive compatibility for S3-compatible systems
+        builder.serviceConfiguration(software.amazon.awssdk.services.s3.S3Configuration.builder()
+                .checksumValidationEnabled(false)
+                .chunkedEncodingEnabled(false)
+                .pathStyleAccessEnabled(false) // Reverting back to Virtual Host, which is correct for Tigris
+                .build());
+
+        builder.overrideConfiguration(c -> c.addExecutionInterceptor(new software.amazon.awssdk.core.interceptor.ExecutionInterceptor() {
+            @Override
+            public software.amazon.awssdk.http.SdkHttpRequest modifyHttpRequest(software.amazon.awssdk.core.interceptor.Context.ModifyHttpRequest context, software.amazon.awssdk.core.interceptor.ExecutionAttributes executionAttributes) {
+                if (context.httpRequest().headers().containsKey("Expect")) {
+                    return context.httpRequest().toBuilder().removeHeader("Expect").build();
+                }
+                return context.httpRequest();
+            }
+        }));
+
+        builder.httpClientBuilder(software.amazon.awssdk.http.apache.ApacheHttpClient.builder()
+                .expectContinueEnabled(false));
 
         return builder.build();
     }
@@ -44,7 +63,10 @@ public class S3Config {
     @Bean
     public S3Presigner s3Presigner() {
         software.amazon.awssdk.services.s3.presigner.S3Presigner.Builder builder = S3Presigner.builder()
-                .region(Region.of(s3Properties.getRegion()));
+                .region(Region.of(s3Properties.getRegion()))
+                .serviceConfiguration(software.amazon.awssdk.services.s3.S3Configuration.builder()
+                        .pathStyleAccessEnabled(false)
+                        .build());
 
         if (isCredentialsProvided()) {
             AwsBasicCredentials credentials = AwsBasicCredentials.create(
