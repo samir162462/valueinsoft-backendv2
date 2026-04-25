@@ -27,7 +27,8 @@ public class DbExpenses {
             rs.getTimestamp("time"),
             rs.getInt("branchId"),
             rs.getString("user"),
-            rs.getString("name")
+            rs.getString("name"),
+            rs.getString("period")
     );
 
     private static final RowMapper<ExpensesSum> expensesSumRowMapper = (rs, rowNum) -> new ExpensesSum(
@@ -51,7 +52,7 @@ public class DbExpenses {
     public List<Expenses> getAllExpensesItems(int branchId, int companyId, boolean isStatic) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         self.provisionExpenseTables(companyId);
-        String sql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name " +
+        String sql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name, period " +
                 "FROM " + TenantSqlIdentifiers.expensesTable(companyId, isStatic) + " WHERE \"branchId\" = ?";
         return jdbcTemplate.query(sql, expensesRowMapper, branchId);
     }
@@ -77,7 +78,7 @@ public class DbExpenses {
         }
 
         String sql = "INSERT INTO " + TenantSqlIdentifiers.expensesTable(companyId, isStatic) +
-                " (type, amount, \"time\", \"branchId\", \"user\", name) VALUES (?, ?, ?, ?, ?, ?)";
+                " (type, amount, \"time\", \"branchId\", \"user\", name, period) VALUES (?, ?, ?, ?, ?, ?, ?)";
         int rows = jdbcTemplate.update(
                 sql,
                 expenses.getType(),
@@ -85,7 +86,8 @@ public class DbExpenses {
                 new Timestamp(System.currentTimeMillis()),
                 branchId,
                 expenses.getUser(),
-                expenses.getName()
+                expenses.getName(),
+                expenses.getPeriod()
         );
         if (rows != 1) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "EXPENSE_INSERT_FAILED", "Record Not Inserted");
@@ -96,7 +98,7 @@ public class DbExpenses {
     public String updateExpenses(int branchId, int companyId, Expenses expenses) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         String sql = "UPDATE " + TenantSqlIdentifiers.expensesTable(companyId, false) +
-                " SET type = ?, amount = ?, \"time\" = ?, \"branchId\" = ?, \"user\" = ?, name = ? WHERE \"eId\" = ?";
+                " SET type = ?, amount = ?, \"time\" = ?, \"branchId\" = ?, \"user\" = ?, name = ?, period = ? WHERE \"eId\" = ?";
         int rows = jdbcTemplate.update(
                 sql,
                 expenses.getType(),
@@ -105,6 +107,7 @@ public class DbExpenses {
                 branchId,
                 expenses.getUser(),
                 expenses.getName(),
+                expenses.getPeriod(),
                 expenses.getExId()
         );
         if (rows != 1) {
@@ -122,7 +125,9 @@ public class DbExpenses {
 
     private boolean isRelationNotFound(BadSqlGrammarException e) {
         String sqlState = e.getSQLException().getSQLState();
-        return "42P01".equals(sqlState) || (sqlState != null && sqlState.startsWith("42"));
+        // 42P01: relation does not exist
+        // 42703: undefined_column (happens when the table exists but column is missing)
+        return "42P01".equals(sqlState) || "42703".equals(sqlState) || (sqlState != null && sqlState.startsWith("42"));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -131,10 +136,15 @@ public class DbExpenses {
         String owner = "postgres"; // Fallback to default postgres owner
 
         try {
+            // Ensure tables exist
             jdbcTemplate.execute(createTableSql(schema, "Expenses", owner));
             jdbcTemplate.execute(createTableSql(schema, "ExpensesStatic", owner));
+
+            // Ensure columns exist (for existing tables)
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".\"Expenses\" ADD COLUMN IF NOT EXISTS period character varying(20)");
+            jdbcTemplate.execute("ALTER TABLE " + schema + ".\"ExpensesStatic\" ADD COLUMN IF NOT EXISTS period character varying(20)");
         } catch (Exception e) {
-            // Ignore if already created by another thread
+            // Ignore if already handled
         }
     }
 
@@ -147,6 +157,7 @@ public class DbExpenses {
                 "    \"branchId\" integer,\n" +
                 "    \"user\" character varying(25) COLLATE pg_catalog.\"default\",\n" +
                 "    name character varying(50) COLLATE pg_catalog.\"default\",\n" +
+                "    period character varying(20) COLLATE pg_catalog.\"default\",\n" +
                 "    CONSTRAINT \"" + tableName + "_pkey\" PRIMARY KEY (\"eId\")\n" +
                 ") TABLESPACE pg_default;\n" +
                 "ALTER TABLE " + schema + ".\"" + tableName + "\" OWNER to " + owner + ";";

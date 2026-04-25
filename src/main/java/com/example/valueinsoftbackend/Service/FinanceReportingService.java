@@ -50,7 +50,7 @@ public class FinanceReportingService {
                                                                           String currencyCode,
                                                                           boolean includeZeroBalances) {
         requireCompany(companyId);
-        requireFiscalPeriod(companyId, fiscalPeriodId);
+        fiscalPeriodId = resolveAndRequireFiscalPeriod(companyId, fiscalPeriodId);
         requireBranchIfPresent(companyId, branchId);
         validateCurrencyCode(currencyCode);
         authorizeRead(authenticatedName, companyId, branchId);
@@ -107,7 +107,7 @@ public class FinanceReportingService {
                                                                              Integer limit,
                                                                              Integer offset) {
         requireCompany(companyId);
-        requireFiscalPeriod(companyId, fiscalPeriodId);
+        fiscalPeriodId = resolveAndRequireFiscalPeriod(companyId, fiscalPeriodId);
         requireBranchIfPresent(companyId, branchId);
         validateCurrencyCode(currencyCode);
         authorizeRead(authenticatedName, companyId, branchId);
@@ -195,7 +195,7 @@ public class FinanceReportingService {
                                                                              String currencyCode,
                                                                              boolean includeZeroBalances) {
         requireCompany(companyId);
-        requireFiscalPeriod(companyId, fiscalPeriodId);
+        fiscalPeriodId = resolveAndRequireFiscalPeriod(companyId, fiscalPeriodId);
         requireBranchIfPresent(companyId, branchId);
         validateCurrencyCode(currencyCode);
         authorizeRead(authenticatedName, companyId, branchId);
@@ -250,7 +250,7 @@ public class FinanceReportingService {
                                                                            String currencyCode,
                                                                            boolean includeZeroBalances) {
         requireCompany(companyId);
-        requireFiscalPeriod(companyId, fiscalPeriodId);
+        fiscalPeriodId = resolveAndRequireFiscalPeriod(companyId, fiscalPeriodId);
         requireBranchIfPresent(companyId, branchId);
         validateCurrencyCode(currencyCode);
         authorizeRead(authenticatedName, companyId, branchId);
@@ -364,11 +364,16 @@ public class FinanceReportingService {
         }
     }
 
-    private void requireFiscalPeriod(int companyId, UUID fiscalPeriodId) {
+    private UUID resolveAndRequireFiscalPeriod(int companyId, UUID fiscalPeriodId) {
+        if (fiscalPeriodId == null) {
+            fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, java.time.LocalDate.now());
+        }
+
         if (fiscalPeriodId == null || !dbFinanceSetup.fiscalPeriodExists(companyId, fiscalPeriodId)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_FISCAL_PERIOD_INVALID",
-                    "Fiscal period does not belong to the company");
+                    "A valid fiscal period must be selected or active for today");
         }
+        return fiscalPeriodId;
     }
 
     private void requireBranchIfPresent(int companyId, Integer branchId) {

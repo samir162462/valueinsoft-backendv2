@@ -26,7 +26,17 @@ public class ExpenseUpsertRequest {
     @NotBlank(message = "name is required")
     private String name;
 
+    private String period;
+
     public ExpenseUpsertRequest() {
+    }
+
+    public String getPeriod() {
+        return period;
+    }
+
+    public void setPeriod(String period) {
+        this.period = period;
     }
 
     public int getExId() {

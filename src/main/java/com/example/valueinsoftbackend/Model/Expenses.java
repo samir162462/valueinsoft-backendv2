@@ -22,5 +22,6 @@ public class Expenses {
     int branchId;
     String user;
     String name;
+    String period;
 
 }

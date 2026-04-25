@@ -30,7 +30,7 @@ public class FinanceReportingController {
     @GetMapping("/trial-balance")
     public FinanceTrialBalanceResponse getTrialBalance(Principal principal,
                                                        @RequestParam("companyId") @Positive int companyId,
-                                                       @RequestParam("fiscalPeriodId") UUID fiscalPeriodId,
+                                                       @RequestParam(value = "fiscalPeriodId", required = false) UUID fiscalPeriodId,
                                                        @RequestParam(value = "branchId", required = false) @Positive Integer branchId,
                                                        @RequestParam(value = "currencyCode", defaultValue = "EGP") String currencyCode,
                                                        @RequestParam(value = "includeZeroBalances", defaultValue = "false")
@@ -47,7 +47,7 @@ public class FinanceReportingController {
     @GetMapping("/general-ledger")
     public FinanceGeneralLedgerResponse getGeneralLedger(Principal principal,
                                                          @RequestParam("companyId") @Positive int companyId,
-                                                         @RequestParam("fiscalPeriodId") UUID fiscalPeriodId,
+                                                         @RequestParam(value = "fiscalPeriodId", required = false) UUID fiscalPeriodId,
                                                          @RequestParam("accountId") UUID accountId,
                                                          @RequestParam(value = "branchId", required = false) @Positive Integer branchId,
                                                          @RequestParam(value = "currencyCode", defaultValue = "EGP") String currencyCode,
@@ -67,7 +67,7 @@ public class FinanceReportingController {
     @GetMapping("/profit-and-loss")
     public FinanceProfitAndLossResponse getProfitAndLoss(Principal principal,
                                                          @RequestParam("companyId") @Positive int companyId,
-                                                         @RequestParam("fiscalPeriodId") UUID fiscalPeriodId,
+                                                         @RequestParam(value = "fiscalPeriodId", required = false) UUID fiscalPeriodId,
                                                          @RequestParam(value = "branchId", required = false) @Positive Integer branchId,
                                                          @RequestParam(value = "currencyCode", defaultValue = "EGP") String currencyCode,
                                                          @RequestParam(value = "includeZeroBalances", defaultValue = "false")
@@ -84,7 +84,7 @@ public class FinanceReportingController {
     @GetMapping("/balance-sheet")
     public FinanceBalanceSheetResponse getBalanceSheet(Principal principal,
                                                        @RequestParam("companyId") @Positive int companyId,
-                                                       @RequestParam("fiscalPeriodId") UUID fiscalPeriodId,
+                                                       @RequestParam(value = "fiscalPeriodId", required = false) UUID fiscalPeriodId,
                                                        @RequestParam(value = "branchId", required = false) @Positive Integer branchId,
                                                        @RequestParam(value = "currencyCode", defaultValue = "EGP") String currencyCode,
                                                        @RequestParam(value = "includeZeroBalances", defaultValue = "false")

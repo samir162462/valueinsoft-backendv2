@@ -24,7 +24,8 @@ public class DbPlatformAdminFinanceReadModels {
             rs.getTimestamp("time"),
             rs.getInt("branchId"),
             rs.getString("user"),
-            rs.getString("name")
+            rs.getString("name"),
+            rs.getString("period")
     );
 
     private static final RowMapper<ClientReceipt> CLIENT_RECEIPT_ROW_MAPPER = (rs, rowNum) -> new ClientReceipt(
@@ -60,7 +61,7 @@ public class DbPlatformAdminFinanceReadModels {
         String whereClause = buildBranchWhereClause(branchId);
         String table = TenantSqlIdentifiers.expensesTable(companyId, false);
         String countSql = "SELECT COUNT(*) FROM " + table + whereClause;
-        String dataSql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name " +
+        String dataSql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name, period " +
                 "FROM " + table + whereClause +
                 " ORDER BY \"time\" DESC, \"eId\" DESC LIMIT :limit OFFSET :offset";
 

@@ -56,7 +56,8 @@ public class ExpensesService {
                 request.getTime(),
                 branchId,
                 request.getUser().trim(),
-                request.getName().trim()
+                request.getName().trim(),
+                request.getPeriod()
         );
     }
 }

@@ -542,6 +542,7 @@ public class DbCompany {
                 "    \"branchId\" integer,\n" +
                 "    \"user\" character varying(25) COLLATE pg_catalog.\"default\",\n" +
                 "    name character varying(50) COLLATE pg_catalog.\"default\",\n" +
+                "    period character varying(20) COLLATE pg_catalog.\"default\",\n" +
                 "    CONSTRAINT \"Expenses_pkey\" PRIMARY KEY (\"eId\")\n" +
                 ")" +
                 "\n" +
@@ -563,6 +564,7 @@ public class DbCompany {
                 "    \"branchId\" integer,\n" +
                 "    \"user\" character varying(25) COLLATE pg_catalog.\"default\",\n" +
                 "    name character varying(50) COLLATE pg_catalog.\"default\",\n" +
+                "    period character varying(20) COLLATE pg_catalog.\"default\",\n" +
                 "    CONSTRAINT \"ExpensesStatic_pkey\" PRIMARY KEY (\"eId\")\n" +
                 ")" +
                 "\n" +
