@@ -4,11 +4,16 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Expenses;
 import com.example.valueinsoftbackend.Model.Sales.ExpensesSum;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.jdbc.BadSqlGrammarException;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import java.sql.Timestamp;
 import java.util.List;
 
@@ -32,13 +37,20 @@ public class DbExpenses {
     );
 
     private final JdbcTemplate jdbcTemplate;
+    private DbExpenses self;
 
     public DbExpenses(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    @Autowired
+    public void setSelf(@Lazy DbExpenses self) {
+        this.self = self;
+    }
+
     public List<Expenses> getAllExpensesItems(int branchId, int companyId, boolean isStatic) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        self.provisionExpenseTables(companyId);
         String sql = "SELECT \"eId\", type, amount::money::numeric AS amount, \"time\", \"branchId\", \"user\", name " +
                 "FROM " + TenantSqlIdentifiers.expensesTable(companyId, isStatic) + " WHERE \"branchId\" = ?";
         return jdbcTemplate.query(sql, expensesRowMapper, branchId);
@@ -59,6 +71,7 @@ public class DbExpenses {
 
     public String addExpenses(int branchId, int companyId, Expenses expenses, boolean isStatic) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        self.provisionExpenseTables(companyId);
         if (isStatic && existsStaticExpense(branchId, companyId, expenses.getName())) {
             throw new ApiException(HttpStatus.CONFLICT, "EXPENSE_NAME_EXISTS", "the Name Exists! => " + expenses.getName());
         }
@@ -105,6 +118,38 @@ public class DbExpenses {
                 " WHERE \"branchId\" = ? AND name = ?)";
         Boolean exists = jdbcTemplate.queryForObject(sql, Boolean.class, branchId, name);
         return Boolean.TRUE.equals(exists);
+    }
+
+    private boolean isRelationNotFound(BadSqlGrammarException e) {
+        String sqlState = e.getSQLException().getSQLState();
+        return "42P01".equals(sqlState) || (sqlState != null && sqlState.startsWith("42"));
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void provisionExpenseTables(int companyId) {
+        String schema = TenantSqlIdentifiers.companySchema(companyId);
+        String owner = "postgres"; // Fallback to default postgres owner
+
+        try {
+            jdbcTemplate.execute(createTableSql(schema, "Expenses", owner));
+            jdbcTemplate.execute(createTableSql(schema, "ExpensesStatic", owner));
+        } catch (Exception e) {
+            // Ignore if already created by another thread
+        }
+    }
+
+    private String createTableSql(String schema, String tableName, String owner) {
+        return "CREATE TABLE IF NOT EXISTS " + schema + ".\"" + tableName + "\" (\n" +
+                "    \"eId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    type character varying(20) COLLATE pg_catalog.\"default\",\n" +
+                "    amount money,\n" +
+                "    \"time\" timestamp without time zone,\n" +
+                "    \"branchId\" integer,\n" +
+                "    \"user\" character varying(25) COLLATE pg_catalog.\"default\",\n" +
+                "    name character varying(50) COLLATE pg_catalog.\"default\",\n" +
+                "    CONSTRAINT \"" + tableName + "_pkey\" PRIMARY KEY (\"eId\")\n" +
+                ") TABLESPACE pg_default;\n" +
+                "ALTER TABLE " + schema + ".\"" + tableName + "\" OWNER to " + owner + ";";
     }
 
     private String[] parseRange(String timeText) {

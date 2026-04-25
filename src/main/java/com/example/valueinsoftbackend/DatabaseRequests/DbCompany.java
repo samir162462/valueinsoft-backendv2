@@ -203,6 +203,8 @@ public class DbCompany {
                 SQLCompanyAnalysis(schemaName, databaseOwner),
                 SQLSupplierReciepts(schemaName, databaseOwner),
                 SQLFixArea(schemaName, databaseOwner),
+                SQLExpenses(schemaName, databaseOwner),
+                SQLExpensesStatic(schemaName, databaseOwner),
                 SQLClient(schemaName, databaseOwner)
         ));
         statements.addAll(SQLModernInventoryFoundation(schemaName, databaseOwner));
@@ -529,6 +531,49 @@ public class DbCompany {
 
         return query;
     }
+    //Todo SQL SQLSupplierReciepts
+    static String SQLExpenses(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"Expenses\"\n" +
+                "(\n" +
+                "    \"eId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    type character varying(20) COLLATE pg_catalog.\"default\",\n" +
+                "    amount money,\n" +
+                "    \"time\" timestamp without time zone,\n" +
+                "    \"branchId\" integer,\n" +
+                "    \"user\" character varying(25) COLLATE pg_catalog.\"default\",\n" +
+                "    name character varying(50) COLLATE pg_catalog.\"default\",\n" +
+                "    CONSTRAINT \"Expenses_pkey\" PRIMARY KEY (\"eId\")\n" +
+                ")" +
+                "\n" +
+                "TABLESPACE pg_default;\n" +
+                "\n" +
+                "ALTER TABLE " + SchemaName + ".\"Expenses\"\n" +
+                "    OWNER to " + DBOwner + ";";
+
+        return query;
+    }
+
+    static String SQLExpensesStatic(String SchemaName, String DBOwner) {
+        String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"ExpensesStatic\"\n" +
+                "(\n" +
+                "    \"eId\" integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 START 1 MINVALUE 1 MAXVALUE 2147483647 CACHE 1 ),\n" +
+                "    type character varying(20) COLLATE pg_catalog.\"default\",\n" +
+                "    amount money,\n" +
+                "    \"time\" timestamp without time zone,\n" +
+                "    \"branchId\" integer,\n" +
+                "    \"user\" character varying(25) COLLATE pg_catalog.\"default\",\n" +
+                "    name character varying(50) COLLATE pg_catalog.\"default\",\n" +
+                "    CONSTRAINT \"ExpensesStatic_pkey\" PRIMARY KEY (\"eId\")\n" +
+                ")" +
+                "\n" +
+                "TABLESPACE pg_default;\n" +
+                "\n" +
+                "ALTER TABLE " + SchemaName + ".\"ExpensesStatic\"\n" +
+                "    OWNER to " + DBOwner + ";";
+
+        return query;
+    }
+
     //Todo SQL SQLSupplierReciepts
     static String SQLSupplierReciepts(String SchemaName, String DBOwner) {
         String query = "CREATE TABLE IF NOT EXISTS " + SchemaName + ".\"supplierReciepts\"\n" +

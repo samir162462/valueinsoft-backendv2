@@ -411,8 +411,8 @@ public class DbFinanceReconciliation {
                         "resolution_proof_file_name = :proofFileName, " +
                         "resolution_proof_file_type = :proofFileType, " +
                         "resolution_proof_file_size = :proofFileSize, " +
-                        "resolution_proof_uploaded_at = CASE WHEN :proofFileKey IS NOT NULL THEN NOW() ELSE resolution_proof_uploaded_at END, " +
-                        "resolution_proof_uploaded_by = CASE WHEN :proofFileKey IS NOT NULL THEN :actorUserId ELSE resolution_proof_uploaded_by END, " +
+                        "resolution_proof_uploaded_at = CASE WHEN :proofFileKey IS NOT NULL AND (:proofFileKey <> resolution_proof_file_key OR resolution_proof_file_key IS NULL) THEN NOW() ELSE resolution_proof_uploaded_at END, " +
+                        "resolution_proof_uploaded_by = CASE WHEN :proofFileKey IS NOT NULL AND (:proofFileKey <> resolution_proof_file_key OR resolution_proof_file_key IS NULL) THEN :actorUserId ELSE resolution_proof_uploaded_by END, " +
                         "updated_by = :actorUserId " +
                         "WHERE company_id = :companyId " +
                         "AND reconciliation_item_id = :reconciliationItemId " +

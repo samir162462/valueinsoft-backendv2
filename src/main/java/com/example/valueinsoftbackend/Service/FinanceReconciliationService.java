@@ -406,13 +406,22 @@ public class FinanceReconciliationService {
         }
 
         if (request.getProofFileKey() != null) {
-            String expectedPrefix = String.format("finance/reconciliation/%d/%s/%s/",
-                    request.getCompanyId(),
-                    reconciliationRunId,
-                    reconciliationItemId);
-            if (!request.getProofFileKey().startsWith(expectedPrefix)) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_PROOF_KEY_INVALID",
-                        "Proof file key does not match the reconciliation item context");
+            // Robust check for existing key preservation (ignore case and whitespace)
+            String existingKey = item.getResolutionProofFileKey();
+            boolean isPreservingExisting = existingKey != null && 
+                                           request.getProofFileKey().trim().equalsIgnoreCase(existingKey.trim());
+
+            if (!isPreservingExisting) {
+                String expectedPrefix = String.format(java.util.Locale.ROOT, "finance/reconciliation/%d/%s/%s/",
+                        request.getCompanyId(),
+                        reconciliationRunId.toString().toLowerCase(),
+                        reconciliationItemId.toString().toLowerCase());
+                
+                String actualKey = request.getProofFileKey().toLowerCase().trim();
+                if (!actualKey.startsWith(expectedPrefix.toLowerCase())) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_RECONCILIATION_PROOF_KEY_INVALID",
+                            "Proof file key does not match the reconciliation item context. Expected prefix: " + expectedPrefix);
+                }
             }
         }
 
