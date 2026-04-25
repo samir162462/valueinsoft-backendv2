@@ -217,6 +217,10 @@ public class DashboardSummaryResponse implements Serializable {
         private Double stockAvailabilityPct;
         private Double deadStockPct;
         private Double turnoverRate;
+        private Double totalItems;
+        private Integer newItemsCount;
+        private Integer recentlySoldItemsCount;
+        private Integer recentlyMovedItemsCount;
 
         public DashboardInventoryHealth() {}
 
@@ -228,6 +232,14 @@ public class DashboardSummaryResponse implements Serializable {
         public void setDeadStockPct(Double deadStockPct) { this.deadStockPct = deadStockPct; }
         public Double getTurnoverRate() { return turnoverRate; }
         public void setTurnoverRate(Double turnoverRate) { this.turnoverRate = turnoverRate; }
+        public Double getTotalItems() { return totalItems; }
+        public void setTotalItems(Double totalItems) { this.totalItems = totalItems; }
+        public Integer getNewItemsCount() { return newItemsCount; }
+        public void setNewItemsCount(Integer newItemsCount) { this.newItemsCount = newItemsCount; }
+        public Integer getRecentlySoldItemsCount() { return recentlySoldItemsCount; }
+        public void setRecentlySoldItemsCount(Integer recentlySoldItemsCount) { this.recentlySoldItemsCount = recentlySoldItemsCount; }
+        public Integer getRecentlyMovedItemsCount() { return recentlyMovedItemsCount; }
+        public void setRecentlyMovedItemsCount(Integer recentlyMovedItemsCount) { this.recentlyMovedItemsCount = recentlyMovedItemsCount; }
     }
 
     public static class DashboardCharts implements Serializable {
