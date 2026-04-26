@@ -100,6 +100,13 @@ public class Product {
 
     String attributes;
 
+    boolean showOnline;
+    String onlineDescription;
+    String onlineImageUrl;
+    java.math.BigDecimal onlineOfferPrice;
+    int onlineSortOrder;
+    boolean onlineActive;
+
     @AssertTrue(message = "rPrice must be greater than or equal to lPrice, and lPrice must be greater than or equal to bPrice")
     public boolean isPriceOrderValid() {
         return rPrice >= lPrice && lPrice >= bPrice;

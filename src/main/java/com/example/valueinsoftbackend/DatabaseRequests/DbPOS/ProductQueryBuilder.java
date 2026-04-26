@@ -42,7 +42,13 @@ final class ProductQueryBuilder {
                     "prod.business_line_key AS \"businessLineKey\", " +
                     "prod.template_key AS \"templateKey\", " +
                     "prod.base_uom_code AS \"baseUomCode\", " +
-                    "prod.pricing_policy_code AS \"pricingPolicyCode\"";
+                    "prod.pricing_policy_code AS \"pricingPolicyCode\", " +
+                    "prod.show_online AS \"showOnline\", " +
+                    "prod.online_description AS \"onlineDescription\", " +
+                    "prod.online_image_url AS \"onlineImageUrl\", " +
+                    "prod.online_offer_price AS \"onlineOfferPrice\", " +
+                    "prod.online_sort_order AS \"onlineSortOrder\", " +
+                    "prod.online_active AS \"onlineActive\"";
     private ProductQueryBuilder() {
     }
 

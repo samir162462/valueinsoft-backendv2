@@ -51,7 +51,13 @@ public class DbPosProduct {
             rs.getString("templateKey"),
             rs.getString("baseUomCode"),
             rs.getString("pricingPolicyCode"),
-            null
+            null,
+            rs.getBoolean("showOnline"),
+            rs.getString("onlineDescription"),
+            rs.getString("onlineImageUrl"),
+            rs.getBigDecimal("onlineOfferPrice"),
+            rs.getInt("onlineSortOrder"),
+            rs.getBoolean("onlineActive")
     );
 
     private static final RowMapper<ProductUtilNames> PRODUCT_NAME_ROW_MAPPER = (rs, rowNum) ->

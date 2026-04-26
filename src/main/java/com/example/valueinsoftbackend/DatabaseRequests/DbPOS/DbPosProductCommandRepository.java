@@ -39,12 +39,14 @@ public class DbPosProductCommandRepository {
                     product_name, buying_day, activation_period, retail_price, lowest_price, buying_price,
                     company_name, product_type, owner_name, serial, description, battery_life, owner_phone,
                     owner_ni, product_state, supplier_id, major, img_file, business_line_key, template_key, base_uom_code,
-                    pricing_policy_code, created_at, updated_at
+                    pricing_policy_code, show_online, online_description, online_image_url, online_offer_price,
+                    online_sort_order, online_active, created_at, updated_at
                 ) VALUES (
                     :productName, :buyingDay, :activationPeriod, :rPrice, :lPrice, :bPrice,
                     :companyName, :type, :ownerName, :serial, :description, :batteryLife, :ownerPhone,
                     :ownerNI, :productState, :supplierId, :major, :image, :businessLineKey, :templateKey, :baseUomCode,
-                    :pricingPolicyCode, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    :pricingPolicyCode, :showOnline, :onlineDescription, :onlineImageUrl, :onlineOfferPrice,
+                    :onlineSortOrder, :onlineActive, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
                 """.formatted(TenantSqlIdentifiers.inventoryProductTable(companyId));
 
@@ -94,6 +96,12 @@ public class DbPosProductCommandRepository {
                     template_key = :templateKey,
                     base_uom_code = :baseUomCode,
                     pricing_policy_code = :pricingPolicyCode,
+                    show_online = :showOnline,
+                    online_description = :onlineDescription,
+                    online_image_url = :onlineImageUrl,
+                    online_offer_price = :onlineOfferPrice,
+                    online_sort_order = :onlineSortOrder,
+                    online_active = :onlineActive,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE product_id = :productId
                 """.formatted(TenantSqlIdentifiers.inventoryProductTable(companyId));
@@ -216,7 +224,13 @@ public class DbPosProductCommandRepository {
                 .addValue("businessLineKey", metadata.businessLineKey())
                 .addValue("templateKey", metadata.templateKey())
                 .addValue("baseUomCode", metadata.baseUomCode())
-                .addValue("pricingPolicyCode", metadata.pricingPolicyCode());
+                .addValue("pricingPolicyCode", metadata.pricingPolicyCode())
+                .addValue("showOnline", product.isShowOnline())
+                .addValue("onlineDescription", product.getOnlineDescription())
+                .addValue("onlineImageUrl", product.getOnlineImageUrl())
+                .addValue("onlineOfferPrice", product.getOnlineOfferPrice())
+                .addValue("onlineSortOrder", product.getOnlineSortOrder())
+                .addValue("onlineActive", product.isOnlineActive());
     }
 
     private int parseActivationPeriod(String activationPeriod) {

@@ -67,7 +67,8 @@ public class SecurityConfiguration {
                                 AntPathRequestMatcher.antMatcher("/OP/TPC"),
                                 AntPathRequestMatcher.antMatcher("/error"),
                                 AntPathRequestMatcher.antMatcher("/users/checkUserEmail/**"),
-                                AntPathRequestMatcher.antMatcher("/users/checkUserUserName/**")
+                                AntPathRequestMatcher.antMatcher("/users/checkUserUserName/**"),
+                                AntPathRequestMatcher.antMatcher("/api/public/**")
                         ).permitAll()
                         .anyRequest().authenticated()
                 );

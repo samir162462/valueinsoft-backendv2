@@ -33,7 +33,7 @@ public class S3StorageService implements StorageService {
     @Override
     public URL generatePresignedUploadUrl(String key, String contentType) {
         log.info("Generating presigned upload URL for key: {}, contentType: {}", key, contentType);
-        
+
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(s3Properties.getBucketName())
                 .key(key)
@@ -52,7 +52,7 @@ public class S3StorageService implements StorageService {
     @Override
     public void uploadFile(String key, byte[] content, String contentType) {
         log.info("Uploading file to S3: {}, size: {} bytes", key, content.length);
-        
+
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(s3Properties.getBucketName())
                 .key(key)
@@ -65,7 +65,7 @@ public class S3StorageService implements StorageService {
     @Override
     public URL generatePresignedDownloadUrl(String key) {
         log.info("Generating presigned download URL for key: {}", key);
-        
+
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(s3Properties.getBucketName())
                 .key(key)
@@ -83,7 +83,7 @@ public class S3StorageService implements StorageService {
     @Override
     public void deleteFile(String key) {
         log.info("Deleting file from S3: {}", key);
-        
+
         DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
                 .bucket(s3Properties.getBucketName())
                 .key(key)
