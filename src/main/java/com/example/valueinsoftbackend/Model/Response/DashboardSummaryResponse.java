@@ -248,6 +248,8 @@ public class DashboardSummaryResponse implements Serializable {
         private List<Object> profitTrend = new ArrayList<>();
         private List<Object> expenseTrend = new ArrayList<>();
         private List<Object> dailyPerformance = new ArrayList<>();
+        private List<Object> clientTrend = new ArrayList<>();
+        private List<Object> paymentMethods = new ArrayList<>();
 
         public DashboardCharts() {}
 
@@ -259,6 +261,10 @@ public class DashboardSummaryResponse implements Serializable {
         public void setExpenseTrend(List<Object> expenseTrend) { this.expenseTrend = expenseTrend; }
         public List<Object> getDailyPerformance() { return dailyPerformance; }
         public void setDailyPerformance(List<Object> dailyPerformance) { this.dailyPerformance = dailyPerformance; }
+        public List<Object> getClientTrend() { return clientTrend; }
+        public void setClientTrend(List<Object> clientTrend) { this.clientTrend = clientTrend; }
+        public List<Object> getPaymentMethods() { return paymentMethods; }
+        public void setPaymentMethods(List<Object> paymentMethods) { this.paymentMethods = paymentMethods; }
     }
 
     public static class DashboardTopPerformers implements Serializable {
@@ -266,6 +272,7 @@ public class DashboardSummaryResponse implements Serializable {
         private List<Object> products = new ArrayList<>();
         private List<Object> customers = new ArrayList<>();
         private List<Object> staff = new ArrayList<>();
+        private List<CategoryPerformance> categories = new ArrayList<>();
 
         public DashboardTopPerformers() {}
 
@@ -275,6 +282,37 @@ public class DashboardSummaryResponse implements Serializable {
         public void setCustomers(List<Object> customers) { this.customers = customers; }
         public List<Object> getStaff() { return staff; }
         public void setStaff(List<Object> staff) { this.staff = staff; }
+        public List<CategoryPerformance> getCategories() { return categories; }
+        public void setCategories(List<CategoryPerformance> categories) { this.categories = categories; }
+    }
+
+    public static class CategoryPerformance implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String name;
+        private Double totalSales;
+        private List<SubCategoryPerformance> subCategories = new ArrayList<>();
+
+        public CategoryPerformance() {}
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public Double getTotalSales() { return totalSales; }
+        public void setTotalSales(Double totalSales) { this.totalSales = totalSales; }
+        public List<SubCategoryPerformance> getSubCategories() { return subCategories; }
+        public void setSubCategories(List<SubCategoryPerformance> subCategories) { this.subCategories = subCategories; }
+    }
+
+    public static class SubCategoryPerformance implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private String name;
+        private Double totalSales;
+
+        public SubCategoryPerformance() {}
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public Double getTotalSales() { return totalSales; }
+        public void setTotalSales(Double totalSales) { this.totalSales = totalSales; }
     }
 
     public static class DashboardWarning implements Serializable {

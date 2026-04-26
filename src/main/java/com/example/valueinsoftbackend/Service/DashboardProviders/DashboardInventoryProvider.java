@@ -52,7 +52,50 @@ public class DashboardInventoryProvider {
             alerts.add(alert);
         }
 
+        // 3. Bounced Back in Today's Shift
+        Integer currentShiftId = findActiveShiftId(companyId, branchId);
+        if (currentShiftId != null) {
+            double bouncedBackTotal = calculateBouncedBackForShift(companyId, branchId, currentShiftId);
+            if (bouncedBackTotal > 0) {
+                DashboardSummaryResponse.DashboardAlert alert = new DashboardSummaryResponse.DashboardAlert();
+                alert.setId("bounced_back");
+                alert.setTitle("مرتجع الوردية الحالية");
+                alert.setType("info");
+                alert.setSeverity("INFO");
+                alert.setCount((int) bouncedBackTotal);
+                alert.setMessage("إجمالي المرتجعات في الوردية الحالية: " + String.format("%.2f", bouncedBackTotal) + " ج.م");
+                alert.setActionLabel("مراجعة المرتجعات");
+                alert.setTarget("PointSale");
+                alert.setParams("tab=ShiftSales&shiftId=" + currentShiftId);
+                alerts.add(alert);
+            }
+        }
+
         return alerts;
+    }
+
+    private Integer findActiveShiftId(Integer companyId, Integer branchId) {
+        String shiftTable = TenantSqlIdentifiers.companySchema(companyId) + ".\"PosShiftPeriod\"";
+        String sql = "SELECT \"PosSOID\" FROM " + shiftTable + " " +
+                "WHERE \"branchId\" = ? AND status = 'OPEN' " +
+                "ORDER BY \"PosSOID\" DESC LIMIT 1";
+        try {
+            return jdbcTemplate.queryForObject(sql, Integer.class, branchId);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private double calculateBouncedBackForShift(Integer companyId, Integer branchId, Integer shiftId) {
+        String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
+        String sql = "SELECT COALESCE(SUM(\"orderBouncedBack\"), 0)::double precision " +
+                "FROM " + orderTable + " " +
+                "WHERE shift_id = ?";
+        try {
+            return jdbcTemplate.queryForObject(sql, Double.class, shiftId);
+        } catch (Exception e) {
+            return 0.0;
+        }
     }
 
     private int countShortages(Integer companyId, Integer branchId) {
