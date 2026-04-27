@@ -24,6 +24,8 @@ public class ValueinsoftBackendApplication {
         log.info("Loaded {} branches during startup", branchArrayList.size());
     }
 
+
+
     @Scheduled(cron = "0 5 * * * *", zone = "Europe/Istanbul")
     public void doScheduledWork() {
         log.debug("Scheduled heartbeat at {}", new Date());

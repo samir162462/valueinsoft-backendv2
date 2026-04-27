@@ -7,6 +7,8 @@ import com.example.valueinsoftbackend.Model.Request.ResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.SaveUserRequest;
 import com.example.valueinsoftbackend.Model.Request.UpdateUserImageRequest;
 import com.example.valueinsoftbackend.Model.User;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,7 @@ import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/users")
+@Tag(name = "User Management", description = "Endpoints for user profiles and account management")
 public class UserController {
 
     private final DbUsers dbUsers;
@@ -27,6 +30,7 @@ public class UserController {
         this.authorizationService = authorizationService;
     }
 
+    @Operation(summary = "Get user profile by ID", description = "Retrieves the full profile of a user given their numeric ID.")
     @RequestMapping(value = "/getUser", method = RequestMethod.GET)
     @ResponseBody
     public User getPersonsByNames(@RequestParam("id") String id, Principal principal) {
@@ -109,6 +113,7 @@ public class UserController {
         return dbUsers.getUserImg(id);
     }
 
+    @Operation(summary = "Register new user", description = "Public registration endpoint to create a new user account.")
     @PostMapping("/saveNewUser")
     public ResponseEntity<Object> saveNewUser(@Valid @RequestBody SaveUserRequest requestBody) {
         String answer = saveUserInternal(requestBody);

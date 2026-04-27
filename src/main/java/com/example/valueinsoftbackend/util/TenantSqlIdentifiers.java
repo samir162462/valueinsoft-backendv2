@@ -135,6 +135,26 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"CompanyAnalysis\"";
     }
 
+    public static String hrEmployeeTable(int companyId) {
+        return companySchema(companyId) + ".hr_employee";
+    }
+
+    public static String hrShiftTable(int companyId) {
+        return companySchema(companyId) + ".hr_shift";
+    }
+
+    public static String hrEmployeeShiftTable(int companyId) {
+        return companySchema(companyId) + ".hr_employee_shift";
+    }
+
+    public static String hrAttendanceLogTable(int companyId) {
+        return companySchema(companyId) + ".hr_attendance_log";
+    }
+
+    public static String hrAttendanceDayTable(int companyId) {
+        return companySchema(companyId) + ".hr_attendance_day";
+    }
+
     public static String companySubscriptionTable() {
         return "public.\"CompanySubscription\"";
     }

@@ -68,7 +68,10 @@ public class SecurityConfiguration {
                                 AntPathRequestMatcher.antMatcher("/error"),
                                 AntPathRequestMatcher.antMatcher("/users/checkUserEmail/**"),
                                 AntPathRequestMatcher.antMatcher("/users/checkUserUserName/**"),
-                                AntPathRequestMatcher.antMatcher("/api/public/**")
+                                AntPathRequestMatcher.antMatcher("/api/public/**"),
+                                AntPathRequestMatcher.antMatcher("/v3/api-docs/**"),
+                                AntPathRequestMatcher.antMatcher("/swagger-ui/**"),
+                                AntPathRequestMatcher.antMatcher("/swagger-ui.html")
                         ).permitAll()
                         .anyRequest().authenticated()
                 );
