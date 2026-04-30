@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
+import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Request.SupplierArchiveRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierProductCreateRequest;
@@ -18,6 +19,7 @@ import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.example.valueinsoftbackend.util.RequestTimestampParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.google.gson.JsonObject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,9 +34,17 @@ import java.util.Locale;
 public class SupplierService {
 
     private final DbSupplier dbSupplier;
+    private final FinanceOperationalPostingService financeOperationalPostingService;
 
     public SupplierService(DbSupplier dbSupplier) {
+        this(dbSupplier, null);
+    }
+
+    @Autowired
+    public SupplierService(DbSupplier dbSupplier,
+                           FinanceOperationalPostingService financeOperationalPostingService) {
         this.dbSupplier = dbSupplier;
+        this.financeOperationalPostingService = financeOperationalPostingService;
     }
 
     public List<Supplier> getSuppliers(int companyId, int branchId) {
@@ -276,7 +286,7 @@ public class SupplierService {
     }
 
     @Transactional
-    public String createSupplierBoughtProduct(int companyId, int branchId, int productId, SupplierProductCreateRequest request) {
+    public SupplierBProduct createSupplierBoughtProduct(int companyId, int branchId, int productId, SupplierProductCreateRequest request) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         TenantSqlIdentifiers.requirePositive(productId, "productId");
@@ -294,13 +304,46 @@ public class SupplierService {
                 request.getOrderDetailsId()
         );
 
-        int rows = dbSupplier.addSupplierBProduct(supplierBProduct, productId, branchId, companyId);
-        if (rows != 1) {
+        SupplierBProduct created = dbSupplier.addSupplierBProduct(supplierBProduct, productId, branchId, companyId);
+        if (created == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_PRODUCT_TARGET_NOT_FOUND", "Product not found for supplier product entry");
         }
+        enrichFinanceSupplierReturn(companyId, branchId, created);
 
         log.info("Created supplier bought-product row for company {} branch {} product {}", companyId, branchId, productId);
-        return "the supplier BProduct added! ok 200";
+        return created;
+    }
+
+    private void enrichFinanceSupplierReturn(int companyId, int branchId, SupplierBProduct returnedProduct) {
+        if (financeOperationalPostingService == null
+                || returnedProduct == null
+                || returnedProduct.getQuantity() <= 0
+                || returnedProduct.getCost() <= 0) {
+            return;
+        }
+
+        try {
+            FinancePostingRequestItem postingRequest = financeOperationalPostingService.enqueueSupplierReturn(
+                    companyId,
+                    branchId,
+                    returnedProduct);
+            if (postingRequest != null) {
+                returnedProduct.setPostingStatus(postingRequest.getStatus());
+                returnedProduct.setPostingRequestId(postingRequest.getPostingRequestId());
+                returnedProduct.setJournalId(postingRequest.getJournalEntryId());
+                returnedProduct.setPostingFailureReason(postingRequest.getLastError());
+            }
+        } catch (RuntimeException exception) {
+            returnedProduct.setPostingStatus("failed");
+            returnedProduct.setPostingFailureReason(exception.getMessage());
+            log.warn(
+                    "Supplier return {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
+                    returnedProduct.getsBPId(),
+                    companyId,
+                    branchId,
+                    exception.getMessage()
+            );
+        }
     }
 
     private String normalize(String value) {

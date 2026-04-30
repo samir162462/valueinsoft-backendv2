@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
+import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Finance.FinanceAccountItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceAccountMappingItem;
@@ -633,6 +634,14 @@ public class FinanceSetupService {
         Map<String, Object> state = new HashMap<>();
         state.put(firstKey, firstValue);
         state.put(secondKey, secondValue);
+        return state;
+    }
+
+    private Map<String, Object> setupState(String k1, Object v1, String k2, Object v2, String k3, Object v3) {
+        Map<String, Object> state = new HashMap<>();
+        state.put(k1, v1);
+        state.put(k2, v2);
+        state.put(k3, v3);
         return state;
     }
 

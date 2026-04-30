@@ -18,6 +18,7 @@ import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.ResultSetExtractor;
 import org.springframework.jdbc.core.RowMapper;
@@ -73,13 +74,18 @@ public class DbSupplier {
     private static final RowMapper<SupplierBProduct> SUPPLIER_B_PRODUCT_ROW_MAPPER = (rs, rowNum) -> new SupplierBProduct(
             rs.getInt("sBPId"),
             rs.getInt("productId"),
+            rs.getInt("supplierId"),
             rs.getInt("quantity"),
             rs.getInt("cost"),
             rs.getString("userName"),
             rs.getInt("sPaid"),
             rs.getTimestamp("time"),
             rs.getString("desc"),
-            rs.getInt("orderDetailsId")
+            rs.getInt("orderDetailsId"),
+            rs.getString("postingStatus"),
+            nullableUuid(rs, "postingRequestId"),
+            nullableUuid(rs, "journalId"),
+            rs.getString("postingFailureReason")
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -402,32 +408,49 @@ public class DbSupplier {
     }
 
     public List<SupplierBProduct> getSupplierBProduct(int branchId, int supplierId, int companyId) {
-        String sql = "SELECT \"sBPId\", \"productId\", quantity, cost, \"userName\", \"sPaid\", " +
-                "\"time\", \"desc\", \"orderDetailsId\" FROM " + TenantSqlIdentifiers.supplierBoughtProductTable(companyId) +
-                " WHERE \"branchId\" = ? AND \"supplierId\" = ?";
-        return jdbcTemplate.query(sql, SUPPLIER_B_PRODUCT_ROW_MAPPER, branchId, supplierId);
+        String sql = "SELECT returned.\"sBPId\", returned.\"productId\", returned.\"supplierId\", returned.quantity, returned.cost, returned.\"userName\", returned.\"sPaid\", " +
+                "returned.\"time\", returned.\"desc\", returned.\"orderDetailsId\", " +
+                "fp.status AS \"postingStatus\", fp.posting_request_id AS \"postingRequestId\", " +
+                "fp.journal_entry_id AS \"journalId\", fp.last_error AS \"postingFailureReason\" " +
+                "FROM " + TenantSqlIdentifiers.supplierBoughtProductTable(companyId) + " returned " +
+                "LEFT JOIN public.finance_posting_request fp " +
+                "  ON fp.company_id = ? " +
+                " AND fp.branch_id = returned.\"branchId\" " +
+                " AND fp.source_module = 'purchase' " +
+                " AND fp.source_type = 'supplier_return' " +
+                " AND fp.source_id = 'supplier-return-' || returned.\"sBPId\"::text " +
+                "WHERE returned.\"branchId\" = ? AND returned.\"supplierId\" = ? " +
+                "ORDER BY returned.\"time\" DESC, returned.\"sBPId\" DESC";
+        return jdbcTemplate.query(sql, SUPPLIER_B_PRODUCT_ROW_MAPPER, companyId, branchId, supplierId);
     }
 
-    public int addSupplierBProduct(SupplierBProduct supplierBProduct, int productId, int branchId, int companyId) {
+    public SupplierBProduct addSupplierBProduct(SupplierBProduct supplierBProduct, int productId, int branchId, int companyId) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.supplierBoughtProductTable(companyId) +
                 " (\"productId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\", \"orderDetailsId\", \"supplierId\", \"branchId\") " +
                 "SELECT ?, ?, ?, ?, ?, ?, ?, ?, p.supplier_id, ? " +
                 "FROM " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " p " +
-                "WHERE p.product_id = ?";
+                "WHERE p.product_id = ? " +
+                "RETURNING \"sBPId\", \"productId\", \"supplierId\", quantity, cost, \"userName\", \"sPaid\", \"time\", \"desc\", \"orderDetailsId\", " +
+                "NULL::varchar AS \"postingStatus\", NULL::uuid AS \"postingRequestId\", NULL::uuid AS \"journalId\", NULL::text AS \"postingFailureReason\"";
 
-        return jdbcTemplate.update(
-                sql,
-                productId,
-                supplierBProduct.getQuantity(),
-                supplierBProduct.getCost(),
-                supplierBProduct.getUserName(),
-                supplierBProduct.getsPaid(),
-                new Timestamp(supplierBProduct.getTime().getTime()),
-                supplierBProduct.getDesc(),
-                supplierBProduct.getOrderDetailsId(),
-                branchId,
-                productId
-        );
+        try {
+            return jdbcTemplate.queryForObject(
+                    sql,
+                    SUPPLIER_B_PRODUCT_ROW_MAPPER,
+                    productId,
+                    supplierBProduct.getQuantity(),
+                    supplierBProduct.getCost(),
+                    supplierBProduct.getUserName(),
+                    supplierBProduct.getsPaid(),
+                    new Timestamp(supplierBProduct.getTime().getTime()),
+                    supplierBProduct.getDesc(),
+                    supplierBProduct.getOrderDetailsId(),
+                    branchId,
+                    productId
+            );
+        } catch (EmptyResultDataAccessException exception) {
+            return null;
+        }
     }
 
     private void ensureSupplierLifecycleColumns(int companyId, int branchId) {
@@ -562,6 +585,8 @@ public class DbSupplier {
         params.add(branchId);
         params.add(branchId);
         params.add(supplierId);
+        params.add(companyId);
+        params.add(branchId);
         params.add(branchId);
         params.add(supplierId);
 
@@ -628,11 +653,17 @@ public class DbSupplier {
                            COALESCE(returned."desc", 'Return to supplier') AS description,
                            (COALESCE(returned.quantity, 0) * COALESCE(returned.cost, 0))::numeric AS debit,
                            0::numeric AS credit,
-                           NULL::varchar AS posting_status,
-                           NULL::uuid AS posting_request_id,
-                           NULL::uuid AS journal_id,
-                           NULL::text AS posting_failure_reason
+                           fp.status AS posting_status,
+                           fp.posting_request_id,
+                           fp.journal_entry_id AS journal_id,
+                           fp.last_error AS posting_failure_reason
                     FROM %s returned
+                    LEFT JOIN public.finance_posting_request fp
+                      ON fp.company_id = ?
+                     AND fp.branch_id = ?
+                     AND fp.source_module = 'purchase'
+                     AND fp.source_type = 'supplier_return'
+                     AND fp.source_id = 'supplier-return-' || returned."sBPId"::text
                     WHERE returned."branchId" = ? AND returned."supplierId" = ?
                 ) statement_activity
                 WHERE 1 = 1
@@ -731,7 +762,7 @@ public class DbSupplier {
         return value == null || value.isBlank() ? "not_required" : value;
     }
 
-    private UUID nullableUuid(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+    private static UUID nullableUuid(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
         return rs.getObject(column, UUID.class);
     }
 

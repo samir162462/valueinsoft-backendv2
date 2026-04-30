@@ -5,11 +5,13 @@
 package com.example.valueinsoftbackend.Model;
 
 import java.sql.Timestamp;
+import java.util.UUID;
 
 public class SupplierBProduct {
 
     int sBPId;
     int productId;
+    int supplierId;
     int quantity;
     int cost;
     String userName;
@@ -17,11 +19,24 @@ public class SupplierBProduct {
     Timestamp time;
     String desc;
     int orderDetailsId;
+    String postingStatus;
+    UUID postingRequestId;
+    UUID journalId;
+    String postingFailureReason;
 
 
     public SupplierBProduct(int sBPId, int productId, int quantity, int cost, String userName, int sPaid, Timestamp time, String desc, int orderDetailsId) {
+        this(sBPId, productId, 0, quantity, cost, userName, sPaid, time, desc, orderDetailsId, null, null, null, null);
+    }
+
+    public SupplierBProduct(int sBPId, int productId, int quantity, int cost, String userName, int sPaid, Timestamp time, String desc, int orderDetailsId, String postingStatus, UUID postingRequestId, UUID journalId, String postingFailureReason) {
+        this(sBPId, productId, 0, quantity, cost, userName, sPaid, time, desc, orderDetailsId, postingStatus, postingRequestId, journalId, postingFailureReason);
+    }
+
+    public SupplierBProduct(int sBPId, int productId, int supplierId, int quantity, int cost, String userName, int sPaid, Timestamp time, String desc, int orderDetailsId, String postingStatus, UUID postingRequestId, UUID journalId, String postingFailureReason) {
         this.sBPId = sBPId;
         this.productId = productId;
+        this.supplierId = supplierId;
         this.quantity = quantity;
         this.cost = cost;
         this.userName = userName;
@@ -29,6 +44,10 @@ public class SupplierBProduct {
         this.time = time;
         this.desc = desc;
         this.orderDetailsId = orderDetailsId;
+        this.postingStatus = postingStatus;
+        this.postingRequestId = postingRequestId;
+        this.journalId = journalId;
+        this.postingFailureReason = postingFailureReason;
     }
 
     public int getsBPId() {
@@ -45,6 +64,14 @@ public class SupplierBProduct {
 
     public void setProductId(int productId) {
         this.productId = productId;
+    }
+
+    public int getSupplierId() {
+        return supplierId;
+    }
+
+    public void setSupplierId(int supplierId) {
+        this.supplierId = supplierId;
     }
 
     public int getQuantity() {
@@ -103,11 +130,44 @@ public class SupplierBProduct {
         this.desc = desc;
     }
 
+    public String getPostingStatus() {
+        return postingStatus;
+    }
+
+    public void setPostingStatus(String postingStatus) {
+        this.postingStatus = postingStatus;
+    }
+
+    public UUID getPostingRequestId() {
+        return postingRequestId;
+    }
+
+    public void setPostingRequestId(UUID postingRequestId) {
+        this.postingRequestId = postingRequestId;
+    }
+
+    public UUID getJournalId() {
+        return journalId;
+    }
+
+    public void setJournalId(UUID journalId) {
+        this.journalId = journalId;
+    }
+
+    public String getPostingFailureReason() {
+        return postingFailureReason;
+    }
+
+    public void setPostingFailureReason(String postingFailureReason) {
+        this.postingFailureReason = postingFailureReason;
+    }
+
     @Override
     public String toString() {
         return "SupplierBProduct{" +
                 "sBPId=" + sBPId +
                 ", productId=" + productId +
+                ", supplierId=" + supplierId +
                 ", quantity=" + quantity +
                 ", cost=" + cost +
                 ", userName='" + userName + '\'' +
@@ -115,6 +175,10 @@ public class SupplierBProduct {
                 ", time=" + time +
                 ", desc='" + desc + '\'' +
                 ", orderDetailsId=" + orderDetailsId +
+                ", postingStatus='" + postingStatus + '\'' +
+                ", postingRequestId=" + postingRequestId +
+                ", journalId=" + journalId +
+                ", postingFailureReason='" + postingFailureReason + '\'' +
                 '}';
     }
 }

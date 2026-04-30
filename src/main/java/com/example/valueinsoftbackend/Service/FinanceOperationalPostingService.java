@@ -6,9 +6,11 @@ import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.DamagedItem;
 import com.example.valueinsoftbackend.Model.Order;
+import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
 import com.example.valueinsoftbackend.Model.Sales.SupplierReceipt;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinancePostingRequestCreateRequest;
+import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -157,6 +159,35 @@ public class FinanceOperationalPostingService {
                 buildPurchaseReturnPayload(transaction, inventoryTransactionId, inventoryMovementId));
 
         financePostingRequestService.createPostingRequestFromSystem(transaction.getUserName(), request);
+    }
+
+    public FinancePostingRequestItem enqueueSupplierReturn(int companyId,
+                                                           int branchId,
+                                                           SupplierBProduct returnedProduct) {
+        if (returnedProduct == null || returnedProduct.getQuantity() <= 0 || returnedProduct.getCost() <= 0) {
+            return null;
+        }
+
+        LocalDate postingDate = returnedProduct.getTime().toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for supplier return posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "purchase",
+                "supplier_return",
+                "supplier-return-" + returnedProduct.getsBPId(),
+                postingDate,
+                fiscalPeriodId,
+                buildSupplierReturnPayload(returnedProduct));
+
+        return financePostingRequestService.createPostingRequestFromSystem(returnedProduct.getUserName(), request);
     }
 
     public void enqueueInventoryAdjustmentTransaction(int companyId,
@@ -647,6 +678,40 @@ public class FinanceOperationalPostingService {
         item.put("quantity", Math.abs(transaction.getNumItems()));
         item.put("totalCost", money(BigDecimal.valueOf(Math.abs((long) transaction.getTransTotal()))));
         item.put("inventoryMovementId", inventoryMovementId);
+        return List.of(item);
+    }
+
+    private Map<String, Object> buildSupplierReturnPayload(SupplierBProduct returnedProduct) {
+        BigDecimal returnAmount = money(BigDecimal.valueOf((long) returnedProduct.getQuantity() * returnedProduct.getCost()));
+        BigDecimal requestedRefund = money(Math.max(returnedProduct.getsPaid(), 0));
+        BigDecimal refundedAmount = requestedRefund.min(returnAmount).setScale(4, RoundingMode.HALF_UP);
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("supplierReturnId", returnedProduct.getsBPId());
+        payload.put("orderDetailsId", returnedProduct.getOrderDetailsId());
+        payload.put("supplierId", positiveOrNull(returnedProduct.getSupplierId()));
+        payload.put("inventoryAmount", returnAmount);
+        payload.put("returnAmount", returnAmount);
+        payload.put("taxAmount", money(0));
+        payload.put("grossAmount", returnAmount);
+        payload.put("refundedAmount", refundedAmount);
+        payload.put("paymentMethod", refundedAmount.compareTo(BigDecimal.ZERO) > 0 ? "cash" : null);
+        payload.put("paymentId", refundedAmount.compareTo(BigDecimal.ZERO) > 0
+                ? "supplier-return-" + returnedProduct.getsBPId()
+                : null);
+        payload.put("returnReason", returnedProduct.getDesc());
+        payload.put("items", buildSupplierReturnItemPayload(returnedProduct, returnAmount));
+        return payload;
+    }
+
+    private List<Map<String, Object>> buildSupplierReturnItemPayload(SupplierBProduct returnedProduct,
+                                                                     BigDecimal returnAmount) {
+        LinkedHashMap<String, Object> item = new LinkedHashMap<>();
+        item.put("productId", returnedProduct.getProductId());
+        item.put("quantity", returnedProduct.getQuantity());
+        item.put("totalCost", returnAmount);
+        item.put("supplierReturnId", returnedProduct.getsBPId());
         return List.of(item);
     }
 

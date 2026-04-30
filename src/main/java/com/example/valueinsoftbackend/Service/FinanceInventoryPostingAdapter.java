@@ -478,6 +478,7 @@ public class FinanceInventoryPostingAdapter implements FinancePostingAdapter {
         FinanceAccountMappingItem mapping = dbFinanceSetup.resolveActiveAccountMapping(
                 request.getCompanyId(),
                 branchId,
+                null,
                 mappingKey,
                 request.getPostingDate());
         if (mapping == null) {

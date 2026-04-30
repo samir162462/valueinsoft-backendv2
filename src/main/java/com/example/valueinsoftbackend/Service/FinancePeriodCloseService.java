@@ -220,6 +220,7 @@ public class FinancePeriodCloseService {
         FinanceAccountMappingItem retainedEarningsMapping = dbFinanceSetup.resolveActiveAccountMapping(
                 companyId,
                 null,
+                null,
                 "closing.retained_earnings",
                 period.getEndDate());
         if (retainedEarningsMapping == null) {
