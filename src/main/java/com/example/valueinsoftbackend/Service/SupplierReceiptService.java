@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbMoney.DBMSupplierReceipt;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Request.SupplierReceiptCreateRequest;
 import com.example.valueinsoftbackend.Model.Sales.SupplierReceipt;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
@@ -33,7 +34,7 @@ public class SupplierReceiptService {
     }
 
     @Transactional
-    public String addSupplierReceipt(int companyId, SupplierReceiptCreateRequest request) {
+    public SupplierReceipt addSupplierReceipt(int companyId, SupplierReceiptCreateRequest request) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         if (request.getRemainingAmount().signum() < 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "SUPPLIER_RECEIPT_INVALID_REMAINING", "remainingAmount must be zero or greater");
@@ -70,7 +71,7 @@ public class SupplierReceiptService {
                 request.getAmountPaid()
         );
         supplierReceiptRepository.verifyDependentRows(inventoryRows, supplierRows);
-        enqueueFinanceSupplierReceipt(companyId, created);
+        enrichFinanceSupplierReceipt(companyId, created);
 
         log.info(
                 "Recorded supplier receipt for company {} branch {} supplier {} transaction {}",
@@ -79,17 +80,25 @@ public class SupplierReceiptService {
                 request.getSupplierId(),
                 request.getTransId()
         );
-        return "the Client Receipt Added Successfully : " + request.getSupplierId();
+        return created;
     }
 
-    private void enqueueFinanceSupplierReceipt(int companyId, SupplierReceipt receipt) {
+    private void enrichFinanceSupplierReceipt(int companyId, SupplierReceipt receipt) {
         if (receipt == null || receipt.getAmountPaid() == null || receipt.getAmountPaid().signum() <= 0) {
             return;
         }
 
         try {
-            financeOperationalPostingService.enqueueSupplierPayment(companyId, receipt);
+            FinancePostingRequestItem postingRequest = financeOperationalPostingService.enqueueSupplierPayment(companyId, receipt);
+            if (postingRequest != null) {
+                receipt.setPostingStatus(postingRequest.getStatus());
+                receipt.setPostingRequestId(postingRequest.getPostingRequestId());
+                receipt.setJournalId(postingRequest.getJournalEntryId());
+                receipt.setPostingFailureReason(postingRequest.getLastError());
+            }
         } catch (RuntimeException exception) {
+            receipt.setPostingStatus("failed");
+            receipt.setPostingFailureReason(exception.getMessage());
             log.warn(
                     "Supplier receipt {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
                     receipt.getSrId(),

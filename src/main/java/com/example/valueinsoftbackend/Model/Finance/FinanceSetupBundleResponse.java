@@ -18,5 +18,6 @@ public class FinanceSetupBundleResponse {
     private ArrayList<FinanceAccountItem> accounts;
     private ArrayList<FinanceAccountMappingItem> accountMappings;
     private ArrayList<FinanceTaxCodeItem> taxCodes;
+    private ArrayList<FinanceSupplierItem> suppliers;
     private Instant generatedAt;
 }

@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceFiscalPeriodItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceFiscalYearItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceSetupBundleResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceSetupOverviewResponse;
+import com.example.valueinsoftbackend.Model.Finance.FinanceSupplierItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTaxCodeItem;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceAccountCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceAccountMappingCreateRequest;
@@ -51,13 +52,16 @@ public class FinanceSetupService {
     private final DbFinanceSetup dbFinanceSetup;
     private final AuthorizationService authorizationService;
     private final FinanceAuditService financeAuditService;
+    private final DbSupplier dbSupplier;
 
     public FinanceSetupService(DbFinanceSetup dbFinanceSetup,
             AuthorizationService authorizationService,
-            FinanceAuditService financeAuditService) {
+            FinanceAuditService financeAuditService,
+            DbSupplier dbSupplier) {
         this.dbFinanceSetup = dbFinanceSetup;
         this.authorizationService = authorizationService;
         this.financeAuditService = financeAuditService;
+        this.dbSupplier = dbSupplier;
     }
 
     public FinanceSetupOverviewResponse getOverviewForAuthenticatedUser(String authenticatedName, int companyId) {
@@ -72,6 +76,12 @@ public class FinanceSetupService {
         requireBranchIfPresent(companyId, branchId);
         authorizeRead(authenticatedName, companyId);
 
+        ArrayList<FinanceSupplierItem> suppliers = new ArrayList<>();
+        if (branchId != null) {
+            dbSupplier.getSuppliers(branchId, companyId).forEach(s -> 
+                suppliers.add(new FinanceSupplierItem(s.getSupplierId(), s.getSupplierName())));
+        }
+
         return new FinanceSetupBundleResponse(
                 companyId,
                 dbFinanceSetup.getOverview(companyId),
@@ -80,6 +90,7 @@ public class FinanceSetupService {
                 dbFinanceSetup.getAccounts(companyId),
                 dbFinanceSetup.getAccountMappings(companyId, branchId),
                 dbFinanceSetup.getTaxCodes(companyId),
+                suppliers,
                 Instant.now());
     }
 
@@ -214,9 +225,11 @@ public class FinanceSetupService {
         requireCompany(request.getCompanyId());
         requireBranchIfPresent(request.getCompanyId(), request.getBranchId());
         authorizeEdit(authenticatedName, request.getCompanyId());
+
         validateAccountMappingRequest(
                 request.getCompanyId(),
                 request.getBranchId(),
+                request.getSupplierId(),
                 request.getMappingKey(),
                 request.getAccountId(),
                 request.getEffectiveFrom(),
@@ -231,7 +244,7 @@ public class FinanceSetupService {
                 "finance.setup.account_mapping.created",
                 "finance_account_mapping",
                 mapping.getAccountMappingId(),
-                setupState("mappingKey", mapping.getMappingKey(), "status", mapping.getStatus()));
+                setupState("key", mapping.getMappingKey(), "status", mapping.getStatus(), "supplierId", mapping.getSupplierId()));
         return mapping;
     }
 
@@ -250,6 +263,7 @@ public class FinanceSetupService {
         validateAccountMappingRequest(
                 request.getCompanyId(),
                 request.getBranchId(),
+                request.getSupplierId(),
                 request.getMappingKey(),
                 request.getAccountId(),
                 request.getEffectiveFrom(),
@@ -270,7 +284,7 @@ public class FinanceSetupService {
                 "finance.setup.account_mapping.updated",
                 "finance_account_mapping",
                 updated.getAccountMappingId(),
-                setupState("mappingKey", updated.getMappingKey(), "status", updated.getStatus()));
+                setupState("key", updated.getMappingKey(), "status", updated.getStatus(), "supplierId", updated.getSupplierId()));
         return updated;
     }
 
@@ -763,6 +777,7 @@ public class FinanceSetupService {
 
     private void validateAccountMappingRequest(int companyId,
             Integer branchId,
+            Integer supplierId,
             String mappingKey,
             UUID accountId,
             LocalDate effectiveFrom,
@@ -775,6 +790,17 @@ public class FinanceSetupService {
         if (branchId != null && branchId <= 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_BRANCH_SCOPE_INVALID",
                     "Branch must be positive when provided");
+        }
+
+        if (supplierId != null) {
+            if (branchId == null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_BRANCH_REQUIRED_FOR_SUPPLIER_MAPPING",
+                        "Branch is required when mapping a specific supplier");
+            }
+            if (!dbSupplier.supplierExists(supplierId, branchId, companyId)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_SUPPLIER_MAPPING_SUPPLIER_INVALID",
+                        "Supplier does not exist in the specified branch");
+            }
         }
 
         if (mappingKey == null || !ACCOUNT_MAPPING_KEY_PATTERN.matcher(mappingKey.trim()).matches()) {
@@ -796,12 +822,13 @@ public class FinanceSetupService {
         if ("active".equals(status) && dbFinanceSetup.accountMappingHasActiveConflict(
                 companyId,
                 branchId,
+                supplierId,
                 mappingKey.trim(),
                 effectiveFrom,
                 effectiveTo,
                 excludedAccountMappingId)) {
             throw new ApiException(HttpStatus.CONFLICT, "FINANCE_ACCOUNT_MAPPING_OVERLAP",
-                    "Active account mapping overlaps an existing active mapping for the same key and branch scope");
+                    "Active account mapping overlaps an existing active mapping for the same key and scope");
         }
     }
 

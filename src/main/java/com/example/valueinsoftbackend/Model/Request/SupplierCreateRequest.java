@@ -17,13 +17,17 @@ public class SupplierCreateRequest {
     @Size(max = 16, message = "supplierPhone2 must be 16 characters or fewer")
     private String supplierPhone2;
 
-    @NotBlank(message = "suplierLocation is required")
     @Size(max = 60, message = "suplierLocation must be 60 characters or fewer")
     private String suplierLocation;
 
-    @NotBlank(message = "suplierMajor is required")
+    @Size(max = 60, message = "supplierLocation must be 60 characters or fewer")
+    private String supplierLocation;
+
     @Size(max = 30, message = "suplierMajor must be 30 characters or fewer")
     private String suplierMajor;
+
+    @Size(max = 30, message = "supplierMajor must be 30 characters or fewer")
+    private String supplierMajor;
 
     @Positive(message = "branchId must be positive")
     private int branchId;
@@ -59,19 +63,35 @@ public class SupplierCreateRequest {
     }
 
     public String getSuplierLocation() {
-        return suplierLocation;
+        return supplierLocation == null || supplierLocation.isBlank() ? suplierLocation : supplierLocation;
     }
 
     public void setSuplierLocation(String suplierLocation) {
         this.suplierLocation = suplierLocation;
     }
 
+    public String getSupplierLocation() {
+        return getSuplierLocation();
+    }
+
+    public void setSupplierLocation(String supplierLocation) {
+        this.supplierLocation = supplierLocation;
+    }
+
     public String getSuplierMajor() {
-        return suplierMajor;
+        return supplierMajor == null || supplierMajor.isBlank() ? suplierMajor : supplierMajor;
     }
 
     public void setSuplierMajor(String suplierMajor) {
         this.suplierMajor = suplierMajor;
+    }
+
+    public String getSupplierMajor() {
+        return getSuplierMajor();
+    }
+
+    public void setSupplierMajor(String supplierMajor) {
+        this.supplierMajor = supplierMajor;
     }
 
     public int getBranchId() {

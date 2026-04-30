@@ -17,6 +17,9 @@ public class FinanceAccountMappingUpdateRequest {
     @Positive
     private Integer branchId;
 
+    @Positive
+    private Integer supplierId;
+
     @NotBlank
     private String mappingKey;
 

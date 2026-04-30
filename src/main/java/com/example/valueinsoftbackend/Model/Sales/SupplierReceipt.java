@@ -6,6 +6,7 @@ package com.example.valueinsoftbackend.Model.Sales;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.util.UUID;
 
 public class SupplierReceipt {
 
@@ -18,8 +19,28 @@ public class SupplierReceipt {
     int supplierId;
     String type;
     int branchId;
+    String postingStatus;
+    UUID postingRequestId;
+    UUID journalId;
+    String postingFailureReason;
 
     public SupplierReceipt(int srId, int transId, BigDecimal amountPaid, BigDecimal remainingAmount, Timestamp receiptTime, String userRecived, int supplierId, String type, int branchId) {
+        this(srId, transId, amountPaid, remainingAmount, receiptTime, userRecived, supplierId, type, branchId, null, null, null, null);
+    }
+
+    public SupplierReceipt(int srId,
+                           int transId,
+                           BigDecimal amountPaid,
+                           BigDecimal remainingAmount,
+                           Timestamp receiptTime,
+                           String userRecived,
+                           int supplierId,
+                           String type,
+                           int branchId,
+                           String postingStatus,
+                           UUID postingRequestId,
+                           UUID journalId,
+                           String postingFailureReason) {
         this.srId = srId;
         this.transId = transId;
         this.amountPaid = amountPaid;
@@ -29,6 +50,10 @@ public class SupplierReceipt {
         this.supplierId = supplierId;
         this.type = type;
         this.branchId = branchId;
+        this.postingStatus = postingStatus;
+        this.postingRequestId = postingRequestId;
+        this.journalId = journalId;
+        this.postingFailureReason = postingFailureReason;
     }
 
     public int getSrId() {
@@ -101,5 +126,37 @@ public class SupplierReceipt {
 
     public void setBranchId(int branchId) {
         this.branchId = branchId;
+    }
+
+    public String getPostingStatus() {
+        return postingStatus;
+    }
+
+    public void setPostingStatus(String postingStatus) {
+        this.postingStatus = postingStatus;
+    }
+
+    public UUID getPostingRequestId() {
+        return postingRequestId;
+    }
+
+    public void setPostingRequestId(UUID postingRequestId) {
+        this.postingRequestId = postingRequestId;
+    }
+
+    public UUID getJournalId() {
+        return journalId;
+    }
+
+    public void setJournalId(UUID journalId) {
+        this.journalId = journalId;
+    }
+
+    public String getPostingFailureReason() {
+        return postingFailureReason;
+    }
+
+    public void setPostingFailureReason(String postingFailureReason) {
+        this.postingFailureReason = postingFailureReason;
     }
 }

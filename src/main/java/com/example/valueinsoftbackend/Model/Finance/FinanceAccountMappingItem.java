@@ -15,6 +15,7 @@ public class FinanceAccountMappingItem {
     private UUID accountMappingId;
     private int companyId;
     private Integer branchId;
+    private Integer supplierId;
     private String mappingKey;
     private UUID accountId;
     private String accountCode;

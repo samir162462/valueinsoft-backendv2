@@ -447,6 +447,7 @@ public class DbFinanceSetup {
 
     public boolean accountMappingHasActiveConflict(int companyId,
                                                    Integer branchId,
+                                                   Integer supplierId,
                                                    String mappingKey,
                                                    LocalDate effectiveFrom,
                                                    LocalDate effectiveTo,
@@ -466,6 +467,14 @@ public class DbFinanceSetup {
             params.addValue("branchId", branchId);
         }
 
+        String supplierClause;
+        if (supplierId == null) {
+            supplierClause = "AND supplier_id IS NULL ";
+        } else {
+            supplierClause = "AND supplier_id = :supplierId ";
+            params.addValue("supplierId", supplierId);
+        }
+
         String excludeClause = excludedAccountMappingId == null
                 ? ""
                 : "AND account_mapping_id <> :excludedAccountMappingId ";
@@ -476,6 +485,7 @@ public class DbFinanceSetup {
                         "AND mapping_key = :mappingKey " +
                         "AND status = 'active' " +
                         branchClause +
+                        supplierClause +
                         excludeClause +
                         "AND effective_from <= COALESCE(:effectiveTo, DATE '9999-12-31') " +
                         "AND COALESCE(effective_to, DATE '9999-12-31') >= :effectiveFrom",
@@ -488,8 +498,8 @@ public class DbFinanceSetup {
     public FinanceAccountMappingItem createAccountMapping(FinanceAccountMappingCreateRequest request) {
         UUID accountMappingId = namedParameterJdbcTemplate.queryForObject(
                 "INSERT INTO public.finance_account_mapping " +
-                        "(company_id, branch_id, mapping_key, account_id, priority, effective_from, effective_to, status) " +
-                        "VALUES (:companyId, :branchId, :mappingKey, :accountId, :priority, :effectiveFrom, :effectiveTo, :status) " +
+                        "(company_id, branch_id, supplier_id, mapping_key, account_id, priority, effective_from, effective_to, status) " +
+                        "VALUES (:companyId, :branchId, :supplierId, :mappingKey, :accountId, :priority, :effectiveFrom, :effectiveTo, :status) " +
                         "RETURNING account_mapping_id",
                 accountMappingParams(request),
                 UUID.class
@@ -501,6 +511,7 @@ public class DbFinanceSetup {
         int rows = namedParameterJdbcTemplate.update(
                 "UPDATE public.finance_account_mapping " +
                         "SET branch_id = :branchId, " +
+                        "supplier_id = :supplierId, " +
                         "mapping_key = :mappingKey, " +
                         "account_id = :accountId, " +
                         "priority = :priority, " +
@@ -750,14 +761,14 @@ public class DbFinanceSetup {
                 : "AND (m.branch_id IS NULL OR m.branch_id = :branchId) ";
 
         return new ArrayList<>(namedParameterJdbcTemplate.query(
-                "SELECT m.account_mapping_id, m.company_id, m.branch_id, m.mapping_key, m.account_id, " +
+                "SELECT m.account_mapping_id, m.company_id, m.branch_id, m.supplier_id, m.mapping_key, m.account_id, " +
                         "a.account_code, a.account_name, m.priority, m.effective_from, m.effective_to, m.status, " +
                         "m.version, m.created_at, m.created_by, m.updated_at, m.updated_by " +
                         "FROM public.finance_account_mapping m " +
                         "JOIN public.finance_account a ON a.company_id = m.company_id AND a.account_id = m.account_id " +
                         "WHERE m.company_id = :companyId " +
                         branchFilter +
-                        "ORDER BY m.mapping_key ASC, m.branch_id NULLS FIRST, m.priority ASC, m.effective_from DESC",
+                        "ORDER BY m.mapping_key ASC, m.branch_id NULLS FIRST, m.supplier_id NULLS FIRST, m.priority ASC, m.effective_from DESC",
                 params,
                 (rs, rowNum) -> mapAccountMapping(rs)
         ));
@@ -765,7 +776,7 @@ public class DbFinanceSetup {
 
     public FinanceAccountMappingItem getAccountMappingById(int companyId, UUID accountMappingId) {
         return namedParameterJdbcTemplate.queryForObject(
-                "SELECT m.account_mapping_id, m.company_id, m.branch_id, m.mapping_key, m.account_id, " +
+                "SELECT m.account_mapping_id, m.company_id, m.branch_id, m.supplier_id, m.mapping_key, m.account_id, " +
                         "a.account_code, a.account_name, m.priority, m.effective_from, m.effective_to, m.status, " +
                         "m.version, m.created_at, m.created_by, m.updated_at, m.updated_by " +
                         "FROM public.finance_account_mapping m " +
@@ -780,10 +791,11 @@ public class DbFinanceSetup {
 
     public FinanceAccountMappingItem resolveActiveAccountMapping(int companyId,
                                                                  Integer branchId,
+                                                                 Integer supplierId,
                                                                  String mappingKey,
                                                                  LocalDate effectiveDate) {
         ArrayList<FinanceAccountMappingItem> mappings = new ArrayList<>(namedParameterJdbcTemplate.query(
-                "SELECT m.account_mapping_id, m.company_id, m.branch_id, m.mapping_key, m.account_id, " +
+                "SELECT m.account_mapping_id, m.company_id, m.branch_id, m.supplier_id, m.mapping_key, m.account_id, " +
                         "a.account_code, a.account_name, m.priority, m.effective_from, m.effective_to, m.status, " +
                         "m.version, m.created_at, m.created_by, m.updated_at, m.updated_by " +
                         "FROM public.finance_account_mapping m " +
@@ -794,13 +806,18 @@ public class DbFinanceSetup {
                         "AND m.effective_from <= :effectiveDate " +
                         "AND (m.effective_to IS NULL OR m.effective_to >= :effectiveDate) " +
                         "AND (m.branch_id = :branchId OR m.branch_id IS NULL) " +
+                        "AND (m.supplier_id = :supplierId OR m.supplier_id IS NULL) " +
                         "AND a.status = 'active' " +
                         "AND a.is_postable = TRUE " +
-                        "ORDER BY CASE WHEN m.branch_id = :branchId THEN 0 ELSE 1 END, m.priority ASC, m.effective_from DESC " +
+                        "ORDER BY " +
+                        "  CASE WHEN m.supplier_id = :supplierId THEN 0 ELSE 1 END, " +
+                        "  CASE WHEN m.branch_id = :branchId THEN 0 ELSE 1 END, " +
+                        "  m.priority ASC, m.effective_from DESC " +
                         "LIMIT 1",
                 new MapSqlParameterSource()
                         .addValue("companyId", companyId)
                         .addValue("branchId", branchId)
+                        .addValue("supplierId", supplierId)
                         .addValue("mappingKey", mappingKey)
                         .addValue("effectiveDate", effectiveDate),
                 (rs, rowNum) -> mapAccountMapping(rs)));
@@ -909,6 +926,7 @@ public class DbFinanceSetup {
                 uuid(rs, "account_mapping_id"),
                 rs.getInt("company_id"),
                 nullableInteger(rs, "branch_id"),
+                nullableInteger(rs, "supplier_id"),
                 rs.getString("mapping_key"),
                 uuid(rs, "account_id"),
                 rs.getString("account_code"),
@@ -988,6 +1006,7 @@ public class DbFinanceSetup {
         return new MapSqlParameterSource()
                 .addValue("companyId", request.getCompanyId())
                 .addValue("branchId", request.getBranchId())
+                .addValue("supplierId", request.getSupplierId())
                 .addValue("mappingKey", request.getMappingKey().trim())
                 .addValue("accountId", request.getAccountId())
                 .addValue("priority", request.getPriority())
@@ -1000,6 +1019,7 @@ public class DbFinanceSetup {
         return new MapSqlParameterSource()
                 .addValue("companyId", request.getCompanyId())
                 .addValue("branchId", request.getBranchId())
+                .addValue("supplierId", request.getSupplierId())
                 .addValue("mappingKey", request.getMappingKey().trim())
                 .addValue("accountId", request.getAccountId())
                 .addValue("priority", request.getPriority())

@@ -202,7 +202,13 @@ public class DbBranch {
                 "    \"SupplierLocation\" VARCHAR," +
                 "    \"suplierMajor\" VARCHAR(20)," +
                 "    \"supplierRemainig\" INTEGER DEFAULT 0," +
-                "    \"supplierTotalSales\" INTEGER DEFAULT 0" +
+                "    \"supplierTotalSales\" INTEGER DEFAULT 0," +
+                "    \"supplierStatus\" VARCHAR(32) NOT NULL DEFAULT 'active'," +
+                "    \"archivedAt\" TIMESTAMP NULL," +
+                "    \"archivedBy\" INTEGER NULL," +
+                "    \"archiveReason\" VARCHAR(500) NULL," +
+                "    \"normalizedSupplierName\" VARCHAR(255)," +
+                "    \"normalizedSupplierPhone1\" VARCHAR(64)" +
                 ")";
         return executeProvisioningSql(sql, "supplier", branchId, companyId);
     }

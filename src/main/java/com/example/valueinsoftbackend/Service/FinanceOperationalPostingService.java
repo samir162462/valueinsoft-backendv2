@@ -419,9 +419,9 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(receipt.getUserName(), request);
     }
 
-    public void enqueueSupplierPayment(int companyId, SupplierReceipt receipt) {
+    public com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem enqueueSupplierPayment(int companyId, SupplierReceipt receipt) {
         if (receipt == null || receipt.getAmountPaid() == null || receipt.getAmountPaid().compareTo(BigDecimal.ZERO) <= 0) {
-            return;
+            return null;
         }
 
         Timestamp receiptTime = receipt.getReceiptTime() == null ? new Timestamp(System.currentTimeMillis()) : receipt.getReceiptTime();
@@ -444,7 +444,7 @@ public class FinanceOperationalPostingService {
                 fiscalPeriodId,
                 buildSupplierPaymentPayload(receipt));
 
-        financePostingRequestService.createPostingRequestFromSystem(receipt.getUserRecived(), request);
+        return financePostingRequestService.createPostingRequestFromSystem(receipt.getUserRecived(), request);
     }
 
     public void enqueueExpense(int companyId,

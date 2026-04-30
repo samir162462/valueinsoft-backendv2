@@ -135,7 +135,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         String paymentId = firstText(payload, "paymentId", "settlementId", "providerSettlementId", "providerReference");
         ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
         lines.add(debitLine(
-                resolveMapping(request, destinationMappingKey(destination)),
+                resolveMapping(request, destinationMappingKey(destination), null),
                 request,
                 netAmount,
                 settlementDescription(destination),
@@ -144,7 +144,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 null));
         if (feeAmount.compareTo(ZERO) > 0) {
             lines.add(debitLine(
-                    resolveMapping(request, "payment.fee_expense"),
+                    resolveMapping(request, "payment.fee_expense", null),
                     request,
                     feeAmount,
                     "Payment processing fee",
@@ -153,7 +153,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                     null));
         }
         lines.add(creditLine(
-                resolveMapping(request, clearingMappingKey(settlementMethod)),
+                resolveMapping(request, clearingMappingKey(settlementMethod), null),
                 request,
                 grossAmount,
                 clearingDescription(settlementMethod),
@@ -188,7 +188,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         String paymentId = firstText(payload, "paymentId", "receiptId", "clientReceiptId");
         ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
         lines.add(debitLine(
-                resolveMapping(request, paymentInstrumentMappingKey(paymentMethod)),
+                resolveMapping(request, paymentInstrumentMappingKey(paymentMethod), null),
                 request,
                 amount,
                 "Customer receipt " + paymentMethod,
@@ -196,7 +196,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 customerId,
                 null));
         lines.add(creditLine(
-                resolveMapping(request, "pos.receivable"),
+                resolveMapping(request, "pos.receivable", null),
                 request,
                 amount,
                 "Customer receivable settlement",
@@ -231,7 +231,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         String paymentId = firstText(payload, "paymentId", "receiptId", "supplierReceiptId");
         ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
         lines.add(debitLine(
-                resolveMapping(request, "purchase.payable"),
+                resolveMapping(request, "purchase.payable", supplierId),
                 request,
                 amount,
                 "Supplier payable settlement",
@@ -239,7 +239,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 null,
                 supplierId));
         lines.add(creditLine(
-                resolveMapping(request, paymentInstrumentMappingKey(paymentMethod)),
+                resolveMapping(request, paymentInstrumentMappingKey(paymentMethod), null),
                 request,
                 amount,
                 "Supplier payment " + paymentMethod,
@@ -302,15 +302,16 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         return journalEntryId;
     }
 
-    private FinanceAccountMappingItem resolveMapping(FinancePostingRequestItem request, String mappingKey) {
+    private FinanceAccountMappingItem resolveMapping(FinancePostingRequestItem request, String mappingKey, Integer supplierId) {
         FinanceAccountMappingItem mapping = dbFinanceSetup.resolveActiveAccountMapping(
                 request.getCompanyId(),
                 request.getBranchId(),
+                supplierId,
                 mappingKey,
                 request.getPostingDate());
         if (mapping == null) {
             throw new ApiException(HttpStatus.CONFLICT, "FINANCE_ACCOUNT_MAPPING_MISSING",
-                    "Missing active finance account mapping: " + mappingKey);
+                    "Missing active finance account mapping: " + mappingKey + (supplierId != null ? " for supplier " + supplierId : ""));
         }
         return mapping;
     }

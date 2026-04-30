@@ -124,7 +124,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
         BigDecimal payableAmount = grossAmount.subtract(settledAmount).setScale(4, RoundingMode.HALF_UP);
 
         ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
-        FinanceAccountMappingItem inventoryMapping = resolveMapping(request, "purchase.inventory");
+        FinanceAccountMappingItem inventoryMapping = resolveMapping(request, "purchase.inventory", null);
         for (PurchaseInventoryLine inventoryLine : inventoryLines) {
             if (purchaseReturn) {
                 lines.add(creditLine(
@@ -151,7 +151,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
         if (taxAmount.compareTo(ZERO) > 0) {
             if (purchaseReturn) {
                 lines.add(creditLine(
-                        resolveMapping(request, "purchase.input_vat"),
+                        resolveMapping(request, "purchase.input_vat", null),
                         request,
                         taxAmount,
                         "Purchase return VAT reversal",
@@ -161,7 +161,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         null));
             } else {
                 lines.add(debitLine(
-                        resolveMapping(request, "purchase.input_vat"),
+                        resolveMapping(request, "purchase.input_vat", null),
                         request,
                         taxAmount,
                         "Purchase input VAT",
@@ -175,7 +175,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
             String paymentMethod = normalizePaymentMethod(text(payload, "paymentMethod", "cash"));
             if (purchaseReturn) {
                 lines.add(debitLine(
-                        resolveMapping(request, "purchase." + paymentMethod),
+                        resolveMapping(request, "purchase." + paymentMethod, null),
                         request,
                         settledAmount,
                         "Purchase return " + paymentMethod + " refund",
@@ -185,7 +185,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         text(payload, "paymentId", null)));
             } else {
                 lines.add(creditLine(
-                        resolveMapping(request, "purchase." + paymentMethod),
+                        resolveMapping(request, "purchase." + paymentMethod, null),
                         request,
                         settledAmount,
                         "Purchase " + paymentMethod + " payment",
@@ -201,7 +201,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                     : "purchase.payable";
             if (purchaseReturn) {
                 lines.add(debitLine(
-                        resolveMapping(request, payableMappingKey),
+                        resolveMapping(request, payableMappingKey, supplierId),
                         request,
                         payableAmount,
                         "Purchase return supplier credit",
@@ -211,7 +211,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         null));
             } else {
                 lines.add(creditLine(
-                        resolveMapping(request, payableMappingKey),
+                        resolveMapping(request, payableMappingKey, supplierId),
                         request,
                         payableAmount,
                         isGoodsReceipt(request) ? "Purchase goods received not invoiced" : "Purchase supplier payable",
@@ -287,15 +287,16 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
         return inventoryLines;
     }
 
-    private FinanceAccountMappingItem resolveMapping(FinancePostingRequestItem request, String mappingKey) {
+    private FinanceAccountMappingItem resolveMapping(FinancePostingRequestItem request, String mappingKey, Integer supplierId) {
         FinanceAccountMappingItem mapping = dbFinanceSetup.resolveActiveAccountMapping(
                 request.getCompanyId(),
                 request.getBranchId(),
+                supplierId,
                 mappingKey,
                 request.getPostingDate());
         if (mapping == null) {
             throw new ApiException(HttpStatus.CONFLICT, "FINANCE_ACCOUNT_MAPPING_MISSING",
-                    "Missing active finance account mapping: " + mappingKey);
+                    "Missing active finance account mapping: " + mappingKey + (supplierId != null ? " for supplier " + supplierId : ""));
         }
         return mapping;
     }

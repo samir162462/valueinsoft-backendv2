@@ -23,7 +23,11 @@ public class DBMSupplierReceipt {
             rs.getString("userRecived"),
             rs.getInt("supplierId"),
             rs.getString("type"),
-            rs.getInt("branchId")
+            rs.getInt("branchId"),
+            rs.getString("postingStatus"),
+            nullableUuid(rs, "postingRequestId"),
+            nullableUuid(rs, "journalId"),
+            rs.getString("postingFailureReason")
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -34,11 +38,20 @@ public class DBMSupplierReceipt {
 
     public List<SupplierReceipt> getSupplierReceipts(int companyId, int supplierId) {
         TenantSqlIdentifiers.requirePositive(supplierId, "supplierId");
-        String sql = "SELECT \"srId\", \"transId\", \"amountPaid\"::money::numeric AS \"amountPaid\", " +
-                "\"remainingAmount\"::money::numeric AS \"remainingAmount\", \"receiptTime\", \"userRecived\", " +
-                "\"supplierId\", type, \"branchId\" FROM " + TenantSqlIdentifiers.supplierReceiptsTable(companyId) +
-                " WHERE \"supplierId\" = ? ORDER BY \"receiptTime\" DESC";
-        return jdbcTemplate.query(sql, supplierReceiptRowMapper, supplierId);
+        String sql = "SELECT receipt.\"srId\", receipt.\"transId\", receipt.\"amountPaid\"::money::numeric AS \"amountPaid\", " +
+                "receipt.\"remainingAmount\"::money::numeric AS \"remainingAmount\", receipt.\"receiptTime\", receipt.\"userRecived\", " +
+                "receipt.\"supplierId\", receipt.type, receipt.\"branchId\", " +
+                "fp.status AS \"postingStatus\", fp.posting_request_id AS \"postingRequestId\", " +
+                "fp.journal_entry_id AS \"journalId\", fp.last_error AS \"postingFailureReason\" " +
+                "FROM " + TenantSqlIdentifiers.supplierReceiptsTable(companyId) + " receipt " +
+                "LEFT JOIN public.finance_posting_request fp " +
+                "  ON fp.company_id = ? " +
+                " AND fp.branch_id = receipt.\"branchId\" " +
+                " AND fp.source_module = 'payment' " +
+                " AND fp.source_type = 'supplier_payment' " +
+                " AND fp.source_id = 'supplier-receipt-' || receipt.\"srId\"::text " +
+                "WHERE receipt.\"supplierId\" = ? ORDER BY receipt.\"receiptTime\" DESC";
+        return jdbcTemplate.query(sql, supplierReceiptRowMapper, companyId, supplierId);
     }
 
     public int insertSupplierReceipt(int companyId, SupplierReceipt supplierReceipt) {
@@ -65,7 +78,8 @@ public class DBMSupplierReceipt {
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
                 "RETURNING \"srId\", \"transId\", \"amountPaid\"::money::numeric AS \"amountPaid\", " +
                 "\"remainingAmount\"::money::numeric AS \"remainingAmount\", \"receiptTime\", \"userRecived\", " +
-                "\"supplierId\", type, \"branchId\"";
+                "\"supplierId\", type, \"branchId\", NULL::varchar AS \"postingStatus\", " +
+                "NULL::uuid AS \"postingRequestId\", NULL::uuid AS \"journalId\", NULL::text AS \"postingFailureReason\"";
 
         return jdbcTemplate.queryForObject(
                 sql,
@@ -101,5 +115,9 @@ public class DBMSupplierReceipt {
                     "Supplier receipt references a missing transaction or supplier"
             );
         }
+    }
+
+    private static java.util.UUID nullableUuid(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        return rs.getObject(column, java.util.UUID.class);
     }
 }
