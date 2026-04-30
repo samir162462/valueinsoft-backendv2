@@ -26,8 +26,10 @@ public class SupplierProductCreateRequest {
     @Size(max = 120, message = "desc must be 120 characters or fewer")
     private String desc;
 
-    @Positive(message = "orderDetailsId must be positive")
+    @PositiveOrZero(message = "orderDetailsId must be zero or greater")
     private int orderDetailsId;
+
+    private boolean adjustInventory;
 
     public SupplierProductCreateRequest() {
     }
@@ -86,5 +88,13 @@ public class SupplierProductCreateRequest {
 
     public void setOrderDetailsId(int orderDetailsId) {
         this.orderDetailsId = orderDetailsId;
+    }
+
+    public boolean isAdjustInventory() {
+        return adjustInventory;
+    }
+
+    public void setAdjustInventory(boolean adjustInventory) {
+        this.adjustInventory = adjustInventory;
     }
 }

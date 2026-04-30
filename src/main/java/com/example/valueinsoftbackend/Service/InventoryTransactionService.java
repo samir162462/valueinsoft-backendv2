@@ -271,6 +271,7 @@ public class InventoryTransactionService {
         return normalized.contains("purchase return")
                 || normalized.contains("supplier return")
                 || normalized.contains("vendor return")
+                || normalized.contains("bouncebackinv")
                 || normalized.contains("return supplier")
                 || normalized.contains("return vendor")
                 || normalized.contains("return to supplier")
