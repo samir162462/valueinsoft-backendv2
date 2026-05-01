@@ -35,7 +35,7 @@ public class FinancePostingRequestService {
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 200;
     private static final int MAX_PAYLOAD_LENGTH = 200_000;
-    private static final Set<String> SOURCE_MODULES = Set.of("pos", "purchase", "inventory", "payment", "expense");
+    private static final Set<String> SOURCE_MODULES = Set.of("pos", "purchase", "inventory", "payment", "expense", "payroll");
     private static final Set<String> REQUEST_STATUSES = Set.of("pending", "processing", "posted", "failed", "ignored", "cancelled");
     private static final Pattern SOURCE_TYPE_PATTERN = Pattern.compile("^[a-z][a-z0-9_.-]*$");
 
@@ -483,7 +483,7 @@ public class FinancePostingRequestService {
     private void validateOptionalSourceModule(String sourceModule) {
         if (sourceModule != null && !SOURCE_MODULES.contains(sourceModule)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_SOURCE_MODULE_INVALID",
-                    "Posting request source module must be pos, purchase, inventory, or payment");
+                    "Posting request source module must be pos, purchase, inventory, payment, expense, or payroll");
         }
     }
 

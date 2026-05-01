@@ -164,6 +164,60 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".supplier_" + branchId;
     }
 
+    // -------------------------------------------------------
+    // Payroll module tables
+    // -------------------------------------------------------
+
+    public static String payrollSettingsTable(int companyId) {
+        return companySchema(companyId) + ".payroll_settings";
+    }
+
+    public static String payrollAllowanceTypeTable(int companyId) {
+        return companySchema(companyId) + ".payroll_allowance_type";
+    }
+
+    public static String payrollDeductionTypeTable(int companyId) {
+        return companySchema(companyId) + ".payroll_deduction_type";
+    }
+
+    public static String payrollSalaryProfileTable(int companyId) {
+        return companySchema(companyId) + ".payroll_salary_profile";
+    }
+
+    public static String payrollSalaryComponentTable(int companyId) {
+        return companySchema(companyId) + ".payroll_salary_component";
+    }
+
+    public static String payrollAdjustmentTable(int companyId) {
+        return companySchema(companyId) + ".payroll_adjustment";
+    }
+
+    public static String payrollRunTable(int companyId) {
+        return companySchema(companyId) + ".payroll_run";
+    }
+
+    public static String payrollRunLineTable(int companyId) {
+        return companySchema(companyId) + ".payroll_run_line";
+    }
+
+    public static String payrollRunLineComponentTable(int companyId) {
+        return companySchema(companyId) + ".payroll_run_line_component";
+    }
+
+    public static String payrollPaymentTable(int companyId) {
+        return companySchema(companyId) + ".payroll_payment";
+    }
+
+    public static String payrollPaymentLineTable(int companyId) {
+        return companySchema(companyId) + ".payroll_payment_line";
+    }
+
+    public static String payrollAuditLogTable(int companyId) {
+        return companySchema(companyId) + ".payroll_audit_log";
+    }
+
+    // -------------------------------------------------------
+
     public static void requirePositive(int value, String fieldName) {
         if (value <= 0) {
             throw new IllegalArgumentException(fieldName + " must be positive");
