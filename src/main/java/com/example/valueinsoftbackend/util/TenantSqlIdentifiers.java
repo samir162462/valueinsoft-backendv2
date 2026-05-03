@@ -217,6 +217,42 @@ public final class TenantSqlIdentifiers {
     }
 
     // -------------------------------------------------------
+    // POS Offline Sync tables (public schema)
+    // -------------------------------------------------------
+
+    public static String posDeviceTable() {
+        return "public.pos_device";
+    }
+
+    public static String posSyncBatchTable() {
+        return "public.pos_sync_batch";
+    }
+
+    public static String posOfflineOrderImportTable() {
+        return "public.pos_offline_order_import";
+    }
+
+    public static String posIdempotencyKeyTable() {
+        return "public.pos_idempotency_key";
+    }
+
+    public static String posOfflineOrderErrorTable() {
+        return "public.pos_offline_order_error";
+    }
+
+    public static String posBootstrapVersionTable() {
+        return "public.pos_bootstrap_version";
+    }
+
+    public static String posDeviceSessionTable() {
+        return "public.pos_device_session";
+    }
+
+    public static String posSyncAuditLogTable() {
+        return "public.pos_sync_audit_log";
+    }
+
+    // -------------------------------------------------------
 
     public static void requirePositive(int value, String fieldName) {
         if (value <= 0) {
