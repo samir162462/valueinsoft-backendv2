@@ -209,7 +209,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 currencyCode,
                 "payment.customer_receipt",
                 "RC-",
-                "payment",
+                "receipt",
                 "Customer receipt " + request.getSourceId(),
                 lines);
     }
@@ -252,7 +252,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 currencyCode,
                 "payment.supplier_payment",
                 "SP-",
-                "payment",
+                "supplier_payment",
                 "Supplier payment " + request.getSourceId(),
                 lines);
     }

@@ -19,6 +19,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -257,8 +258,8 @@ class FinanceInventoryPostingAdapterTest {
     }
 
     private void stubMappingForBranch(Integer branchId, String mappingKey, UUID accountId) {
-        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, branchId, mappingKey,
-                LocalDate.of(2026, 4, 7))).thenReturn(mapping(branchId, mappingKey, accountId));
+        when(dbFinanceSetup.resolveActiveAccountMapping(eq(COMPANY_ID), eq(branchId), any(), eq(mappingKey),
+                eq(LocalDate.of(2026, 4, 7)))).thenReturn(mapping(branchId, mappingKey, accountId));
     }
 
     private FinanceAccountMappingItem mapping(Integer branchId, String mappingKey, UUID accountId) {
@@ -266,10 +267,11 @@ class FinanceInventoryPostingAdapterTest {
                 UUID.randomUUID(),
                 COMPANY_ID,
                 branchId,
+                null,
                 mappingKey,
                 accountId,
-                mappingKey,
-                mappingKey,
+                "ACC-" + mappingKey,
+                "Account " + mappingKey,
                 100,
                 LocalDate.of(2026, 1, 1),
                 null,

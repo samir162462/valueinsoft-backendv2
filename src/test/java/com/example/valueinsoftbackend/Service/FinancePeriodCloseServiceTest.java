@@ -98,8 +98,8 @@ class FinancePeriodCloseServiceTest {
     void generateClosingEntriesRequiresRetainedEarningsMapping() {
         when(dbFinanceClose.getNominalClosingBalances(COMPANY_ID, FISCAL_PERIOD_ID, "EGP"))
                 .thenReturn(nominalBalances());
-        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, null, "closing.retained_earnings",
-                LocalDate.of(2026, 1, 31))).thenReturn(null);
+        when(dbFinanceSetup.resolveActiveAccountMapping(eq(COMPANY_ID), eq(null), any(), eq("closing.retained_earnings"),
+                eq(LocalDate.of(2026, 1, 31)))).thenReturn(null);
 
         ApiException exception = assertThrows(ApiException.class, () ->
                 service.generateClosingEntriesForAuthenticatedUser("sam", COMPANY_ID, FISCAL_PERIOD_ID, "EGP"));
@@ -111,7 +111,7 @@ class FinancePeriodCloseServiceTest {
     void generateClosingEntriesRequiresPostableEquityRetainedEarningsAccount() {
         when(dbFinanceClose.getNominalClosingBalances(COMPANY_ID, FISCAL_PERIOD_ID, "EGP"))
                 .thenReturn(nominalBalances());
-        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, null, "closing.retained_earnings",
+        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, null, null, "closing.retained_earnings",
                 LocalDate.of(2026, 1, 31))).thenReturn(retainedEarningsMapping());
         when(dbFinanceSetup.getAccountById(COMPANY_ID, RETAINED_EARNINGS_ACCOUNT_ID))
                 .thenReturn(account(RETAINED_EARNINGS_ACCOUNT_ID, "1100", "asset", "debit", true, "active"));
@@ -126,7 +126,7 @@ class FinancePeriodCloseServiceTest {
     void generateClosingEntriesCreatesBalancedClosingJournalToRetainedEarnings() {
         when(dbFinanceClose.getNominalClosingBalances(COMPANY_ID, FISCAL_PERIOD_ID, "EGP"))
                 .thenReturn(nominalBalances());
-        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, null, "closing.retained_earnings",
+        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, null, null, "closing.retained_earnings",
                 LocalDate.of(2026, 1, 31))).thenReturn(retainedEarningsMapping());
         when(dbFinanceSetup.getAccountById(COMPANY_ID, RETAINED_EARNINGS_ACCOUNT_ID))
                 .thenReturn(account(RETAINED_EARNINGS_ACCOUNT_ID, "3300", "equity", "credit", true, "active"));
@@ -401,6 +401,7 @@ class FinancePeriodCloseServiceTest {
         return new FinanceAccountMappingItem(
                 UUID.fromString("00000000-0000-0000-0000-000000000501"),
                 COMPANY_ID,
+                null,
                 null,
                 "closing.retained_earnings",
                 RETAINED_EARNINGS_ACCOUNT_ID,

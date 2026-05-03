@@ -19,6 +19,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -158,8 +159,8 @@ class FinancePaymentPostingAdapterTest {
 
     @Test
     void postRejectsMissingMapping() {
-        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, BRANCH_ID, "payment.card_clearing",
-                LocalDate.of(2026, 5, 9))).thenReturn(null);
+        when(dbFinanceSetup.resolveActiveAccountMapping(eq(COMPANY_ID), eq(BRANCH_ID), any(), eq("payment.card_clearing"),
+                eq(LocalDate.of(2026, 5, 9)))).thenReturn(null);
 
         ApiException exception = assertThrows(ApiException.class, () -> adapter.post(request("card_settlement", """
                 {
@@ -239,8 +240,8 @@ class FinancePaymentPostingAdapterTest {
     }
 
     private void stubMapping(String mappingKey, UUID accountId) {
-        when(dbFinanceSetup.resolveActiveAccountMapping(COMPANY_ID, BRANCH_ID, mappingKey,
-                LocalDate.of(2026, 5, 9))).thenReturn(mapping(mappingKey, accountId));
+        when(dbFinanceSetup.resolveActiveAccountMapping(eq(COMPANY_ID), eq(BRANCH_ID), any(), eq(mappingKey),
+                eq(LocalDate.of(2026, 5, 9)))).thenReturn(mapping(mappingKey, accountId));
     }
 
     private FinanceAccountMappingItem mapping(String mappingKey, UUID accountId) {
@@ -248,10 +249,11 @@ class FinancePaymentPostingAdapterTest {
                 UUID.randomUUID(),
                 COMPANY_ID,
                 BRANCH_ID,
+                null,
                 mappingKey,
                 accountId,
-                mappingKey,
-                mappingKey,
+                "ACC-" + mappingKey,
+                "Account " + mappingKey,
                 100,
                 LocalDate.of(2026, 1, 1),
                 null,

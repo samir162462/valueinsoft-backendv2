@@ -2,7 +2,7 @@
 
 ## Current Phase Status
 
-Phase 7 - Real Order Validation: completed on 2026-05-03.
+Phase 7.5 - Verification, Migration Validation, and Integration Audit: completed on 2026-05-03.
 
 ## Tenant Isolation Decision
 
@@ -91,6 +91,14 @@ Global/public data:
 - Phase 7: Added audit events for validation started, passed, failed, and skipped.
 - Phase 7: Added `V83__pos_offline_order_validation.sql` for validation statuses and lookup indexes.
 - Phase 7: No invoice, payment, inventory, or finance posting was implemented.
+- Phase 7.5: Completed static SQL review for migrations V77 through V83.
+- Phase 7.5: Confirmed offline runtime code does not read or write `public.pos_*` tables.
+- Phase 7.5: Confirmed every offline controller endpoint requires `Principal` and `AuthorizationService.assertAuthenticatedCapability(...)`.
+- Phase 7.5: Confirmed bootstrap PRODUCTS/PRICES are branch-scoped, cursor-paginated, and capped by `maxBootstrapPageSize`.
+- Phase 7.5: Confirmed idempotency statuses in enum, migration constraints, and repository writes are aligned.
+- Phase 7.5: Confirmed validation does not create invoices, payments, inventory movements, or finance journal entries.
+- Phase 7.5: Fixed V80 status constraint so all migration constraints include the current import status set.
+- Phase 7.5: Fixed validation numeric parsing so quantities are not rounded before line-total validation.
 - Inspected `TenantSqlIdentifiers`.
 - Inspected current offline sync schema usage.
 - Inspected offline repositories and services that access `pos_*` tables.
@@ -175,6 +183,8 @@ Global/public data:
 - Price validation is conservative because final pricing policy enforcement is not approved yet; Phase 7 checks non-negative unit price and rejects prices below `inventory_product.lowest_price`.
 - Cashier validation uses `public.users` branch membership because the current user identity table remains public in the project architecture.
 - Validated imports are not posted and batch summary counts are not finalized until a later posting phase.
+- Phase 7.5 did not run live Flyway/PostgreSQL migration tests because Docker is installed but the Docker daemon is not running in this environment.
+- Static SQL review did not identify PostgreSQL syntax problems after the V80 status-constraint fix.
 
 ## API Examples
 
@@ -301,6 +311,87 @@ Phase 7 manual checks:
 - Phase 5: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
 - Phase 6: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
 - Phase 7: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 7.5: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 7.5: No offline-specific tests were found under `src/test`, so targeted offline tests were not available.
+
+## Phase 7.5 Verification Audit
+
+### Migration Validation Result
+
+- Reviewed `V77__create_pos_offline_sync_tenant_tables.sql` through `V83__pos_offline_order_validation.sql`.
+- `V77` uses `format('%I', schema_name)`-style identifier quoting through `EXECUTE format(... %I ...)` and rejects schemas that do not start with `c_`.
+- `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `DROP CONSTRAINT IF EXISTS`, and `CREATE INDEX IF NOT EXISTS` are used where needed.
+- V77 creates tenant tables and runs `public.create_offline_sync_tables_for_tenant(schema_name)` for existing `c_%` schemas.
+- V78 only registers capabilities and role grants in public authorization tables; it does not touch offline runtime data.
+- V79 indexes tenant inventory tables used by bootstrap.
+- V80, V82, and V83 rebuild `chk_order_import_status`; after the Phase 7.5 fix they all include the current status set.
+- V81 rebuilds `chk_idempotency_status`; it includes all current idempotency statuses.
+- No migration writes runtime offline POS rows to `public.pos_*`; V74/V75 public tables remain deprecated compatibility artifacts.
+- Live PostgreSQL validation was not run because the Docker daemon is unavailable.
+
+### Import Status Transition Table
+
+| Status | Meaning | Set by | Allowed previous statuses | Allowed next statuses | Retry allowed | Validation allowed | Posting later |
+|---|---|---|---|---|---|---|---|
+| `PENDING` | Raw import stored and waiting for processing claim | `OfflineOrderImportRepository.insertImport` | New import | `PROCESSING`, `DUPLICATE`, `FAILED` | No | No | No |
+| `PENDING_RETRY` | Manager retry accepted; ready to be claimed again | `markPendingRetry` | `FAILED`, `NEEDS_REVIEW` | `PROCESSING`, `FAILED` | No | No | No |
+| `PROCESSING` | Import atomically claimed for skeleton processing | `claimNextPendingImport`, `claimImportForProcessing` | `PENDING`, `PENDING_RETRY` | `READY_FOR_VALIDATION`, `FAILED` | No | No | No |
+| `READY_FOR_VALIDATION` | Processing boundary completed; ready for validation | `markReadyForValidation` | `PROCESSING` | `VALIDATING` | No | Yes | No |
+| `VALIDATING` | Import atomically claimed for validation | `claimNextReadyForValidation`, `claimImportForValidation` | `READY_FOR_VALIDATION` | `VALIDATED`, `VALIDATION_FAILED` | No | In progress | No |
+| `VALIDATED` | Order passed validation; not posted | `markValidated` | `VALIDATING` | Future posting status | No | No | Yes |
+| `VALIDATION_FAILED` | Order failed validation | `markValidationFailed` | `VALIDATING` | Future review/retry path if approved | No currently | No | No |
+| `SYNCED` | Reserved for future successful posting | Future posting phase | Future posting phase | Terminal or adjustment flow | No | No | Already posted |
+| `FAILED` | Storage, processing, or system failure | `markFailed`, `markProcessingFailed` | `PENDING`, `PROCESSING`, future stages | `PENDING_RETRY` | Yes | No | No |
+| `DUPLICATE` | Reserved for duplicate import semantics | Future duplicate handling | `PENDING` | Terminal | No | No | No |
+| `NEEDS_REVIEW` | Reserved for manager review state | Future validation/review logic | Validation/processing phases | `PENDING_RETRY` | Yes | No | No |
+
+### Idempotency Status Audit
+
+- Enum and migration constraints include `RECEIVED`, `PROCESSING`, `SYNCED`, `FAILED`, `DUPLICATE`, `NEEDS_REVIEW`, and `PAYLOAD_MISMATCH`.
+- Current upload path writes `RECEIVED`; mismatch path writes `PAYLOAD_MISMATCH`.
+- Existing future helper methods write `SYNCED` and `FAILED`, both allowed by constraints.
+- Duplicate same key/hash re-reads and returns existing import state.
+- Duplicate same key/different hash returns `IDEMPOTENCY_PAYLOAD_MISMATCH`.
+- Duplicate-key races are caught via `DuplicateKeyException` and resolved by re-reading the existing idempotency record.
+
+### Tenant Isolation Audit
+
+- Search for `public.pos_`, `FROM pos_`, `INTO pos_`, `UPDATE pos_`, and `DELETE FROM pos_` in runtime offline Java code found no runtime public/unqualified offline table access.
+- Offline repositories use `TenantSqlIdentifiers.posXTable(companyId)` for offline runtime tables.
+- Status, errors, and retry endpoints require `companyId` and `branchId`.
+- Tenant queries keep `company_id` and `branch_id` predicates where relevant.
+
+### Authorization Audit
+
+- Every endpoint in `PosOfflineSyncController` accepts `Principal`.
+- Null/blank principal is rejected with `UNAUTHENTICATED`.
+- Every endpoint calls `AuthorizationService.assertAuthenticatedCapability(...)` before service execution.
+- Final capabilities are `pos.device.register`, `pos.device.heartbeat`, `pos.bootstrap.read`, `pos.offline.sync`, `pos.offline.status`, `pos.offline.errors`, and `pos.offline.retry`.
+- Retry requires `pos.offline.retry`; V78 grants it to Owner and BranchManager only.
+
+### Bootstrap Audit
+
+- PRODUCTS and PRICES join tenant `inventory_product` to tenant `inventory_branch_stock_balance` by `branch_id`.
+- Pagination uses `product_id` cursor with `LIMIT pageSize + 1`.
+- Page size is capped by `OfflinePosProperties.maxBootstrapPageSize`.
+- Unsupported data types return `UNSUPPORTED_BOOTSTRAP_DATA_TYPE`.
+- Invalid cursor returns `INVALID_BOOTSTRAP_CURSOR`.
+- PAYMENT_METHODS, POS_SETTINGS, CASHIER_PERMISSIONS, TAXES, and DISCOUNTS remain compact defaults/placeholders.
+
+### Validation Audit
+
+- Validation does not call invoice, payment, inventory movement, or finance journal services.
+- Product validation fetches all referenced product IDs/barcodes in one tenant query.
+- Line/order/payment totals use `BigDecimal` with `0.01` tolerance.
+- Phase 7.5 fixed quantity parsing so quantities preserve payload precision.
+- Invalid orders write compact tenant error rows through `SyncErrorService`.
+- Valid orders move only to `VALIDATED`.
+- Batch validation loops one import per transaction and can continue after an invalid order.
+
+### Bugs Fixed In Phase 7.5
+
+- Fixed `V80__pos_offline_retry_baseline.sql` so its status check constraint includes `READY_FOR_VALIDATION`, `VALIDATING`, `VALIDATED`, and `VALIDATION_FAILED`.
+- Fixed validation decimal parsing so quantities are not rounded to two decimals before total validation.
 
 ## Remaining TODOs
 
