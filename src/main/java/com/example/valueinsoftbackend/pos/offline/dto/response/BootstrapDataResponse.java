@@ -13,6 +13,7 @@ public record BootstrapDataResponse(
         String dataType,
         Long versionNo,
         String checksum,
+        Instant lastUpdatedAt,
         Instant serverTime,
         List<Object> data,
         Boolean hasMore,

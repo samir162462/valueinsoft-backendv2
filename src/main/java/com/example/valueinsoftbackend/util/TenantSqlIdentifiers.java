@@ -23,6 +23,11 @@ public final class TenantSqlIdentifiers {
         return "c_" + companyId;
     }
 
+    public static String companySchema(long companyId) {
+        requirePositive(companyId, "companyId");
+        return "c_" + companyId;
+    }
+
     public static String expensesTable(int companyId, boolean isStatic) {
         return companySchema(companyId) + "." + (isStatic ? "\"ExpensesStatic\"" : "\"Expenses\"");
     }
@@ -55,7 +60,15 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".inventory_product";
     }
 
+    public static String inventoryProductTable(long companyId) {
+        return companySchema(companyId) + ".inventory_product";
+    }
+
     public static String inventoryBranchStockBalanceTable(int companyId) {
+        return companySchema(companyId) + ".inventory_branch_stock_balance";
+    }
+
+    public static String inventoryBranchStockBalanceTable(long companyId) {
         return companySchema(companyId) + ".inventory_branch_stock_balance";
     }
 
@@ -69,6 +82,10 @@ public final class TenantSqlIdentifiers {
 
     public static String inventoryProductTemplateTable(int companyId) {
         return companySchema(companyId) + ".inventory_product_template";
+    }
+
+    public static String inventoryPricingPolicyTable(long companyId) {
+        return companySchema(companyId) + ".inventory_pricing_policy";
     }
 
     public static String inventoryAttributeDefinitionTable(int companyId) {
@@ -217,37 +234,109 @@ public final class TenantSqlIdentifiers {
     }
 
     // -------------------------------------------------------
-    // POS Offline Sync tables (public schema)
+    // POS Offline Sync tables (tenant schema)
     // -------------------------------------------------------
 
+    public static String posDeviceTable(long companyId) {
+        return companySchema(companyId) + ".pos_device";
+    }
+
+    public static String posSyncBatchTable(long companyId) {
+        return companySchema(companyId) + ".pos_sync_batch";
+    }
+
+    public static String posOfflineOrderImportTable(long companyId) {
+        return companySchema(companyId) + ".pos_offline_order_import";
+    }
+
+    public static String posIdempotencyKeyTable(long companyId) {
+        return companySchema(companyId) + ".pos_idempotency_key";
+    }
+
+    public static String posOfflineOrderErrorTable(long companyId) {
+        return companySchema(companyId) + ".pos_offline_order_error";
+    }
+
+    public static String posBootstrapVersionTable(long companyId) {
+        return companySchema(companyId) + ".pos_bootstrap_version";
+    }
+
+    public static String posDeviceSessionTable(long companyId) {
+        return companySchema(companyId) + ".pos_device_session";
+    }
+
+    public static String posSyncAuditLogTable(long companyId) {
+        return companySchema(companyId) + ".pos_sync_audit_log";
+    }
+
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posDeviceTable() {
         return "public.pos_device";
     }
 
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posSyncBatchTable() {
         return "public.pos_sync_batch";
     }
 
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posOfflineOrderImportTable() {
         return "public.pos_offline_order_import";
     }
 
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posIdempotencyKeyTable() {
         return "public.pos_idempotency_key";
     }
 
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posOfflineOrderErrorTable() {
         return "public.pos_offline_order_error";
     }
 
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posBootstrapVersionTable() {
         return "public.pos_bootstrap_version";
     }
 
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posDeviceSessionTable() {
         return "public.pos_device_session";
     }
 
+    /**
+     * @deprecated Public offline sync tables are compatibility artifacts from V74/V75.
+     * Runtime offline sync code must use tenant-scoped methods with companyId.
+     */
+    @Deprecated(forRemoval = false)
     public static String posSyncAuditLogTable() {
         return "public.pos_sync_audit_log";
     }
@@ -255,6 +344,12 @@ public final class TenantSqlIdentifiers {
     // -------------------------------------------------------
 
     public static void requirePositive(int value, String fieldName) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(fieldName + " must be positive");
+        }
+    }
+
+    public static void requirePositive(long value, String fieldName) {
         if (value <= 0) {
             throw new IllegalArgumentException(fieldName + " must be positive");
         }

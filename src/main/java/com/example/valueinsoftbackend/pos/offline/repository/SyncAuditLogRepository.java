@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.pos.offline.repository;
 
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -21,11 +22,11 @@ public class SyncAuditLogRepository {
                                Long offlineOrderImportId, Long deviceId, Long cashierId,
                                String eventType, String eventMessage, String payloadJson) {
         String sql = """
-                INSERT INTO pos_sync_audit_log
+                INSERT INTO %s
                     (company_id, branch_id, sync_batch_id, offline_order_import_id,
                      device_id, cashier_id, event_type, event_message, payload_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
-                """;
+                """.formatted(TenantSqlIdentifiers.posSyncAuditLogTable(companyId));
         jdbcTemplate.update(sql, companyId, branchId, syncBatchId, offlineOrderImportId,
                 deviceId, cashierId, eventType, eventMessage, payloadJson);
     }

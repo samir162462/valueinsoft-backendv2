@@ -17,6 +17,7 @@ public class OfflinePosProperties {
     private int maxBootstrapPageSize = 500;
     private int maxOfflineHoursDefault = 24;
     private boolean allowOfflineSync = true;
+    private boolean runTenantMigrationOnStartup = false;
 
     // -------------------------------------------------------
     // Getters / Setters (required for @ConfigurationProperties binding)
@@ -60,5 +61,13 @@ public class OfflinePosProperties {
 
     public void setAllowOfflineSync(boolean allowOfflineSync) {
         this.allowOfflineSync = allowOfflineSync;
+    }
+
+    public boolean isRunTenantMigrationOnStartup() {
+        return runTenantMigrationOnStartup;
+    }
+
+    public void setRunTenantMigrationOnStartup(boolean runTenantMigrationOnStartup) {
+        this.runTenantMigrationOnStartup = runTenantMigrationOnStartup;
     }
 }

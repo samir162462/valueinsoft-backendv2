@@ -14,9 +14,11 @@ import com.example.valueinsoftbackend.pos.offline.repository.PosSyncBatchReposit
 import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HexFormat;
@@ -31,7 +33,10 @@ public class PosOfflineSyncService {
         private final PosDeviceService deviceService;
         private final OfflineOrderValidationService validationService;
         private final PosIdempotencyService idempotencyService;
+        private final SyncErrorService syncErrorService;
         private final AuditLogService auditLogService;
+        private final OfflineSingleOrderProcessor singleOrderProcessor;
+        private final OfflineOrderValidationProcessor validationProcessor;
         private final OfflinePosProperties props;
         private final Gson gson = new Gson();
 
@@ -40,23 +45,29 @@ public class PosOfflineSyncService {
                         PosDeviceService deviceService,
                         OfflineOrderValidationService validationService,
                         PosIdempotencyService idempotencyService,
+                        SyncErrorService syncErrorService,
                         AuditLogService auditLogService,
+                        OfflineSingleOrderProcessor singleOrderProcessor,
+                        OfflineOrderValidationProcessor validationProcessor,
                         OfflinePosProperties props) {
                 this.batchRepo = batchRepo;
                 this.importRepo = importRepo;
                 this.deviceService = deviceService;
                 this.validationService = validationService;
                 this.idempotencyService = idempotencyService;
+                this.syncErrorService = syncErrorService;
                 this.auditLogService = auditLogService;
+                this.singleOrderProcessor = singleOrderProcessor;
+                this.validationProcessor = validationProcessor;
                 this.props = props;
         }
 
         /**
          * Receives an offline sync upload, validates basic fields,
          * stores each order as a raw import record, and returns a
-         * RECEIVED status. Actual processing happens in Phase 2.
+         * RECEIVED status. Processing is handled through separate per-import boundaries.
          */
-        public OfflineSyncUploadResponse uploadOfflineSync(OfflineSyncUploadRequest request) {
+        public OfflineSyncUploadResponse uploadOfflineSync(OfflineSyncUploadRequest request, String principalName) {
                 // 1. Global feature gate
                 if (!props.isAllowOfflineSync()) {
                         throw new OfflineSyncException("OFFLINE_SYNC_DISABLED",
@@ -102,19 +113,8 @@ public class PosOfflineSyncService {
                                 request.companyId(), request.branchId(),
                                 batchId, null, request.deviceId(), request.cashierId(),
                                 "BATCH_RECEIVED",
-                                "Received batch with " + request.orders().size() + " orders",
+                                "Received batch with " + request.orders().size() + " orders from " + principalName,
                                 null);
-
-                // TODO: In Phase 2, trigger async processing of stored orders:
-                // - For each PENDING order import:
-                // a) Check idempotency
-                // b) Validate order details (products, prices, stock, taxes)
-                // c) Create official invoice via InvoiceCreationService
-                // d) Create payments via PaymentCreationService
-                // e) Post inventory via InventoryMovementService
-                // f) Post finance journal via FinancePostingService
-                // g) Update import status to SYNCED or FAILED
-                // - Update batch summary counts
 
                 return new OfflineSyncUploadResponse(
                                 batchId, request.clientBatchId(),
@@ -125,12 +125,63 @@ public class PosOfflineSyncService {
         }
 
         /**
-         * Query current status of a sync batch.
+         * Internal Phase 6 processing skeleton. This deliberately does not run
+         * invoice, payment, inventory, or finance posting.
          */
-        public SyncStatusResponse getSyncStatus(Long batchId) {
-                PosSyncBatchModel batch = batchRepo.findById(batchId)
+        public int processPendingImports(Long companyId, Long branchId, Long batchId) {
+                batchRepo.findById(companyId, branchId, batchId)
                                 .orElseThrow(() -> new OfflineSyncException(
                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                int processed = 0;
+                while (singleOrderProcessor.processNextPendingImport(companyId, branchId, batchId)) {
+                        processed++;
+                }
+                return processed;
+        }
+
+        /**
+         * Internal Phase 6 single-import boundary. The processor claims only
+         * PENDING/PENDING_RETRY imports and skips all other statuses.
+         */
+        public boolean processSingleImport(Long companyId, Long branchId, Long offlineOrderImportId) {
+                return singleOrderProcessor.processSingleImport(companyId, branchId, offlineOrderImportId);
+        }
+
+        /**
+         * Internal Phase 7 validation loop. Validates one import per transaction
+         * through OfflineOrderValidationProcessor and does not post final business rows.
+         */
+        public int validateReadyImports(Long companyId, Long branchId, Long batchId) {
+                batchRepo.findById(companyId, branchId, batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                int validated = 0;
+                while (validationProcessor.validateNextReadyImport(companyId, branchId, batchId)) {
+                        validated++;
+                }
+                return validated;
+        }
+
+        /**
+         * Internal Phase 7 single-import validation boundary.
+         */
+        public boolean validateSingleImport(Long companyId, Long branchId, Long offlineOrderImportId) {
+                return validationProcessor.validateSingleImport(companyId, branchId, offlineOrderImportId);
+        }
+
+        /**
+         * Query current status of a sync batch.
+         */
+        public SyncStatusResponse getSyncStatus(Long companyId, Long branchId, Long batchId, String principalName) {
+                PosSyncBatchModel batch = batchRepo.findById(companyId, branchId, batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                auditLogService.logSyncEvent(
+                                companyId, branchId,
+                                batchId, null, batch.deviceId(), batch.cashierId(),
+                                "SYNC_STATUS_VIEWED",
+                                "Sync status viewed by " + principalName,
+                                null);
 
                 return new SyncStatusResponse(
                                 batch.id(), batch.clientBatchId(), batch.status(),
@@ -143,43 +194,97 @@ public class PosOfflineSyncService {
         /**
          * Get errors for all orders in a sync batch.
          */
-        public List<SyncErrorResponse> getSyncErrors(Long batchId) {
-                // Verify batch exists
-                batchRepo.findById(batchId)
+        public SyncErrorListResponse getSyncErrors(Long companyId, Long branchId, Long batchId,
+                        String cursor, Integer size, String principalName) {
+                PosSyncBatchModel batch = batchRepo.findById(companyId, branchId, batchId)
                                 .orElseThrow(() -> new OfflineSyncException(
                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                int pageSize = normalizePageSize(size);
+                long afterErrorId = parseCursor(cursor);
+                auditLogService.logSyncEvent(
+                                companyId, branchId,
+                                batchId, null, batch.deviceId(), batch.cashierId(),
+                                "SYNC_ERRORS_VIEWED",
+                                "Sync errors viewed by " + principalName,
+                                null);
 
-                // TODO: Delegate to SyncErrorService once error recording is implemented
-                return Collections.emptyList();
+                return syncErrorService.getErrorsByBatchId(companyId, branchId, batchId, afterErrorId, pageSize);
         }
 
         /**
          * Retry processing a single failed offline order import.
          */
-        public OfflineOrderSyncResult retryOfflineOrder(Long offlineOrderImportId) {
-                OfflineOrderImportModel importRecord = importRepo.findById(offlineOrderImportId)
+        public OfflineRetryResultResponse retryOfflineOrder(Long companyId, Long branchId, Long offlineOrderImportId,
+                        String principalName) {
+                OfflineOrderImportModel importRecord = importRepo.findByImportId(companyId, branchId, offlineOrderImportId)
                                 .orElseThrow(() -> new OfflineSyncException(
                                                 "IMPORT_NOT_FOUND",
                                                 "Offline order import not found: " + offlineOrderImportId));
 
-                // TODO: In Phase 2, re-run the processing pipeline for this single order:
-                // 1. Re-parse payloadJson
-                // 2. Re-validate
-                // 3. Attempt invoice creation
-                // 4. Update status
-
                 log.info("Retry requested for offlineOrderImportId={}, current status={}",
                                 offlineOrderImportId, importRecord.status());
+                auditLogService.logSyncEvent(
+                                companyId, branchId,
+                                importRecord.syncBatchId(), importRecord.id(), importRecord.deviceId(),
+                                importRecord.cashierId(),
+                                "OFFLINE_ORDER_RETRY_REQUESTED",
+                                "Offline order retry requested by " + principalName,
+                                null);
 
-                return new OfflineOrderSyncResult(
+                if (importRecord.status() != OfflineOrderImportStatus.FAILED
+                                && importRecord.status() != OfflineOrderImportStatus.NEEDS_REVIEW) {
+                        auditLogService.logSyncEvent(
+                                        companyId, branchId,
+                                        importRecord.syncBatchId(), importRecord.id(), importRecord.deviceId(),
+                                        importRecord.cashierId(),
+                                        "OFFLINE_ORDER_RETRY_REJECTED",
+                                        "Retry rejected for status " + importRecord.status() + " by " + principalName,
+                                        null);
+                        throw new OfflineSyncException(
+                                        "OFFLINE_ORDER_RETRY_NOT_ALLOWED",
+                                        "Retry is allowed only for FAILED or NEEDS_REVIEW imports");
+                }
+
+                idempotencyService.requireMatchingRecord(
+                                companyId,
+                                branchId,
+                                importRecord.deviceId(),
+                                importRecord.idempotencyKey(),
+                                importRecord.payloadHash());
+
+                int updated = importRepo.markPendingRetry(companyId, branchId, offlineOrderImportId);
+                if (updated == 0) {
+                        auditLogService.logSyncEvent(
+                                        companyId, branchId,
+                                        importRecord.syncBatchId(), importRecord.id(), importRecord.deviceId(),
+                                        importRecord.cashierId(),
+                                        "OFFLINE_ORDER_RETRY_REJECTED",
+                                        "Retry rejected because import status changed before update",
+                                        null);
+                        throw new OfflineSyncException(
+                                        "OFFLINE_ORDER_RETRY_STATE_CHANGED",
+                                        "Offline order import status changed before retry could be accepted");
+                }
+
+                Instant retryAt = Instant.now();
+                auditLogService.logSyncEvent(
+                                companyId, branchId,
+                                importRecord.syncBatchId(), importRecord.id(), importRecord.deviceId(),
+                                importRecord.cashierId(),
+                                "OFFLINE_ORDER_RETRY_ACCEPTED",
+                                "Retry accepted by " + principalName + "; import marked PENDING_RETRY",
+                                null);
+
+                return new OfflineRetryResultResponse(
+                                importRecord.id(),
                                 importRecord.offlineOrderNo(),
                                 importRecord.idempotencyKey(),
                                 importRecord.status(),
-                                importRecord.officialOrderId(),
-                                importRecord.officialInvoiceNo(),
-                                importRecord.errorCode(),
-                                importRecord.errorMessage(),
-                                Collections.emptyList());
+                                OfflineOrderImportStatus.PENDING_RETRY,
+                                importRecord.retryCount() + 1,
+                                retryAt,
+                                true,
+                                "Retry accepted. Import marked PENDING_RETRY; posting is not executed yet.");
         }
 
         // -------------------------------------------------------
@@ -193,28 +298,37 @@ public class PosOfflineSyncService {
                         String payloadJson = gson.toJson(order);
                         String payloadHash = sha256(payloadJson);
 
-                        // Check idempotency before storing
-                        boolean isDuplicate = idempotencyService.existsByKey(
-                                        batch.companyId(), batch.branchId(),
-                                        batch.deviceId(), order.idempotencyKey());
+                        IdempotencyClaimResult claim = idempotencyService.claimIdempotencyKey(
+                                        batch.companyId(), batch.branchId(), batch.deviceId(),
+                                        order.idempotencyKey(), order.offlineOrderNo(), payloadHash);
 
-                        if (isDuplicate) {
-                                log.info("Duplicate idempotency key detected: {}", order.idempotencyKey());
+                        if (!claim.payloadMatches()) {
+                                log.warn("Idempotency payload mismatch detected: companyId={}, branchId={}, deviceId={}, key={}",
+                                                batch.companyId(), batch.branchId(), batch.deviceId(), order.idempotencyKey());
                                 return new OfflineOrderSyncResult(
                                                 order.offlineOrderNo(), order.idempotencyKey(),
-                                                OfflineOrderImportStatus.DUPLICATE,
+                                                OfflineOrderImportStatus.FAILED,
                                                 null, null,
-                                                "DUPLICATE_IDEMPOTENCY_KEY",
-                                                "Order already processed with this idempotency key",
+                                                "IDEMPOTENCY_PAYLOAD_MISMATCH",
+                                                "Same idempotency key was used with a different payload",
                                                 Collections.emptyList());
                         }
 
-                        Long importId = importRepo.insertImport(
-                                        batchId, batch.companyId(), batch.branchId(),
-                                        batch.deviceId(), batch.cashierId(),
-                                        order.offlineOrderNo(), order.idempotencyKey(),
-                                        order.localOrderCreatedAt(),
-                                        payloadJson, payloadHash);
+                        if (!claim.newlyClaimed()) {
+                                return existingIdempotentResult(batch, order);
+                        }
+
+                        Long importId;
+                        try {
+                                importId = importRepo.insertImport(
+                                                batchId, batch.companyId(), batch.branchId(),
+                                                batch.deviceId(), batch.cashierId(),
+                                                order.offlineOrderNo(), order.idempotencyKey(),
+                                                order.localOrderCreatedAt(),
+                                                payloadJson, payloadHash);
+                        } catch (DuplicateKeyException duplicate) {
+                                return existingIdempotentResult(batch, order);
+                        }
 
                         log.debug("Stored offline order import: id={}, offlineOrderNo={}",
                                         importId, order.offlineOrderNo());
@@ -238,6 +352,29 @@ public class PosOfflineSyncService {
                 }
         }
 
+        private OfflineOrderSyncResult existingIdempotentResult(OfflineSyncUploadRequest batch, OfflineOrderRequest order) {
+                return importRepo.findByIdempotencyKey(
+                                batch.companyId(), batch.branchId(), batch.deviceId(), order.idempotencyKey())
+                                .map(existing -> new OfflineOrderSyncResult(
+                                                existing.offlineOrderNo(),
+                                                existing.idempotencyKey(),
+                                                existing.status(),
+                                                existing.officialOrderId(),
+                                                existing.officialInvoiceNo(),
+                                                existing.errorCode(),
+                                                existing.errorMessage(),
+                                                List.of("IDEMPOTENT_REPLAY")))
+                                .orElseGet(() -> new OfflineOrderSyncResult(
+                                                order.offlineOrderNo(),
+                                                order.idempotencyKey(),
+                                                OfflineOrderImportStatus.PENDING,
+                                                null,
+                                                null,
+                                                null,
+                                                "Idempotency key already claimed; import is not yet visible",
+                                                List.of("IDEMPOTENT_CLAIM_IN_PROGRESS")));
+        }
+
         private String sha256(String input) {
                 try {
                         MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -246,6 +383,26 @@ public class PosOfflineSyncService {
                 } catch (Exception e) {
                         log.warn("SHA-256 hashing failed, using fallback", e);
                         return String.valueOf(input.hashCode());
+                }
+        }
+
+        private int normalizePageSize(Integer size) {
+                int requested = size != null ? size : props.getMaxBootstrapPageSize();
+                return Math.max(1, Math.min(requested, props.getMaxBootstrapPageSize()));
+        }
+
+        private long parseCursor(String cursor) {
+                if (cursor == null || cursor.isBlank()) {
+                        return 0L;
+                }
+                try {
+                        long parsed = Long.parseLong(cursor);
+                        if (parsed < 0) {
+                                throw new NumberFormatException("cursor must be non-negative");
+                        }
+                        return parsed;
+                } catch (NumberFormatException ex) {
+                        throw new OfflineSyncException("INVALID_SYNC_ERROR_CURSOR", "Invalid sync error cursor");
                 }
         }
 }

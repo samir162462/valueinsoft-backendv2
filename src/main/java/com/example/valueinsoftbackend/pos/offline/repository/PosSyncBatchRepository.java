@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.pos.offline.repository;
 
 import com.example.valueinsoftbackend.pos.offline.enums.PosSyncBatchStatus;
 import com.example.valueinsoftbackend.pos.offline.model.PosSyncBatchModel;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -60,12 +61,12 @@ public class PosSyncBatchRepository {
                             String appVersion, int totalOrders,
                             Instant offlineStartedAt, Instant syncStartedAt) {
         String sql = """
-                INSERT INTO pos_sync_batch (company_id, branch_id, device_id, cashier_id,
+                INSERT INTO %s (company_id, branch_id, device_id, cashier_id,
                     client_batch_id, client_type, platform, app_version,
                     total_orders, offline_started_at, sync_started_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
-                """;
+                """.formatted(TenantSqlIdentifiers.posSyncBatchTable(companyId));
         return jdbcTemplate.queryForObject(sql, Long.class,
                 companyId, branchId, deviceId, cashierId,
                 clientBatchId, clientType, platform, appVersion,
@@ -78,9 +79,12 @@ public class PosSyncBatchRepository {
     // Lookups
     // -------------------------------------------------------
 
-    public Optional<PosSyncBatchModel> findById(Long id) {
-        String sql = "SELECT * FROM pos_sync_batch WHERE id = ?";
-        List<PosSyncBatchModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id);
+    public Optional<PosSyncBatchModel> findById(Long companyId, Long branchId, Long id) {
+        String sql = """
+                SELECT * FROM %s
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posSyncBatchTable(companyId));
+        List<PosSyncBatchModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id, companyId, branchId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
@@ -88,22 +92,26 @@ public class PosSyncBatchRepository {
     // Updates
     // -------------------------------------------------------
 
-    public void updateStatus(Long id, PosSyncBatchStatus status) {
-        String sql = "UPDATE pos_sync_batch SET status = ?, updated_at = NOW() WHERE id = ?";
-        jdbcTemplate.update(sql, status.name(), id);
+    public void updateStatus(Long companyId, Long branchId, Long id, PosSyncBatchStatus status) {
+        String sql = """
+                UPDATE %s
+                SET status = ?, updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posSyncBatchTable(companyId));
+        jdbcTemplate.update(sql, status.name(), id, companyId, branchId);
     }
 
-    public void updateSummary(Long id, PosSyncBatchStatus status,
+    public void updateSummary(Long companyId, Long branchId, Long id, PosSyncBatchStatus status,
                               int syncedOrders, int failedOrders,
                               int duplicateOrders, int needsReviewOrders) {
         String sql = """
-                UPDATE pos_sync_batch
+                UPDATE %s
                 SET status = ?, synced_orders = ?, failed_orders = ?,
                     duplicate_orders = ?, needs_review_orders = ?,
                     sync_completed_at = NOW(), updated_at = NOW()
-                WHERE id = ?
-                """;
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posSyncBatchTable(companyId));
         jdbcTemplate.update(sql, status.name(), syncedOrders, failedOrders,
-                duplicateOrders, needsReviewOrders, id);
+                duplicateOrders, needsReviewOrders, id, companyId, branchId);
     }
 }

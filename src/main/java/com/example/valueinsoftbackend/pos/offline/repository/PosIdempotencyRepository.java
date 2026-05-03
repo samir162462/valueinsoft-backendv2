@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.pos.offline.repository;
 
 import com.example.valueinsoftbackend.pos.offline.enums.PosIdempotencyStatus;
 import com.example.valueinsoftbackend.pos.offline.model.PosIdempotencyModel;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -45,9 +46,9 @@ public class PosIdempotencyRepository {
 
     public boolean existsByKey(Long companyId, Long branchId, Long deviceId, String idempotencyKey) {
         String sql = """
-                SELECT COUNT(*) FROM pos_idempotency_key
+                SELECT COUNT(*) FROM %s
                 WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
-                """;
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class,
                 companyId, branchId, deviceId, idempotencyKey);
         return count != null && count > 0;
@@ -61,12 +62,27 @@ public class PosIdempotencyRepository {
                                     String idempotencyKey, String offlineOrderNo,
                                     String requestHash) {
         String sql = """
-                INSERT INTO pos_idempotency_key
+                INSERT INTO %s
                     (company_id, branch_id, device_id, idempotency_key,
                      offline_order_no, request_hash)
                 VALUES (?, ?, ?, ?, ?, ?)
                 RETURNING id
-                """;
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
+        return jdbcTemplate.queryForObject(sql, Long.class,
+                companyId, branchId, deviceId,
+                idempotencyKey, offlineOrderNo, requestHash);
+    }
+
+    public Long insertReceivedKey(Long companyId, Long branchId, Long deviceId,
+                                  String idempotencyKey, String offlineOrderNo,
+                                  String requestHash) {
+        String sql = """
+                INSERT INTO %s
+                    (company_id, branch_id, device_id, idempotency_key,
+                     offline_order_no, request_hash, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'RECEIVED')
+                RETURNING id
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
         return jdbcTemplate.queryForObject(sql, Long.class,
                 companyId, branchId, deviceId,
                 idempotencyKey, offlineOrderNo, requestHash);
@@ -80,21 +96,30 @@ public class PosIdempotencyRepository {
                            String idempotencyKey, Long officialOrderId,
                            String officialInvoiceNo) {
         String sql = """
-                UPDATE pos_idempotency_key
+                UPDATE %s
                 SET status = 'SYNCED', official_order_id = ?, official_invoice_no = ?,
                     updated_at = NOW()
                 WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
-                """;
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
         jdbcTemplate.update(sql, officialOrderId, officialInvoiceNo,
                 companyId, branchId, deviceId, idempotencyKey);
     }
 
     public void markFailed(Long companyId, Long branchId, Long deviceId, String idempotencyKey) {
         String sql = """
-                UPDATE pos_idempotency_key
+                UPDATE %s
                 SET status = 'FAILED', updated_at = NOW()
                 WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
-                """;
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
+        jdbcTemplate.update(sql, companyId, branchId, deviceId, idempotencyKey);
+    }
+
+    public void markPayloadMismatch(Long companyId, Long branchId, Long deviceId, String idempotencyKey) {
+        String sql = """
+                UPDATE %s
+                SET status = 'PAYLOAD_MISMATCH', updated_at = NOW()
+                WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
         jdbcTemplate.update(sql, companyId, branchId, deviceId, idempotencyKey);
     }
 
@@ -105,9 +130,9 @@ public class PosIdempotencyRepository {
     public Optional<PosIdempotencyModel> findByKey(Long companyId, Long branchId,
                                                     Long deviceId, String idempotencyKey) {
         String sql = """
-                SELECT * FROM pos_idempotency_key
+                SELECT * FROM %s
                 WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
-                """;
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
         List<PosIdempotencyModel> results = jdbcTemplate.query(sql, ROW_MAPPER,
                 companyId, branchId, deviceId, idempotencyKey);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));

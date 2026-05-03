@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.pos.offline.repository;
 
 import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineOrderImportModel;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -46,6 +47,8 @@ public class OfflineOrderImportRepository {
             rs.getString("error_message"),
             rs.getInt("retry_count"),
             rs.getTimestamp("created_at").toInstant(),
+            rs.getTimestamp("processing_started_at") != null
+                    ? rs.getTimestamp("processing_started_at").toInstant() : null,
             rs.getTimestamp("processed_at") != null
                     ? rs.getTimestamp("processed_at").toInstant() : null,
             rs.getTimestamp("updated_at").toInstant()
@@ -61,13 +64,13 @@ public class OfflineOrderImportRepository {
                              Instant localOrderCreatedAt,
                              String payloadJson, String payloadHash) {
         String sql = """
-                INSERT INTO pos_offline_order_import
+                INSERT INTO %s
                     (sync_batch_id, company_id, branch_id, device_id, cashier_id,
                      offline_order_no, idempotency_key, local_order_created_at,
                      payload_json, payload_hash)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
                 RETURNING id
-                """;
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
         return jdbcTemplate.queryForObject(sql, Long.class,
                 syncBatchId, companyId, branchId, deviceId, cashierId,
                 offlineOrderNo, idempotencyKey,
@@ -79,14 +82,112 @@ public class OfflineOrderImportRepository {
     // Lookups
     // -------------------------------------------------------
 
-    public List<OfflineOrderImportModel> findByBatchId(Long syncBatchId) {
-        String sql = "SELECT * FROM pos_offline_order_import WHERE sync_batch_id = ? ORDER BY id ASC";
-        return jdbcTemplate.query(sql, ROW_MAPPER, syncBatchId);
+    public List<OfflineOrderImportModel> findByBatchId(Long companyId, Long branchId, Long syncBatchId) {
+        String sql = """
+                SELECT * FROM %s
+                WHERE sync_batch_id = ? AND company_id = ? AND branch_id = ?
+                ORDER BY id ASC
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        return jdbcTemplate.query(sql, ROW_MAPPER, syncBatchId, companyId, branchId);
     }
 
-    public Optional<OfflineOrderImportModel> findById(Long id) {
-        String sql = "SELECT * FROM pos_offline_order_import WHERE id = ?";
-        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id);
+    public Optional<OfflineOrderImportModel> findByImportId(Long companyId, Long branchId, Long id) {
+        String sql = """
+                SELECT * FROM %s
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id, companyId, branchId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public Optional<OfflineOrderImportModel> findByIdempotencyKey(Long companyId, Long branchId,
+                                                                  Long deviceId, String idempotencyKey) {
+        String sql = """
+                SELECT * FROM %s
+                WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
+                ORDER BY id ASC
+                LIMIT 1
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER,
+                companyId, branchId, deviceId, idempotencyKey);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public Optional<OfflineOrderImportModel> claimNextPendingImport(Long companyId, Long branchId, Long syncBatchId) {
+        String table = TenantSqlIdentifiers.posOfflineOrderImportTable(companyId);
+        String sql = """
+                UPDATE %s
+                SET status = 'PROCESSING',
+                    processing_started_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = (
+                    SELECT id
+                    FROM %s
+                    WHERE company_id = ?
+                      AND branch_id = ?
+                      AND sync_batch_id = ?
+                      AND status IN ('PENDING', 'PENDING_RETRY')
+                    ORDER BY id ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                )
+                RETURNING *
+                """.formatted(table, table);
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, companyId, branchId, syncBatchId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public Optional<OfflineOrderImportModel> claimImportForProcessing(Long companyId, Long branchId, Long id) {
+        String sql = """
+                UPDATE %s
+                SET status = 'PROCESSING',
+                    processing_started_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ?
+                  AND company_id = ?
+                  AND branch_id = ?
+                  AND status IN ('PENDING', 'PENDING_RETRY')
+                RETURNING *
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id, companyId, branchId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public Optional<OfflineOrderImportModel> claimNextReadyForValidation(Long companyId, Long branchId, Long syncBatchId) {
+        String table = TenantSqlIdentifiers.posOfflineOrderImportTable(companyId);
+        String sql = """
+                UPDATE %s
+                SET status = 'VALIDATING',
+                    updated_at = NOW()
+                WHERE id = (
+                    SELECT id
+                    FROM %s
+                    WHERE company_id = ?
+                      AND branch_id = ?
+                      AND sync_batch_id = ?
+                      AND status = 'READY_FOR_VALIDATION'
+                    ORDER BY id ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                )
+                RETURNING *
+                """.formatted(table, table);
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, companyId, branchId, syncBatchId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public Optional<OfflineOrderImportModel> claimImportForValidation(Long companyId, Long branchId, Long id) {
+        String sql = """
+                UPDATE %s
+                SET status = 'VALIDATING',
+                    updated_at = NOW()
+                WHERE id = ?
+                  AND company_id = ?
+                  AND branch_id = ?
+                  AND status = 'READY_FOR_VALIDATION'
+                RETURNING *
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id, companyId, branchId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
@@ -94,33 +195,100 @@ public class OfflineOrderImportRepository {
     // Status Updates
     // -------------------------------------------------------
 
-    public void updateStatus(Long id, OfflineOrderImportStatus status) {
+    public void updateStatus(Long companyId, Long branchId, Long id, OfflineOrderImportStatus status) {
         String sql = """
-                UPDATE pos_offline_order_import
+                UPDATE %s
                 SET status = ?, updated_at = NOW()
-                WHERE id = ?
-                """;
-        jdbcTemplate.update(sql, status.name(), id);
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, status.name(), id, companyId, branchId);
     }
 
-    public void markProcessed(Long id, OfflineOrderImportStatus status,
+    public void markProcessed(Long companyId, Long branchId, Long id, OfflineOrderImportStatus status,
                               Long officialOrderId, String officialInvoiceNo) {
         String sql = """
-                UPDATE pos_offline_order_import
+                UPDATE %s
                 SET status = ?, official_order_id = ?, official_invoice_no = ?,
                     processed_at = NOW(), updated_at = NOW()
-                WHERE id = ?
-                """;
-        jdbcTemplate.update(sql, status.name(), officialOrderId, officialInvoiceNo, id);
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, status.name(), officialOrderId, officialInvoiceNo, id, companyId, branchId);
     }
 
-    public void markFailed(Long id, String errorCode, String errorMessage) {
+    public void markReadyForValidation(Long companyId, Long branchId, Long id) {
         String sql = """
-                UPDATE pos_offline_order_import
+                UPDATE %s
+                SET status = 'READY_FOR_VALIDATION',
+                    processed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ? AND status = 'PROCESSING'
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, id, companyId, branchId);
+    }
+
+    public void markProcessingFailed(Long companyId, Long branchId, Long id, String errorCode, String errorMessage) {
+        String sql = """
+                UPDATE %s
+                SET status = 'FAILED',
+                    error_code = ?,
+                    error_message = ?,
+                    processed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, errorCode, errorMessage, id, companyId, branchId);
+    }
+
+    public void markValidated(Long companyId, Long branchId, Long id) {
+        String sql = """
+                UPDATE %s
+                SET status = 'VALIDATED',
+                    error_code = NULL,
+                    error_message = NULL,
+                    processed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ? AND status = 'VALIDATING'
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, id, companyId, branchId);
+    }
+
+    public void markValidationFailed(Long companyId, Long branchId, Long id, String errorCode, String errorMessage) {
+        String sql = """
+                UPDATE %s
+                SET status = 'VALIDATION_FAILED',
+                    error_code = ?,
+                    error_message = ?,
+                    processed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, errorCode, errorMessage, id, companyId, branchId);
+    }
+
+    public void markFailed(Long companyId, Long branchId, Long id, String errorCode, String errorMessage) {
+        String sql = """
+                UPDATE %s
                 SET status = 'FAILED', error_code = ?, error_message = ?,
                     retry_count = retry_count + 1, updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, errorCode, errorMessage, id, companyId, branchId);
+    }
+
+    public int markPendingRetry(Long companyId, Long branchId, Long id) {
+        String sql = """
+                UPDATE %s
+                SET status = 'PENDING_RETRY',
+                    error_code = NULL,
+                    error_message = NULL,
+                    retry_count = retry_count + 1,
+                    last_retry_at = NOW(),
+                    updated_at = NOW()
                 WHERE id = ?
-                """;
-        jdbcTemplate.update(sql, errorCode, errorMessage, id);
+                  AND company_id = ?
+                  AND branch_id = ?
+                  AND status IN ('FAILED', 'NEEDS_REVIEW')
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        return jdbcTemplate.update(sql, id, companyId, branchId);
     }
 }

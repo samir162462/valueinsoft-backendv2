@@ -26,6 +26,7 @@ public record OfflineOrderImportModel(
         String errorMessage,
         int retryCount,
         Instant createdAt,
+        Instant processingStartedAt,
         Instant processedAt,
         Instant updatedAt
 ) {}

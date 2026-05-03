@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.pos.offline.repository;
 
 import com.example.valueinsoftbackend.pos.offline.model.BootstrapVersionModel;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -32,19 +33,22 @@ public class BootstrapVersionRepository {
     );
 
     public Optional<BootstrapVersionModel> findVersion(Long companyId, Long branchId, String dataType) {
-        String sql = "SELECT * FROM pos_bootstrap_version WHERE company_id = ? AND branch_id = ? AND data_type = ?";
+        String sql = """
+                SELECT * FROM %s
+                WHERE company_id = ? AND branch_id = ? AND data_type = ?
+                """.formatted(TenantSqlIdentifiers.posBootstrapVersionTable(companyId));
         List<BootstrapVersionModel> results = jdbcTemplate.query(sql, ROW_MAPPER, companyId, branchId, dataType);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     public void upsertVersion(Long companyId, Long branchId, String dataType, long versionNo, String checksum) {
         String sql = """
-                INSERT INTO pos_bootstrap_version (company_id, branch_id, data_type, version_no, checksum)
+                INSERT INTO %s (company_id, branch_id, data_type, version_no, checksum)
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (company_id, branch_id, data_type)
                 DO UPDATE SET version_no = EXCLUDED.version_no, checksum = EXCLUDED.checksum,
                               last_changed_at = NOW(), updated_at = NOW()
-                """;
+                """.formatted(TenantSqlIdentifiers.posBootstrapVersionTable(companyId));
         jdbcTemplate.update(sql, companyId, branchId, dataType, versionNo, checksum);
     }
 }

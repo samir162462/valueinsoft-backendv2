@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.pos.offline.repository;
 import com.example.valueinsoftbackend.pos.offline.enums.PosClientType;
 import com.example.valueinsoftbackend.pos.offline.enums.PosDeviceStatus;
 import com.example.valueinsoftbackend.pos.offline.model.PosDeviceModel;
+import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -54,11 +55,11 @@ public class PosDeviceRepository {
                              PosClientType clientType, String platform, String appVersion,
                              Long registeredBy) {
         String sql = """
-                INSERT INTO pos_device (company_id, branch_id, device_code, device_name,
+                INSERT INTO %s (company_id, branch_id, device_code, device_name,
                     client_type, platform, app_version, registered_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
-                """;
+                """.formatted(TenantSqlIdentifiers.posDeviceTable(companyId));
         return jdbcTemplate.queryForObject(sql, Long.class,
                 companyId, branchId, deviceCode, deviceName,
                 clientType.name(), platform, appVersion, registeredBy);
@@ -71,17 +72,20 @@ public class PosDeviceRepository {
     public Optional<PosDeviceModel> findByCompanyBranchDeviceCode(Long companyId, Long branchId,
                                                                    String deviceCode) {
         String sql = """
-                SELECT * FROM pos_device
+                SELECT * FROM %s
                 WHERE company_id = ? AND branch_id = ? AND device_code = ?
-                """;
+                """.formatted(TenantSqlIdentifiers.posDeviceTable(companyId));
         List<PosDeviceModel> results = jdbcTemplate.query(sql, ROW_MAPPER,
                 companyId, branchId, deviceCode);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
-    public Optional<PosDeviceModel> findById(Long id) {
-        String sql = "SELECT * FROM pos_device WHERE id = ?";
-        List<PosDeviceModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id);
+    public Optional<PosDeviceModel> findById(Long companyId, Long branchId, Long id) {
+        String sql = """
+                SELECT * FROM %s
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posDeviceTable(companyId));
+        List<PosDeviceModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id, companyId, branchId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
@@ -89,18 +93,22 @@ public class PosDeviceRepository {
     // Updates
     // -------------------------------------------------------
 
-    public void updateHeartbeat(Long id, String appVersion) {
+    public void updateHeartbeat(Long companyId, Long branchId, Long id, String appVersion) {
         String sql = """
-                UPDATE pos_device
+                UPDATE %s
                 SET last_heartbeat_at = NOW(), app_version = COALESCE(?, app_version),
                     updated_at = NOW()
-                WHERE id = ?
-                """;
-        jdbcTemplate.update(sql, appVersion, id);
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posDeviceTable(companyId));
+        jdbcTemplate.update(sql, appVersion, id, companyId, branchId);
     }
 
-    public void updateStatus(Long id, PosDeviceStatus status) {
-        String sql = "UPDATE pos_device SET status = ?, updated_at = NOW() WHERE id = ?";
-        jdbcTemplate.update(sql, status.name(), id);
+    public void updateStatus(Long companyId, Long branchId, Long id, PosDeviceStatus status) {
+        String sql = """
+                UPDATE %s
+                SET status = ?, updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posDeviceTable(companyId));
+        jdbcTemplate.update(sql, status.name(), id, companyId, branchId);
     }
 }
