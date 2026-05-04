@@ -95,14 +95,32 @@ public class PosIdempotencyRepository {
     public void markSynced(Long companyId, Long branchId, Long deviceId,
                            String idempotencyKey, Long officialOrderId,
                            String officialInvoiceNo) {
+        markSynced(companyId, branchId, deviceId, idempotencyKey, officialOrderId, officialInvoiceNo, null);
+    }
+
+    public void markSynced(Long companyId, Long branchId, Long deviceId,
+                           String idempotencyKey, Long officialOrderId,
+                           String officialInvoiceNo, String resultMetadataJson) {
         String sql = """
                 UPDATE %s
                 SET status = 'SYNCED', official_order_id = ?, official_invoice_no = ?,
+                    result_metadata = ?::jsonb,
                     updated_at = NOW()
                 WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
                 """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
-        jdbcTemplate.update(sql, officialOrderId, officialInvoiceNo,
+        jdbcTemplate.update(sql, officialOrderId, officialInvoiceNo, resultMetadataJson,
                 companyId, branchId, deviceId, idempotencyKey);
+    }
+
+    public void updateResultMetadata(Long companyId, Long branchId, Long deviceId,
+                                     String idempotencyKey, String resultMetadataJson) {
+        String sql = """
+                UPDATE %s
+                SET result_metadata = ?::jsonb,
+                    updated_at = NOW()
+                WHERE company_id = ? AND branch_id = ? AND device_id = ? AND idempotency_key = ?
+                """.formatted(TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
+        jdbcTemplate.update(sql, resultMetadataJson, companyId, branchId, deviceId, idempotencyKey);
     }
 
     public void markFailed(Long companyId, Long branchId, Long deviceId, String idempotencyKey) {

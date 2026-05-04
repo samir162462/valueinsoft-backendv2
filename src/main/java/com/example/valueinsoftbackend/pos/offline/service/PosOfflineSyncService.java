@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus
 import com.example.valueinsoftbackend.pos.offline.enums.PosSyncBatchStatus;
 import com.example.valueinsoftbackend.pos.offline.exception.OfflineSyncException;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineOrderImportModel;
+import com.example.valueinsoftbackend.pos.offline.model.OfflineImportStatusCounts;
 import com.example.valueinsoftbackend.pos.offline.model.PosSyncBatchModel;
 import com.example.valueinsoftbackend.pos.offline.repository.OfflineOrderImportRepository;
 import com.example.valueinsoftbackend.pos.offline.repository.PosSyncBatchRepository;
@@ -304,6 +305,17 @@ public class PosOfflineSyncService {
                                 .orElseThrow(() -> new OfflineSyncException(
                                                  "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
                 batchRepo.recalculateSummary(companyId, branchId, batchId);
+        }
+
+        public PosSyncBatchModel getBatch(Long companyId, Long branchId, Long batchId) {
+                return batchRepo.findById(companyId, branchId, batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+        }
+
+        public OfflineImportStatusCounts getImportStatusCounts(Long companyId, Long branchId, Long batchId) {
+                getBatch(companyId, branchId, batchId);
+                return batchRepo.findImportStatusCounts(companyId, branchId, batchId);
         }
 
         /**

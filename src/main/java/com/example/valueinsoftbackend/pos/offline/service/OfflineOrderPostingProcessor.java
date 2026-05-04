@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.pos.offline.service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
+import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.Service.PosSalePostingService;
@@ -9,6 +10,7 @@ import com.example.valueinsoftbackend.pos.offline.exception.OfflineSyncException
 import com.example.valueinsoftbackend.pos.offline.model.OfflineOrderImportModel;
 import com.example.valueinsoftbackend.pos.offline.model.PosIdempotencyModel;
 import com.example.valueinsoftbackend.pos.offline.repository.OfflineOrderImportRepository;
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -20,7 +22,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Processor responsible for converting validated offline order imports into official POS orders.
@@ -31,12 +36,18 @@ import java.util.Optional;
 @Slf4j
 public class OfflineOrderPostingProcessor {
 
+    private static final String FINANCE_STATUS_ENQUEUED = "ENQUEUED";
+    private static final String FINANCE_STATUS_UNAVAILABLE = "UNAVAILABLE";
+    private static final String FINANCE_STATUS_ENQUEUE_FAILED = "ENQUEUE_FAILED";
+    private static final int COMPACT_ERROR_LENGTH = 300;
+
     private final OfflineOrderImportRepository importRepo;
     private final PosIdempotencyService idempotencyService;
     private final PosSalePostingService posSalePostingService;
     private final SyncErrorService syncErrorService;
     private final AuditLogService auditLogService;
     private final TransactionTemplate transactionTemplate;
+    private final Gson gson = new Gson();
 
     /**
      * Constructs a new OfflineOrderPostingProcessor with required dependencies.
@@ -159,24 +170,141 @@ public class OfflineOrderPostingProcessor {
         }
 
         Order order = mapToOnlineOrder(importRecord);
-        DbPosOrder.AddOrderResult posted = posSalePostingService.postSale(importRecord.companyId().intValue(), order);
+        DbPosOrder.AddOrderResult posted = posSalePostingService.postSale(
+                importRecord.companyId().intValue(),
+                order,
+                (postedResult, financeRequest) -> handleFinanceEnqueued(importRecord, postedResult, financeRequest),
+                (postedResult, exception) -> handleFinanceEnqueueFailed(importRecord, postedResult, exception));
 
         Long postedOrderId = (long) posted.orderId();
-        importRepo.markPostingSynced(importRecord.companyId(), importRecord.branchId(), importRecord.id(), postedOrderId);
+        importRepo.markPostingSynced(
+                importRecord.companyId(),
+                importRecord.branchId(),
+                importRecord.id(),
+                postedOrderId,
+                FINANCE_STATUS_UNAVAILABLE,
+                null);
         idempotencyService.markSynced(
                 importRecord.companyId(),
                 importRecord.branchId(),
                 importRecord.deviceId(),
                 importRecord.idempotencyKey(),
                 postedOrderId,
-                null);
+                null,
+                resultMetadata(postedOrderId, null, FINANCE_STATUS_UNAVAILABLE, null));
 
         auditLogService.logSyncEvent(
                 importRecord.companyId(), importRecord.branchId(), importRecord.syncBatchId(), importRecord.id(),
                 importRecord.deviceId(), importRecord.cashierId(),
                 "OFFLINE_POSTING_SUCCEEDED",
                 "Offline import posted as POS order " + postedOrderId,
-                "{\"postedOrderId\":" + postedOrderId + "}");
+                resultMetadata(postedOrderId, null, FINANCE_STATUS_UNAVAILABLE, null));
+    }
+
+    private void handleFinanceEnqueued(OfflineOrderImportModel importRecord,
+                                       DbPosOrder.AddOrderResult postedResult,
+                                       Optional<FinancePostingRequestItem> financeRequest) {
+        Long postedOrderId = (long) postedResult.orderId();
+        UUID requestId = financeRequest
+                .map(FinancePostingRequestItem::getPostingRequestId)
+                .orElse(null);
+        String financeStatus = requestId == null ? FINANCE_STATUS_UNAVAILABLE : FINANCE_STATUS_ENQUEUED;
+        String metadataJson = resultMetadata(postedOrderId, requestId, financeStatus, null);
+        try {
+            importRepo.updateFinanceEnqueueMetadata(
+                    importRecord.companyId(),
+                    importRecord.branchId(),
+                    importRecord.id(),
+                    requestId,
+                    financeStatus,
+                    null);
+            idempotencyService.updateResultMetadata(
+                    importRecord.companyId(),
+                    importRecord.branchId(),
+                    importRecord.deviceId(),
+                    importRecord.idempotencyKey(),
+                    metadataJson);
+            auditLogService.logSyncEvent(
+                    importRecord.companyId(), importRecord.branchId(), importRecord.syncBatchId(), importRecord.id(),
+                    importRecord.deviceId(), importRecord.cashierId(),
+                    requestId == null ? "OFFLINE_FINANCE_ENQUEUE_UNAVAILABLE" : "OFFLINE_FINANCE_ENQUEUE_CAPTURED",
+                    requestId == null
+                            ? "POS order posted without a finance posting request id"
+                            : "Captured finance posting request for offline POS order",
+                    metadataJson);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to capture finance enqueue metadata for offline import {}: {}",
+                    importRecord.id(), ex.getMessage());
+        }
+    }
+
+    private void handleFinanceEnqueueFailed(OfflineOrderImportModel importRecord,
+                                            DbPosOrder.AddOrderResult postedResult,
+                                            RuntimeException exception) {
+        Long postedOrderId = (long) postedResult.orderId();
+        String compactError = compact(exception.getMessage());
+        String metadataJson = resultMetadata(postedOrderId, null, FINANCE_STATUS_ENQUEUE_FAILED, compactError);
+        try {
+            importRepo.updateFinanceEnqueueMetadata(
+                    importRecord.companyId(),
+                    importRecord.branchId(),
+                    importRecord.id(),
+                    null,
+                    FINANCE_STATUS_ENQUEUE_FAILED,
+                    compactError);
+            idempotencyService.updateResultMetadata(
+                    importRecord.companyId(),
+                    importRecord.branchId(),
+                    importRecord.deviceId(),
+                    importRecord.idempotencyKey(),
+                    metadataJson);
+            syncErrorService.saveError(
+                    importRecord.id(),
+                    importRecord.companyId(),
+                    importRecord.branchId(),
+                    "FINANCE_ENQUEUE",
+                    "OFFLINE_FINANCE_ENQUEUE_FAILED",
+                    compactError,
+                    null,
+                    null,
+                    OfflineErrorSeverity.WARNING,
+                    true,
+                    false);
+            auditLogService.logSyncEvent(
+                    importRecord.companyId(), importRecord.branchId(), importRecord.syncBatchId(), importRecord.id(),
+                    importRecord.deviceId(), importRecord.cashierId(),
+                    "OFFLINE_FINANCE_ENQUEUE_FAILED",
+                    "Offline POS order was synced but finance enqueue failed",
+                    metadataJson);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to record finance enqueue failure metadata for offline import {}: {}",
+                    importRecord.id(), ex.getMessage());
+        }
+    }
+
+    private String resultMetadata(Long postedOrderId, UUID financePostingRequestId,
+                                  String financeStatus, String financeError) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("postedOrderId", postedOrderId);
+        metadata.put("officialOrderId", postedOrderId);
+        if (financePostingRequestId != null) {
+            metadata.put("financePostingRequestId", financePostingRequestId.toString());
+        }
+        metadata.put("financeStatus", financeStatus);
+        if (financeError != null && !financeError.isBlank()) {
+            metadata.put("financeError", compact(financeError));
+        }
+        return gson.toJson(metadata);
+    }
+
+    private String compact(String value) {
+        if (value == null || value.isBlank()) {
+            return "Finance enqueue failed";
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= COMPACT_ERROR_LENGTH
+                ? trimmed
+                : trimmed.substring(0, COMPACT_ERROR_LENGTH);
     }
 
     /**

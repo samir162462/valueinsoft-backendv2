@@ -1,5 +1,8 @@
 package com.example.valueinsoftbackend.pos.offline.repository;
 
+import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminErrorCodeCount;
+import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminErrorSummary;
+import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminImportErrorItem;
 import com.example.valueinsoftbackend.pos.offline.dto.response.SyncErrorResponse;
 import com.example.valueinsoftbackend.pos.offline.dto.response.SyncErrorItemResponse;
 import com.example.valueinsoftbackend.pos.offline.enums.OfflineErrorSeverity;
@@ -137,5 +140,73 @@ public class OfflineOrderErrorRepository {
                 ORDER BY created_at ASC
                 """.formatted(TenantSqlIdentifiers.posOfflineOrderErrorTable(companyId));
         return jdbcTemplate.query(sql, ERROR_RESPONSE_MAPPER, offlineOrderImportId, companyId, branchId);
+    }
+
+    public List<OfflineAdminImportErrorItem> findRecentImportErrors(Long companyId, Long branchId,
+                                                                    Long offlineOrderImportId, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 25));
+        String sql = """
+                SELECT id, error_code, error_message, created_at
+                FROM %s
+                WHERE offline_order_import_id = ?
+                  AND company_id = ?
+                  AND branch_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderErrorTable(companyId));
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineAdminImportErrorItem(
+                rs.getLong("id"),
+                rs.getString("error_code"),
+                compact(rs.getString("error_message")),
+                rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant() : null
+        ), offlineOrderImportId, companyId, branchId, safeLimit);
+    }
+
+    public OfflineAdminErrorSummary summarizeErrorsByBatchId(Long companyId, Long branchId, Long syncBatchId) {
+        String summarySql = """
+                SELECT COUNT(*)::int AS total_errors, MAX(e.created_at) AS latest_error_at
+                FROM %s e
+                JOIN %s oi ON oi.id = e.offline_order_import_id
+                WHERE oi.sync_batch_id = ?
+                  AND oi.company_id = ?
+                  AND oi.branch_id = ?
+                  AND e.company_id = ?
+                  AND e.branch_id = ?
+                """.formatted(
+                TenantSqlIdentifiers.posOfflineOrderErrorTable(companyId),
+                TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        OfflineAdminErrorSummary base = jdbcTemplate.queryForObject(summarySql, (rs, rowNum) -> new OfflineAdminErrorSummary(
+                rs.getInt("total_errors"),
+                rs.getTimestamp("latest_error_at") != null ? rs.getTimestamp("latest_error_at").toInstant() : null,
+                List.of()
+        ), syncBatchId, companyId, branchId, companyId, branchId);
+
+        String codesSql = """
+                SELECT e.error_code, COUNT(*)::int AS error_count
+                FROM %s e
+                JOIN %s oi ON oi.id = e.offline_order_import_id
+                WHERE oi.sync_batch_id = ?
+                  AND oi.company_id = ?
+                  AND oi.branch_id = ?
+                  AND e.company_id = ?
+                  AND e.branch_id = ?
+                GROUP BY e.error_code
+                ORDER BY error_count DESC, e.error_code ASC
+                LIMIT 10
+                """.formatted(
+                TenantSqlIdentifiers.posOfflineOrderErrorTable(companyId),
+                TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        List<OfflineAdminErrorCodeCount> codes = jdbcTemplate.query(codesSql,
+                (rs, rowNum) -> new OfflineAdminErrorCodeCount(rs.getString("error_code"), rs.getInt("error_count")),
+                syncBatchId, companyId, branchId, companyId, branchId);
+        return new OfflineAdminErrorSummary(base.totalErrors(), base.latestErrorAt(), codes);
+    }
+
+    private String compact(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= 300 ? trimmed : trimmed.substring(0, 300);
     }
 }

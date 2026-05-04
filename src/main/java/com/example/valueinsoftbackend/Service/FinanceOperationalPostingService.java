@@ -43,6 +43,14 @@ public class FinanceOperationalPostingService {
                                int orderId,
                                Timestamp orderTime,
                                List<DbPosOrder.OrderFinanceCostLine> costLines) {
+        enqueuePosSaleAndReturnRequest(companyId, order, orderId, orderTime, costLines);
+    }
+
+    public FinancePostingRequestItem enqueuePosSaleAndReturnRequest(int companyId,
+                                                                    Order order,
+                                                                    int orderId,
+                                                                    Timestamp orderTime,
+                                                                    List<DbPosOrder.OrderFinanceCostLine> costLines) {
         LocalDate postingDate = orderTime.toLocalDateTime().toLocalDate();
         UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
         if (fiscalPeriodId == null) {
@@ -62,7 +70,7 @@ public class FinanceOperationalPostingService {
                 fiscalPeriodId,
                 buildPosSalePayload(order, orderId, costLines));
 
-        financePostingRequestService.createPostingRequestFromSystem(order.getSalesUser(), request);
+        return financePostingRequestService.createPostingRequestFromSystem(order.getSalesUser(), request);
     }
 
     public void enqueuePosSaleReturn(int companyId,

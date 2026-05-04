@@ -2,7 +2,7 @@
 
 ## Current Phase Status
 
-Phase 9B - Admin/Internal Operational Trigger: completed on 2026-05-04.
+Phase 10E - Admin Batch List Endpoint and UI Listing: completed on 2026-05-04.
 
 ## Tenant Isolation Decision
 
@@ -157,6 +157,59 @@ Global/public data:
 - Phase 9B: Admin triggers reuse existing service boundaries and atomic claims; posting still only claims `VALIDATED` imports.
 - Phase 9B: Added compact `OfflineAdminOperationResponse`.
 - Phase 9B: Added tenant audit events for each admin operation request without raw payloads.
+- Phase 9C: Expanded admin operation responses with batch status, processed/posted/skipped counts, failure counters, eligible posting count, recalculation flag, and warnings.
+- Phase 9C: Added tenant-aware import status count aggregation for admin responses without N+1 queries.
+- Phase 9C: Added `POST /api/admin/pos/offline-sync/batches/{batchId}/post-preview` as a read-only posting dry run.
+- Phase 9C: Post preview requires `pos.offline.admin.process` and does not create orders, decrement stock, update import statuses, or update idempotency rows.
+- Phase 9C: Post preview reports eligible `VALIDATED` import count and warning conditions for `POSTING`, `NEEDS_REVIEW`, and empty eligible sets.
+- Phase 9C: Actual admin post now returns warnings when `POSTING` or `NEEDS_REVIEW` rows are present before posting.
+- Phase 9C: Added optional admin operation request body with `reason`; reasons are written only to audit metadata.
+- Phase 9C: No decimal posting support, multi-tender support, finance behavior change, automatic posting enablement, or public `pos_*` runtime access was added.
+- Phase 9D: Added `OfflinePosAdminProperties` for disabled-by-default admin posting controls.
+- Phase 9D: Added `valueinsoft.pos.offline.admin.posting-enabled=false` and `valueinsoft.pos.offline.admin.max-post-batch-size=50`.
+- Phase 9D: Admin post preview remains allowed when actual admin posting is disabled.
+- Phase 9D: Actual admin post now returns `accepted=false` without posting when admin posting is disabled.
+- Phase 9D: Admin post and recover-stuck now require a nonblank reason before execution.
+- Phase 9D: Admin post now requires `force=true` when `POSTING` or `NEEDS_REVIEW` warning states exist.
+- Phase 9D: Admin post now rejects batches whose eligible `VALIDATED` count exceeds the configured max post batch size.
+- Phase 9D: Blocked admin post/recover operations write compact blocked audit events when tenant audit is available.
+- Phase 9D: Process, validate, recalculate-summary, and post-preview remain reason-optional.
+- Phase 9E: Added `GET /api/admin/pos/offline-sync/batches/{batchId}` for secure admin batch details.
+- Phase 9E: Batch details requires `Principal` and `pos.offline.admin.process`.
+- Phase 9E: Added compact `OfflineAdminBatchDetailsResponse` with batch status, timestamps, legacy counters, import status counts, warnings, readiness, recent admin events, and error summary.
+- Phase 9E: Added readiness flags and blocked reason lists for recover-stuck, process, validate, post, and recalculate-summary.
+- Phase 9E: Readiness reports `ADMIN_POSTING_DISABLED`, `NO_VALIDATED_IMPORTS`, `POSTING_ROWS_EXIST`, `NEEDS_REVIEW_ROWS_EXIST`, and `MAX_POST_BATCH_SIZE_EXCEEDED` for post blocking.
+- Phase 9E: Added tenant recent admin event lookup from `pos_sync_audit_log` without raw payload exposure.
+- Phase 9E: Added tenant error summary lookup grouped by `error_code` without reading raw order payload columns.
+- Phase 10B: Added `FinanceOperationalPostingService.enqueuePosSaleAndReturnRequest(...)` while preserving the existing void `enqueuePosSale(...)` wrapper.
+- Phase 10B: Extended `PosSalePostingService` with optional after-commit finance success/failure callbacks without changing existing online POS behavior.
+- Phase 10B: Added `V87__pos_offline_finance_request_capture.sql` for tenant `finance_enqueue_status`, `finance_enqueue_error`, and idempotency `result_metadata`.
+- Phase 10B: Offline posting now captures `finance_posting_request_id` when after-commit finance enqueue returns a request.
+- Phase 10B: Offline imports remain `SYNCED` when finance request ID capture is unavailable or enqueue fails.
+- Phase 10B: Idempotency result metadata now includes `postedOrderId`, `officialOrderId`, `financePostingRequestId` when available, and compact finance status.
+- Phase 10B: Finance enqueue failures keep existing logging behavior and add compact tenant warning/error metadata when available.
+- Phase 10C: Added `GET /api/admin/pos/offline-sync/imports/{offlineOrderImportId}` for secure admin import details.
+- Phase 10C: Import details requires `Principal` and `pos.offline.admin.process`.
+- Phase 10C: Import details validates company/branch access and returns safe not found when the import is outside the requested tenant/branch.
+- Phase 10C: Added compact import details DTOs for posting metadata, finance enqueue metadata, masked idempotency fields, latest errors, latest import audit events, and online order reference.
+- Phase 10C: Import details does not select or return raw offline order payload JSON.
+- Phase 10C: Long finance errors, import errors, and metadata are truncated for support-safe responses.
+- Phase 10D: Added frontend Offline Sync Batches admin screen under the existing app shell as `OfflineSyncAdmin`.
+- Phase 10D: Added capability-gated sidebar/settings navigation requiring `pos.offline.admin.process`.
+- Phase 10D: Added manual batch id lookup using the existing secure batch details endpoint.
+- Phase 10D: Added guarded admin action controls for recover stuck, process, validate, post preview, post, and recalculate summary.
+- Phase 10D: UI treats `accepted=false` responses as blocked/no-side-effect outcomes, not successful completion.
+- Phase 10D: Post flow calls post-preview before confirmation, requires a reason, and supports backend force-confirmation requirements.
+- Phase 10D: Added manual import id lookup using the Phase 10C import details endpoint.
+- Phase 10D: Import details UI displays posting, finance, idempotency, error, audit, and online order reference metadata without raw payload exposure.
+- Phase 10E: Added `GET /api/admin/pos/offline-sync/batches` for secure, tenant-scoped admin batch listing.
+- Phase 10E: Batch list requires `Principal` and `pos.offline.admin.process`.
+- Phase 10E: Batch list filters by requested `companyId` and `branchId`, with optional `status` and `activeOnly`.
+- Phase 10E: Batch list uses newest-first cursor pagination with page size capped at 100.
+- Phase 10E: Batch list returns compact batch summary fields only and does not expose raw offline order payloads.
+- Phase 10E: Offline Sync Admin UI now loads a recent batch table from the list endpoint.
+- Phase 10E: UI supports status filter, active-only filter, refresh, cursor-based load more, and row-click batch details.
+- Phase 10E: Manual batch id lookup remains available as fallback.
 - Inspected `TenantSqlIdentifiers`.
 - Inspected current offline sync schema usage.
 - Inspected offline repositories and services that access `pos_*` tables.
@@ -175,6 +228,7 @@ Global/public data:
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/repository/BootstrapVersionRepository.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/repository/SyncAuditLogRepository.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/config/OfflinePosProperties.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/config/OfflinePosAdminProperties.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/config/OfflinePosWorkerProperties.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/controller/PosOfflineSyncController.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/controller/PosOfflineAdminController.java`
@@ -196,16 +250,29 @@ Global/public data:
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/SyncErrorItemResponse.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineRetryResultResponse.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminOperationResponse.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminBatchDetailsResponse.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminReadiness.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminRecentEvent.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminErrorSummary.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminErrorCodeCount.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminImportDetailsResponse.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminImportErrorItem.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminImportAuditEvent.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminOnlineOrderReference.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/request/OfflineAdminOperationRequest.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/enums/OfflineOrderImportStatus.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/enums/PosSyncBatchStatus.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/enums/PosIdempotencyStatus.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/model/OfflineValidationProductSnapshot.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/model/OfflineImportStatusCounts.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/model/OfflineAdminImportDetailsSnapshot.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/repository/OfflineOrderValidationRepository.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/service/IdempotencyClaimResult.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/service/OfflineSingleOrderProcessor.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/service/OfflineOrderImportValidationService.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/service/OfflineOrderValidationProcessor.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/service/OfflinePosWorker.java`
+- `src/main/java/com/example/valueinsoftbackend/Service/FinanceOperationalPostingService.java`
 - `src/main/java/com/example/valueinsoftbackend/Service/PosSalePostingService.java`
 - `src/main/java/com/example/valueinsoftbackend/Service/OrderService.java`
 - `src/main/java/com/example/valueinsoftbackend/pos/offline/service/OfflineOrderPostingProcessor.java`
@@ -213,6 +280,16 @@ Global/public data:
 - `src/test/java/com/example/valueinsoftbackend/pos/offline/service/PosOfflineSyncServiceOperationalTest.java`
 - `src/main/resources/application.properties`
 - `docs/OFFLINE_POS_MIGRATION_VALIDATION.md`
+- Frontend: `src/domains/pos-offline/api/offlineAdminApi.js`
+- Frontend: `src/domains/pos-offline/pages/OfflineSyncAdminPage.js`
+- Frontend: `src/domains/pos-offline/pages/OfflineSyncAdminPage.css`
+- Frontend: `src/Components/SideNavBarPro/Main.js`
+- Frontend: `src/Components/SideNavBarPro/Aside.js`
+- Frontend: `src/domains/app-shell/config/appShellAccess.js`
+- Frontend: `src/domains/navigation/config/appNavigationSchema.js`
+- Frontend: `docs/OFFLINE_POS_ADMIN_UI.md`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminBatchListResponse.java`
+- `src/main/java/com/example/valueinsoftbackend/pos/offline/dto/response/OfflineAdminBatchListItem.java`
 - `src/main/resources/db/migration/V77__create_pos_offline_sync_tenant_tables.sql`
 - `src/main/resources/db/migration/V78__pos_offline_sync_capabilities.sql`
 - `src/main/resources/db/migration/V79__pos_offline_bootstrap_indexes.sql`
@@ -223,6 +300,7 @@ Global/public data:
 - `src/main/resources/db/migration/V84__pos_offline_posting_mvp.sql`
 - `src/main/resources/db/migration/V85__pos_offline_batch_finalization.sql`
 - `src/main/resources/db/migration/V86__pos_offline_admin_capability.sql`
+- `src/main/resources/db/migration/V87__pos_offline_finance_request_capture.sql`
 - `src/main/resources/db/migration/V74__create_pos_offline_sync_tables.sql`
 - `src/main/resources/db/migration/V75__create_pos_offline_sync_indexes.sql`
 - `src/main/resources/db/migration/V76__alter_sales_tables_for_offline_sync.sql`
@@ -270,12 +348,12 @@ Global/public data:
 - Phase 8B stores cashier as `offline-cashier-{cashierId}` in the online order `salesUser` field until a principal/cashier-name resolver is approved.
 - Phase 8B sets online `orderIncome` to the posted total for MVP compatibility; exact profit calculation should be revisited before broad reporting rollout.
 - Phase 8B follows existing online finance behavior: finance enqueue is after-commit and non-blocking. A finance enqueue failure can be logged by the online posting service after the import is already `SYNCED`.
-- `finance_posting_request_id` and `finance_journal_entry_id` columns are added by V84 but remain null in MVP because existing finance enqueue does not return those IDs.
+- `finance_posting_request_id` and `finance_journal_entry_id` columns are added by V84. Phase 10B populates `finance_posting_request_id` only when after-commit enqueue returns a request; `finance_journal_entry_id` remains unavailable until the finance posting worker posts the request.
 - `OrderService.createOrder` delegates to `PosSalePostingService`, but the previous inline online path remains as a fallback branch for safety.
 - V85 must be migrated before expanded batch counters and `IN_PROGRESS`/`COMPLETED`/`COMPLETED_WITH_ERRORS` statuses can be persisted in existing tenant schemas.
 - Batch finalization is service-triggered only; no scheduler or endpoint invokes it automatically.
 - Stuck-state recovery is explicit/internal only. `POSTING` rows are moved to `NEEDS_REVIEW` because side effects may have partially committed.
-- Finance posting request IDs remain unavailable in offline metadata because POS finance enqueue still runs after commit and returns no value to the posting transaction.
+- Finance posting request IDs are captured after commit and may appear shortly after the import is marked `SYNCED`; admin/operator views should tolerate this brief metadata lag.
 - Phase 8D added focused Mockito unit coverage for the posting processor, but there is still no real PostgreSQL/Testcontainers integration suite for offline posting side effects.
 - Live migration validation is documented in `docs/OFFLINE_POS_MIGRATION_VALIDATION.md`, but it was not executed against a live PostgreSQL server in this phase.
 - Offline worker properties are disabled by default and configuration-only in Phase 8D; no scheduler or admin trigger executes them yet.
@@ -287,8 +365,30 @@ Global/public data:
 - Automatic posting remains high risk and must be enabled only in a controlled local/staging environment until PostgreSQL integration tests are approved.
 - V86 must be migrated before admin/internal operational endpoints can be used by high-privilege roles.
 - Admin operational endpoints are powerful; they must remain restricted to `pos.offline.admin.process` and must not be granted to Cashier or normal offline sync roles.
-- Admin endpoint responses currently return operation count and `failedCount=0`; detailed failure counters can be improved later if service methods expose richer summaries.
 - `SupportAdmin` grant is global-admin scoped and depends on the existing effective capability resolver including global admin grants for tenant/branch operations.
+- Phase 9C admin responses derive failure and eligible counters from tenant import status counts after the operation; `processedCount` remains the direct service operation count.
+- Phase 9C `post-preview` is intentionally read-only and does not parse raw order payloads, so decimal quantity/amount and multi-tender warnings are generic until actual posting guards run.
+- Phase 9C actual admin post warns about `POSTING` and `NEEDS_REVIEW` rows but does not block posting of other `VALIDATED` rows; manual operators must review warnings before proceeding.
+- Phase 9D actual admin posting is disabled by default even for privileged operators; production enablement requires `valueinsoft.pos.offline.admin.posting-enabled=true`.
+- Phase 9D force confirmation is required only for `POSTING`/`NEEDS_REVIEW` safety warnings; it does not override status claims, decimal guards, multi-tender guards, or max batch size.
+- Phase 9D blocked operations are returned as HTTP 200 with `accepted=false` so operators receive current batch status and warnings without side effects.
+- Phase 9E batch details exposes recent admin events and reason metadata for operational visibility; it intentionally does not expose full audit payloads or raw offline order payloads.
+- Phase 9E readiness is advisory for UI/support operators. Actual mutation endpoints still enforce authorization, reason, force, config, max-size, and atomic status claims independently.
+- Phase 9E error summary is grouped by current tenant error rows; older retained historical errors remain included until an approved archival/filtering policy exists.
+- V87 must be migrated before `finance_enqueue_status`, `finance_enqueue_error`, or idempotency `result_metadata` can be persisted in existing tenant schemas.
+- Phase 10B does not change finance rollback semantics; a finance enqueue failure after order commit leaves the offline import `SYNCED` with `financeStatus=ENQUEUE_FAILED`.
+- Phase 10B does not expose import-level finance visibility in the admin batch details endpoint; a future import details endpoint should show per-import request IDs and finance status.
+- Existing finance request processing still owns final journal creation, so `finance_journal_entry_id` remains null until a later capture path is approved.
+- Phase 10C import details is support-facing and compact; it intentionally omits raw `payload_json`, full payload hash, full idempotency key, and full audit payload JSON.
+- Phase 10C import audit history includes only events directly correlated by `offline_order_import_id`; batch-level admin operations are visible through the batch details endpoint instead.
+- Phase 10C online order reference is a lightweight table/id pointer only and does not join online order detail rows.
+- Phase 10D initially used manual batch id lookup before the Phase 10E batch list endpoint was added.
+- Phase 10D action buttons are advisory-disabled from readiness flags, but backend authorization and safety gates remain the source of truth.
+- Phase 10D post confirmation depends on backend `requiresForceForPost`; operators must still use a controlled environment before enabling backend posting.
+- Phase 10D import lookup depends on support knowing the `offlineOrderImportId` until a future import list endpoint is approved.
+- Phase 10E batch list depends on V85 summary columns for validated/posting-failed/validation-failed counts in existing tenant schemas.
+- Phase 10E cursor pagination is newest-first by `created_at` and batch id; newly inserted batches can appear before the current cursor during operator refresh.
+- Phase 10E finance enqueue status summary is not included in the list because it would require extra import aggregation; finance metadata remains available in import details.
 
 ## API Examples
 
@@ -503,6 +603,100 @@ Phase 9B manual checks:
 - Confirm responses are compact and contain no raw order payloads.
 - Confirm no runtime access to `public.pos_*`.
 
+Phase 9C manual checks:
+- Call `POST /api/admin/pos/offline-sync/batches/{batchId}/post-preview?companyId=1095&branchId=1` without token and confirm rejection.
+- Call post preview with Cashier and confirm rejection.
+- Call post preview with Owner/Admin and correct branch and confirm allowed.
+- Confirm post preview does not create online orders, decrement stock, change import statuses, or update idempotency rows.
+- Confirm post preview returns `eligibleForPostingCount`, current failure counters, `skippedCount`, and warnings.
+- Call actual admin post when `POSTING` rows exist and confirm the response includes a `POSTING` warning.
+- Call actual admin post when `NEEDS_REVIEW` rows exist and confirm the response includes a `NEEDS_REVIEW` warning.
+- Send `{ "reason": "manual controlled posting" }` to an admin operation and confirm tenant audit metadata includes the reason.
+- Confirm richer responses include `batchStatus`, `postedCount`, `failedCount`, `validationFailedCount`, `postingFailedCount`, `needsReviewCount`, and `summaryRecalculated`.
+- Confirm no runtime access to `public.pos_*`.
+
+Phase 9D manual checks:
+- Confirm `valueinsoft.pos.offline.admin.posting-enabled=false` by default.
+- Confirm `valueinsoft.pos.offline.admin.max-post-batch-size=50` by default.
+- Call post preview while admin posting is disabled and confirm it still returns counts/warnings without side effects.
+- Call actual post while admin posting is disabled and confirm `accepted=false`, `summaryRecalculated=false`, and no posting occurs.
+- Enable admin posting and call post without a nonblank `reason`; confirm `accepted=false` and no posting occurs.
+- Call recover-stuck without a nonblank `reason`; confirm `accepted=false` and no recovery occurs.
+- Create `POSTING` or `NEEDS_REVIEW` warning state and call post without `force=true`; confirm `accepted=false` and no posting occurs.
+- Call post with `force=true` and a reason; confirm it proceeds only for `VALIDATED` imports.
+- Create more than `max-post-batch-size` eligible `VALIDATED` rows and confirm post is rejected.
+- Confirm process, validate, recalculate-summary, and post-preview do not require a reason.
+- Confirm blocked post/recover operations write compact blocked audit events when tenant audit tables exist.
+- Confirm no runtime access to `public.pos_*`.
+
+Phase 9E manual checks:
+- Call `GET /api/admin/pos/offline-sync/batches/{batchId}?companyId=1095&branchId=1` without token and confirm rejection.
+- Call batch details with Cashier and confirm rejection.
+- Call batch details with Owner/Admin and correct branch and confirm allowed.
+- Call batch details with wrong branch and confirm authorization rejection.
+- Confirm response includes `batchStatus`, timestamps, legacy counters, and import status counts.
+- Confirm `readiness.canPost=false` and `ADMIN_POSTING_DISABLED` when admin posting is disabled.
+- Confirm `readiness.canPost=false`, `POSTING_ROWS_EXIST`, and `requiresForceForPost=true` when `POSTING` rows exist.
+- Confirm `readiness.canPost=false`, `NEEDS_REVIEW_ROWS_EXIST`, and `requiresForceForPost=true` when `NEEDS_REVIEW` rows exist.
+- Confirm `readiness.canPost=false` and `MAX_POST_BATCH_SIZE_EXCEEDED` when eligible rows exceed the configured max.
+- Confirm recent admin events include event type, created time, actor/reason when available, and blocked flag without raw payloads.
+- Confirm error summary returns `totalErrors`, `latestErrorAt`, and grouped `topErrorCodes`.
+- Confirm no runtime access to `public.pos_*`.
+
+Phase 10B manual checks:
+- Run Flyway migration V87 and confirm tenant `pos_offline_order_import` has `finance_enqueue_status` and `finance_enqueue_error`.
+- Confirm tenant `pos_idempotency_key` has `result_metadata`.
+- Post a `VALIDATED` import in controlled local/staging and confirm the online POS order is created.
+- Confirm finance enqueue still runs after commit and remains non-blocking.
+- Confirm `finance_posting_request_id` is populated when finance enqueue returns a request.
+- Confirm the import remains `SYNCED` when finance request ID is unavailable.
+- Simulate finance enqueue failure and confirm the import remains `SYNCED` with compact `finance_enqueue_status=ENQUEUE_FAILED`.
+- Confirm idempotency `result_metadata` includes `postedOrderId`, `officialOrderId`, `financePostingRequestId` when available, and `financeStatus`.
+- Confirm no raw offline order payloads are written to logs, audit metadata, idempotency metadata, or error metadata.
+- Confirm no runtime access to `public.pos_*`.
+
+Phase 10C manual checks:
+- Call `GET /api/admin/pos/offline-sync/imports/{offlineOrderImportId}?companyId=1095&branchId=1` without token and confirm rejection.
+- Call import details with Cashier and confirm rejection.
+- Call import details with Owner/Admin and correct branch and confirm allowed.
+- Call import details with wrong branch and confirm authorization rejection or safe not found.
+- Confirm response includes status, timestamps, posting metadata, and finance enqueue metadata.
+- Confirm response includes latest import error rows without raw values.
+- Confirm response includes latest import-specific audit events without full audit payload JSON.
+- Confirm response masks `idempotencyKey` and returns only a `payloadHashPrefix`.
+- Confirm response does not include raw offline order payload JSON.
+- Confirm long finance/import errors are truncated.
+- Confirm no runtime access to `public.pos_*`.
+
+Phase 10D manual UI checks:
+- Open `/MainApp/{email}/{companyId}/{branchName}/OfflineSyncAdmin` as a user with `pos.offline.admin.process`.
+- Load batch details by batch id and confirm status, counters, readiness, warnings, error summary, and recent admin events are visible.
+- Confirm blocked reasons display when admin posting is disabled.
+- Call post-preview and confirm the UI labels it read-only/no side effects.
+- Try actual post without a reason and confirm the UI blocks confirmation before sending the operation.
+- Try post with warning states and no force when force is required; confirm the UI shows blocked.
+- Try post with force and reason only in a controlled environment; confirm details refresh after the backend response.
+- Confirm `accepted=false` action responses are shown as blocked/no side effects, not as successful completion.
+- Load import details by import id and confirm posting metadata, finance metadata, masked idempotency fields, errors, audit events, and online order reference display.
+- Confirm the UI does not display raw offline order payload JSON.
+- Confirm finance metadata displays when present.
+- Confirm the Offline Sync Batches sidebar item is visible only through the admin capability-gated app shell.
+
+Phase 10E manual API/UI checks:
+- Call `GET /api/admin/pos/offline-sync/batches?companyId=1095&branchId=1` without token and confirm rejection.
+- Call the list endpoint with Cashier and confirm rejection.
+- Call the list endpoint with Owner/Admin and correct branch and confirm allowed.
+- Call the list endpoint with wrong branch and confirm authorization rejection.
+- Confirm the list returns only requested company/branch batches.
+- Confirm `status=` filter works.
+- Confirm `activeOnly=true` returns active batches when no status filter is supplied.
+- Confirm cursor pagination returns `hasMore` and `nextCursor` without duplicate rows.
+- Confirm no raw payload data is returned.
+- Open Offline Sync Admin UI and confirm the batch table loads.
+- Change status filter and refresh.
+- Click a batch row and confirm batch details load.
+- Confirm manual batch lookup still works.
+
 ## Compile/Test Result
 
 - Phase 2: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
@@ -524,6 +718,21 @@ Phase 9B manual checks:
 - Phase 9A: Broad tests were skipped per request.
 - Phase 9B: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
 - Phase 9B: Broad tests were skipped per request.
+- Phase 9C: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 9C: Broad tests were skipped per request.
+- Phase 9D: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 9D: Broad tests were skipped per request.
+- Phase 9E: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 9E: Broad tests were skipped per request.
+- Phase 10B: `mvnw.cmd -DskipTests clean compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 10B: Broad tests were skipped per request.
+- Phase 10C: `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 10C: Broad tests were skipped per request.
+- Phase 10D: Frontend `npm run build` passed.
+- Phase 10D: Backend compile was not rerun because no backend code changed in this phase.
+- Phase 10E: Backend `mvnw.cmd compile` passed with `JAVA_HOME=C:\Program Files\Java\jdk-21`.
+- Phase 10E: Frontend `npm run build` passed.
+- Phase 10E: Broad tests were skipped per request.
 
 ## Phase 7.5 Verification Audit
 
@@ -988,22 +1197,322 @@ Posting additions:
   - `OFFLINE_ADMIN_RECALCULATE_REQUESTED`
 - Audit event messages include the principal name and no raw order payload.
 
+## Phase 9C Admin Response Hardening and Dry Run Preview
+
+### Rich Admin Responses
+
+- Expanded `OfflineAdminOperationResponse` with:
+  - `batchStatus`
+  - `processedCount`
+  - `postedCount`
+  - `skippedCount`
+  - `failedCount`
+  - `validationFailedCount`
+  - `postingFailedCount`
+  - `needsReviewCount`
+  - `eligibleForPostingCount`
+  - `summaryRecalculated`
+  - `warnings`
+- Added `OfflineImportStatusCounts` and `PosSyncBatchRepository.findImportStatusCounts(...)`.
+- Status counts are read from tenant `pos_offline_order_import` in one aggregate query.
+- Admin responses derive summary counters after the operation so operators can see the current batch/import state.
+- `processedCount` remains the direct count returned by the invoked service method.
+
+### Posting Preview
+
+- Added `POST /api/admin/pos/offline-sync/batches/{batchId}/post-preview?companyId=&branchId=`.
+- The preview endpoint requires `pos.offline.admin.process`.
+- Preview is read-only:
+  - It does not create online POS orders.
+  - It does not decrement stock.
+  - It does not update import statuses.
+  - It does not update idempotency rows.
+- Preview reports current `VALIDATED` imports as `eligibleForPostingCount`.
+- Preview reports skipped rows as total imports that are not currently `VALIDATED`.
+- Preview warns when:
+  - `POSTING` rows exist.
+  - `NEEDS_REVIEW` rows exist.
+  - No `VALIDATED` imports are eligible for posting.
+  - Decimal quantity/amount and multi-tender checks will still run during actual posting.
+
+### Admin Reason and Audit
+
+- Added optional `OfflineAdminOperationRequest` with `reason`.
+- Recover stuck, process, validate, post, and recalculate summary accept the optional reason body.
+- Nonblank reasons are written to tenant audit metadata as compact JSON.
+- Raw offline order payloads are never included in admin responses, logs, or audit metadata.
+- Added preview audit event `OFFLINE_ADMIN_POST_PREVIEW_REQUESTED`.
+
+### Posting Safety Result
+
+- Actual admin post reads pre-operation counts before invoking posting.
+- If `POSTING` or `NEEDS_REVIEW` rows exist, the operation response includes warnings.
+- Warnings do not block posting of other eligible `VALIDATED` imports.
+- Existing posting service protections remain unchanged: only `VALIDATED` imports can be atomically claimed for posting.
+- No decimal posting support, multi-tender support, finance behavior change, public endpoint, or automatic posting enablement was added.
+
+## Phase 9D Production Safety Guards and Force Confirmation
+
+### Admin Posting Gate
+
+- Added `OfflinePosAdminProperties` bound to `valueinsoft.pos.offline.admin`.
+- Added disabled-by-default properties:
+  - `valueinsoft.pos.offline.admin.posting-enabled=false`
+  - `valueinsoft.pos.offline.admin.max-post-batch-size=50`
+- Actual admin posting is rejected unless `posting-enabled=true`.
+- Post preview remains available with admin capability even when actual posting is disabled.
+- Worker posting remains controlled only by the existing worker flags and was not changed.
+
+### Dangerous Operation Requirements
+
+- Admin post now requires a nonblank `reason`.
+- Admin recover-stuck now requires a nonblank `reason`.
+- Process, validate, recalculate-summary, and post-preview keep reason optional.
+- `OfflineAdminOperationRequest` now supports:
+  - `reason`
+  - `force`
+- Reasons are stored only in audit metadata and are not logged with raw payloads.
+
+### Force and Size Guards
+
+- Actual admin post reads tenant import status counts before execution.
+- If `POSTING` or `NEEDS_REVIEW` rows exist, actual post requires `force=true`.
+- Without force, the response returns `accepted=false` and posting is not invoked.
+- Force does not override existing atomic status claims; only `VALIDATED` rows can still be posted.
+- If eligible `VALIDATED` rows exceed `max-post-batch-size`, actual post returns `accepted=false` and posting is not invoked.
+- Blocked responses include current batch status, eligible count, failure counters, warnings, and `summaryRecalculated=false`.
+
+### Blocked Audit Events
+
+- Blocked actual posting writes `OFFLINE_ADMIN_POST_BLOCKED` when tenant audit is available.
+- Blocked recover-stuck writes `OFFLINE_ADMIN_RECOVER_STUCK_BLOCKED` when tenant audit is available.
+- Blocked audit metadata may include `reason` and `blockReason`.
+- Audit write failures are caught and logged compactly so a missing tenant audit table does not hide the block response.
+
+### Safety Result
+
+- Admin posting is fail-closed by default.
+- Post preview remains safe and read-only.
+- No decimal posting support, multi-tender support, finance behavior change, automatic posting enablement, or public endpoint was added.
+
+## Phase 9E Admin Batch Details and Action Readiness API
+
+### Batch Details Endpoint
+
+- Added `GET /api/admin/pos/offline-sync/batches/{batchId}?companyId=&branchId=`.
+- The endpoint requires `Principal`.
+- The endpoint requires `pos.offline.admin.process`.
+- Branch/company access is checked through `AuthorizationService.assertAuthenticatedCapability(...)`.
+- Response is read-only and does not include raw offline order payloads.
+
+### Response Shape
+
+- Added `OfflineAdminBatchDetailsResponse`.
+- Response includes:
+  - company and branch identifiers.
+  - batch id and batch status.
+  - `createdAt`, `receivedAt`, and `completedAt`.
+  - tenant import status counts from `OfflineImportStatusCounts`.
+  - legacy batch counters: total, synced, failed, duplicate, and needs review.
+  - `eligibleForPostingCount`.
+  - warnings.
+  - readiness object.
+  - recent admin events.
+  - compact error summary.
+
+### Readiness
+
+- Added `OfflineAdminReadiness`.
+- Readiness includes booleans for recover-stuck, process, validate, post, and recalculate-summary.
+- Readiness includes blocked reason lists for recover, process, validate, and post.
+- Post blocked reasons include:
+  - `ADMIN_POSTING_DISABLED`
+  - `NO_VALIDATED_IMPORTS`
+  - `POSTING_ROWS_EXIST`
+  - `NEEDS_REVIEW_ROWS_EXIST`
+  - `MAX_POST_BATCH_SIZE_EXCEEDED`
+- `requiresReasonForPost=true`.
+- `requiresReasonForRecoverStuck=true`.
+- `requiresForceForPost=true` when `POSTING` or `NEEDS_REVIEW` rows exist.
+- Readiness is advisory only; mutation endpoints still enforce their own safety gates.
+
+### Recent Admin Events
+
+- Added `SyncAuditLogRepository.findRecentAdminEvents(...)`.
+- The query is tenant-scoped and filtered by `sync_batch_id`.
+- The query returns only admin audit events matching `OFFLINE_ADMIN_%`.
+- Response includes event type, created time, actor parsed from event message when available, reason from audit metadata, and whether the event was blocked.
+- Full audit payload JSON and raw offline order payloads are not exposed.
+
+### Error Summary
+
+- Added `OfflineOrderErrorRepository.summarizeErrorsByBatchId(...)`.
+- Error summary joins tenant errors to tenant imports by batch id.
+- Response includes total errors, latest error timestamp, and top error codes grouped by `error_code`.
+- The query does not read raw order payload columns.
+
+## Phase 10B Finance Request ID Capture
+
+### Finance Enqueue Path
+
+- `FinancePostingRequestService.createPostingRequestFromSystem(...)` already returns `FinancePostingRequestItem`.
+- `FinanceOperationalPostingService.enqueuePosSale(...)` remains available as the existing void method for online POS callers.
+- Added `FinanceOperationalPostingService.enqueuePosSaleAndReturnRequest(...)` for callers that need the created or replayed finance posting request metadata.
+- Existing online POS behavior is preserved: finance enqueue still runs after commit, and enqueue exceptions are logged without rolling back the saved POS order.
+
+### Offline Metadata Capture
+
+- `PosSalePostingService.postSale(...)` now has an overload with optional after-commit finance success/failure callbacks.
+- Offline posting uses the callback overload to capture finance enqueue metadata after the POS order transaction commits.
+- When a finance posting request is available, `pos_offline_order_import.finance_posting_request_id` is updated with the returned request id.
+- `finance_enqueue_status` is set to `ENQUEUED`, `UNAVAILABLE`, or `ENQUEUE_FAILED`.
+- `finance_enqueue_error` stores only compact failure text when finance enqueue fails.
+- Offline imports remain `SYNCED` even when finance request ID capture is unavailable or finance enqueue fails.
+
+### Idempotency Metadata
+
+- Added tenant `pos_idempotency_key.result_metadata`.
+- Successful offline posting writes compact idempotency metadata:
+  - `postedOrderId`
+  - `officialOrderId`
+  - `financePostingRequestId` when available
+  - `financeStatus`
+  - compact `financeError` only when enqueue fails
+- Raw offline order payloads are not written to idempotency metadata.
+
+### Migration
+
+- Added `V87__pos_offline_finance_request_capture.sql`.
+- V87 upgrades only tenant schemas matching `c_%`.
+- V87 adds a status constraint for lightweight finance enqueue states.
+- V87 adds a tenant index for lookup by `finance_posting_request_id`.
+- No runtime access to `public.pos_*` was added.
+
+### Visibility Result
+
+- Batch-level admin details remain unchanged because they do not expose individual imports.
+- Import-level finance visibility should be added through a future compact import details endpoint.
+- `finance_journal_entry_id` remains unset in Phase 10B because journal creation happens later in the finance posting lifecycle.
+
+## Phase 10C Admin Import-Level Details Endpoint
+
+### Import Details Endpoint
+
+- Added `GET /api/admin/pos/offline-sync/imports/{offlineOrderImportId}?companyId=&branchId=`.
+- The endpoint requires `Principal`.
+- The endpoint requires `pos.offline.admin.process`.
+- Branch/company access is checked through `AuthorizationService.assertAuthenticatedCapability(...)`.
+- The lookup filters by `offlineOrderImportId`, `company_id`, and `branch_id`.
+- Missing or cross-branch imports return a safe `OFFLINE_IMPORT_NOT_FOUND` response.
+
+### Response Shape
+
+- Added `OfflineAdminImportDetailsResponse`.
+- Response includes compact import status, timestamps, retry count, posting metadata, finance enqueue metadata, device/cashier identifiers, masked idempotency key, payload hash prefix, idempotency status, and sanitized idempotency result metadata.
+- Response includes a lightweight online order reference when a posted/official order id exists.
+- Response does not include raw offline order payload JSON.
+- Long errors and metadata are truncated.
+
+### Error and Audit History
+
+- Added latest 10 tenant error rows for a single import through `OfflineOrderErrorRepository.findRecentImportErrors(...)`.
+- Error rows include error id, code, compact message, and created time.
+- Added latest 10 tenant audit events directly correlated by `offline_order_import_id` through `SyncAuditLogRepository.findRecentImportEvents(...)`.
+- Audit event rows include event type, created time, parsed actor when available, and reason when available.
+- Full audit payload JSON and raw offline order payloads are not exposed.
+
+### Tenant Isolation Result
+
+- Import details uses tenant `pos_offline_order_import`, tenant device, tenant idempotency, tenant error, and tenant audit tables.
+- The import details query selects only required support-safe columns and does not read `payload_json`.
+- No runtime access to `public.pos_*` was added.
+
+## Phase 10D Offline Admin UI Screen
+
+### App Shell Route
+
+- Added frontend view id `OfflineSyncAdmin`.
+- Added lazy route rendering in the existing `MainApp` shell.
+- Added sidebar/settings navigation entry labeled Offline sync batches.
+- Access is gated by the existing shell capability model with `pos.offline.admin.process`.
+
+### Batch Operations UI
+
+- Added manual batch id lookup as the initial fallback before Phase 10E added the safe batch-list endpoint.
+- Batch details use `GET /api/admin/pos/offline-sync/batches/{batchId}?companyId=&branchId=`.
+- The page shows batch status, timestamps, legacy counters, import status counts, readiness flags, blocked reasons, warnings, error summary, and recent admin events.
+- Added action controls for recover stuck, process, validate, post preview, post, and recalculate summary.
+- Dangerous actions open confirmation dialogs.
+- Recover stuck requires a reason.
+- Post calls post-preview before confirmation, requires a reason, and requires force confirmation when backend readiness says force is required.
+- `accepted=false` responses are displayed as blocked/no-side-effect outcomes.
+
+### Import Details UI
+
+- Added manual import id lookup using `GET /api/admin/pos/offline-sync/imports/{offlineOrderImportId}?companyId=&branchId=`.
+- Import details show compact status, timestamps, posting references, finance enqueue metadata, masked idempotency fields, latest errors, latest import audit events, and online order reference.
+- The UI does not display raw offline order payload JSON.
+- Long backend-provided messages are displayed in compact table/text areas and rely on backend truncation.
+
+### Safety Result
+
+- No backend posting behavior was added.
+- Automatic posting remains disabled-by-default and backend-controlled.
+- No decimal quantity/money support or multi-tender operational persistence was added.
+- The UI uses only existing safe admin endpoints and does not invent batch discovery or raw payload endpoints.
+
+## Phase 10E Admin Batch List Endpoint and UI Listing
+
+### Batch List Endpoint
+
+- Added `GET /api/admin/pos/offline-sync/batches?companyId=&branchId=&status=&activeOnly=&size=&cursor=`.
+- The endpoint requires `Principal`.
+- The endpoint requires `pos.offline.admin.process`.
+- Branch/company access is checked through `AuthorizationService.assertAuthenticatedCapability(...)`.
+- The lookup filters by `company_id` and `branch_id`.
+- Optional `status` validates against `PosSyncBatchStatus`.
+- Optional `activeOnly=true` filters to `RECEIVED`, `IN_PROGRESS`, `PROCESSING`, and `PARTIALLY_SYNCED` when no explicit status filter is supplied.
+
+### Pagination and Response
+
+- Added `OfflineAdminBatchListResponse`.
+- Added `OfflineAdminBatchListItem`.
+- Pagination is newest-first by `created_at DESC, id DESC`.
+- Cursor is an opaque URL-safe encoded `createdAt|batchId` value.
+- Page size is capped at 100.
+- Response includes `hasMore` and `nextCursor`.
+- Items include compact batch counters and warning count only.
+- Raw offline order payloads and import payloads are not selected or returned.
+
+### UI Listing
+
+- Offline Sync Admin now auto-loads a recent batch table for the active company/branch.
+- Added status filter, active-only filter, refresh button, and load-more button.
+- Clicking a batch row loads the existing batch details panel.
+- Manual batch id lookup remains available as fallback.
+- Dangerous operation behavior from Phase 10D is unchanged.
+
+### Safety Result
+
+- No backend posting behavior was added.
+- No automatic posting behavior was added.
+- No decimal quantity/money support or multi-tender operational persistence was added.
+- Batch list uses only tenant `c_{companyId}.pos_sync_batch` summary data.
+
 ## Remaining TODOs
 
 - Later: Add an approved data migration/backfill from `public.pos_*` to tenant `c_{companyId}.pos_*` if existing public data must be retained.
 - Later: Resolve `registered_by` from principalName to numeric user id for `pos_device.registered_by`.
 - Later: Replace Phase 3 placeholder/default sources for payment methods, POS settings, cashier permissions, taxes, and discounts with final tenant configuration tables once approved.
 - Later: Add reconciliation for idempotency claims that remain `RECEIVED` without a visible import due to unexpected storage failures.
-- Later: Add a scheduler/admin trigger for processing if approved.
-- Later: Add a scheduler/admin trigger for validation if approved.
-- Later phases: PostgreSQL/Testcontainers posting integration tests, payment persistence, finance reference capture, richer admin operation summaries, and broader offline operations hardening.
+- Later phases: PostgreSQL/Testcontainers posting integration tests, payment persistence, finance journal reference capture, admin endpoint tests, UI integration, and broader offline operations hardening.
 
 ## Next Recommended Phase
 
-Phase 9C - Operational Verification and Admin Hardening, only after explicit approval.
+Phase 10F - Finance Journal Reference Capture and PostgreSQL Verification, only after explicit approval.
 
 Recommended implementation shape:
-- Add Testcontainers or an approved real PostgreSQL test profile for Phase 8B/8C posting and batch summaries.
+- Add Testcontainers or an approved real PostgreSQL test profile for posting, finance request capture, and batch summaries.
 - Add targeted tests for `OfflinePosWorker` gating and target parsing.
 - Add targeted tests for admin capability enforcement and endpoint operation mapping.
-- Decide whether finance enqueue should expose posting request IDs back to offline metadata before broad rollout.
+- Decide whether finance journal completion should update `finance_journal_entry_id` back to offline metadata.

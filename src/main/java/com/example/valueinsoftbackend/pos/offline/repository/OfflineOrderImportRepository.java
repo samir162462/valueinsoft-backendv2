@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.pos.offline.repository;
 
 import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus;
+import com.example.valueinsoftbackend.pos.offline.model.OfflineAdminImportDetailsSnapshot;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineOrderImportModel;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 @Slf4j
@@ -110,6 +112,89 @@ public class OfflineOrderImportRepository {
                 """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
         List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER,
                 companyId, branchId, deviceId, idempotencyKey);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public Optional<OfflineAdminImportDetailsSnapshot> findAdminImportDetails(Long companyId, Long branchId, Long id) {
+        String sql = """
+                SELECT
+                    oi.company_id,
+                    oi.branch_id,
+                    oi.sync_batch_id,
+                    oi.id AS offline_order_import_id,
+                    oi.offline_order_no,
+                    oi.status,
+                    oi.created_at,
+                    oi.updated_at,
+                    oi.processing_started_at,
+                    oi.posting_started_at,
+                    oi.posting_completed_at,
+                    oi.posted_order_id,
+                    oi.official_order_id,
+                    oi.finance_posting_request_id,
+                    oi.finance_journal_entry_id,
+                    oi.finance_enqueue_status,
+                    oi.finance_enqueue_error,
+                    oi.error_code,
+                    oi.error_message,
+                    oi.retry_count,
+                    oi.last_retry_at,
+                    oi.device_id,
+                    d.device_code,
+                    oi.cashier_id,
+                    oi.idempotency_key,
+                    oi.payload_hash,
+                    idem.status AS idempotency_status,
+                    idem.result_metadata::text AS idempotency_result_metadata
+                FROM %s oi
+                LEFT JOIN %s d
+                    ON d.id = oi.device_id
+                   AND d.company_id = oi.company_id
+                   AND d.branch_id = oi.branch_id
+                LEFT JOIN %s idem
+                    ON idem.company_id = oi.company_id
+                   AND idem.branch_id = oi.branch_id
+                   AND idem.device_id = oi.device_id
+                   AND idem.idempotency_key = oi.idempotency_key
+                WHERE oi.id = ?
+                  AND oi.company_id = ?
+                  AND oi.branch_id = ?
+                """.formatted(
+                TenantSqlIdentifiers.posOfflineOrderImportTable(companyId),
+                TenantSqlIdentifiers.posDeviceTable(companyId),
+                TenantSqlIdentifiers.posIdempotencyKeyTable(companyId));
+        List<OfflineAdminImportDetailsSnapshot> results = jdbcTemplate.query(sql, (rs, rowNum) ->
+                        new OfflineAdminImportDetailsSnapshot(
+                                rs.getLong("company_id"),
+                                rs.getLong("branch_id"),
+                                rs.getLong("sync_batch_id"),
+                                rs.getLong("offline_order_import_id"),
+                                rs.getString("offline_order_no"),
+                                rs.getString("status"),
+                                rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant() : null,
+                                rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toInstant() : null,
+                                rs.getTimestamp("processing_started_at") != null ? rs.getTimestamp("processing_started_at").toInstant() : null,
+                                rs.getTimestamp("posting_started_at") != null ? rs.getTimestamp("posting_started_at").toInstant() : null,
+                                rs.getTimestamp("posting_completed_at") != null ? rs.getTimestamp("posting_completed_at").toInstant() : null,
+                                rs.getObject("posted_order_id") != null ? rs.getLong("posted_order_id") : null,
+                                rs.getObject("official_order_id") != null ? rs.getLong("official_order_id") : null,
+                                rs.getObject("finance_posting_request_id", UUID.class),
+                                rs.getObject("finance_journal_entry_id", UUID.class),
+                                rs.getString("finance_enqueue_status"),
+                                rs.getString("finance_enqueue_error"),
+                                rs.getString("error_code"),
+                                rs.getString("error_message"),
+                                rs.getObject("retry_count") != null ? rs.getInt("retry_count") : null,
+                                rs.getTimestamp("last_retry_at") != null ? rs.getTimestamp("last_retry_at").toInstant() : null,
+                                rs.getObject("device_id") != null ? rs.getLong("device_id") : null,
+                                rs.getString("device_code"),
+                                rs.getObject("cashier_id") != null ? rs.getLong("cashier_id") : null,
+                                rs.getString("idempotency_key"),
+                                rs.getString("payload_hash"),
+                                rs.getString("idempotency_status"),
+                                rs.getString("idempotency_result_metadata")
+                        ),
+                id, companyId, branchId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
@@ -310,11 +395,18 @@ public class OfflineOrderImportRepository {
     }
 
     public void markPostingSynced(Long companyId, Long branchId, Long id, Long postedOrderId) {
+        markPostingSynced(companyId, branchId, id, postedOrderId, "UNAVAILABLE", null);
+    }
+
+    public void markPostingSynced(Long companyId, Long branchId, Long id, Long postedOrderId,
+                                  String financeEnqueueStatus, String financeEnqueueError) {
         String sql = """
                 UPDATE %s
                 SET status = 'SYNCED',
                     official_order_id = ?,
                     posted_order_id = ?,
+                    finance_enqueue_status = ?,
+                    finance_enqueue_error = ?,
                     posting_completed_at = NOW(),
                     posting_error_code = NULL,
                     posting_error_message = NULL,
@@ -322,7 +414,24 @@ public class OfflineOrderImportRepository {
                     updated_at = NOW()
                 WHERE id = ? AND company_id = ? AND branch_id = ? AND status = 'POSTING'
                 """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
-        jdbcTemplate.update(sql, postedOrderId, postedOrderId, id, companyId, branchId);
+        jdbcTemplate.update(sql, postedOrderId, postedOrderId,
+                financeEnqueueStatus, financeEnqueueError, id, companyId, branchId);
+    }
+
+    public void updateFinanceEnqueueMetadata(Long companyId, Long branchId, Long id,
+                                             UUID financePostingRequestId,
+                                             String financeEnqueueStatus,
+                                             String financeEnqueueError) {
+        String sql = """
+                UPDATE %s
+                SET finance_posting_request_id = COALESCE(?::uuid, finance_posting_request_id),
+                    finance_enqueue_status = ?,
+                    finance_enqueue_error = ?,
+                    updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, financePostingRequestId, financeEnqueueStatus,
+                financeEnqueueError, id, companyId, branchId);
     }
 
     public void markPostingFailed(Long companyId, Long branchId, Long id, String errorCode, String errorMessage) {

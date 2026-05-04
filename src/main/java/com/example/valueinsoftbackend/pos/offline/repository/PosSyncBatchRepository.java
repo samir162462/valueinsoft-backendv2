@@ -1,6 +1,8 @@
 package com.example.valueinsoftbackend.pos.offline.repository;
 
 import com.example.valueinsoftbackend.pos.offline.enums.PosSyncBatchStatus;
+import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminBatchListItem;
+import com.example.valueinsoftbackend.pos.offline.model.OfflineImportStatusCounts;
 import com.example.valueinsoftbackend.pos.offline.model.PosSyncBatchModel;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +11,8 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -99,6 +103,127 @@ public class PosSyncBatchRepository {
                 LIMIT ?
                 """.formatted(TenantSqlIdentifiers.posSyncBatchTable(companyId));
         return jdbcTemplate.query(sql, ROW_MAPPER, companyId, branchId, safeLimit);
+    }
+
+    public OfflineImportStatusCounts findImportStatusCounts(Long companyId, Long branchId, Long batchId) {
+        String sql = """
+                SELECT
+                    COUNT(*)::int AS total_count,
+                    COUNT(*) FILTER (WHERE status = 'PENDING')::int AS pending_count,
+                    COUNT(*) FILTER (WHERE status = 'PENDING_RETRY')::int AS pending_retry_count,
+                    COUNT(*) FILTER (WHERE status = 'PROCESSING')::int AS processing_count,
+                    COUNT(*) FILTER (WHERE status = 'READY_FOR_VALIDATION')::int AS ready_for_validation_count,
+                    COUNT(*) FILTER (WHERE status = 'VALIDATING')::int AS validating_count,
+                    COUNT(*) FILTER (WHERE status = 'VALIDATED')::int AS validated_count,
+                    COUNT(*) FILTER (WHERE status = 'POSTING')::int AS posting_count,
+                    COUNT(*) FILTER (WHERE status = 'SYNCED')::int AS synced_count,
+                    COUNT(*) FILTER (WHERE status = 'POSTING_FAILED')::int AS posting_failed_count,
+                    COUNT(*) FILTER (WHERE status = 'VALIDATION_FAILED')::int AS validation_failed_count,
+                    COUNT(*) FILTER (WHERE status = 'FAILED')::int AS failed_count,
+                    COUNT(*) FILTER (WHERE status = 'DUPLICATE')::int AS duplicate_count,
+                    COUNT(*) FILTER (WHERE status = 'NEEDS_REVIEW')::int AS needs_review_count
+                FROM %s
+                WHERE company_id = ? AND branch_id = ? AND sync_batch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> new OfflineImportStatusCounts(
+                rs.getInt("total_count"),
+                rs.getInt("pending_count"),
+                rs.getInt("pending_retry_count"),
+                rs.getInt("processing_count"),
+                rs.getInt("ready_for_validation_count"),
+                rs.getInt("validating_count"),
+                rs.getInt("validated_count"),
+                rs.getInt("posting_count"),
+                rs.getInt("synced_count"),
+                rs.getInt("posting_failed_count"),
+                rs.getInt("validation_failed_count"),
+                rs.getInt("failed_count"),
+                rs.getInt("duplicate_count"),
+                rs.getInt("needs_review_count")
+        ), companyId, branchId, batchId);
+    }
+
+    public List<OfflineAdminBatchListItem> findAdminBatchList(Long companyId,
+                                                              Long branchId,
+                                                              PosSyncBatchStatus status,
+                                                              boolean activeOnly,
+                                                              Instant cursorCreatedAt,
+                                                              Long cursorBatchId,
+                                                              int limit) {
+        int safeLimit = Math.max(1, limit);
+        List<Object> args = new ArrayList<>();
+        args.add(companyId);
+        args.add(branchId);
+
+        StringBuilder where = new StringBuilder("""
+                WHERE company_id = ?
+                  AND branch_id = ?
+                """);
+
+        if (status != null) {
+            where.append(" AND status = ?\n");
+            args.add(status.name());
+        } else if (activeOnly) {
+            where.append(" AND status IN ('RECEIVED', 'IN_PROGRESS', 'PROCESSING', 'PARTIALLY_SYNCED')\n");
+        }
+
+        if (cursorCreatedAt != null && cursorBatchId != null) {
+            where.append(" AND (created_at < ? OR (created_at = ? AND id < ?))\n");
+            Timestamp cursorTimestamp = Timestamp.from(cursorCreatedAt);
+            args.add(cursorTimestamp);
+            args.add(cursorTimestamp);
+            args.add(cursorBatchId);
+        }
+
+        args.add(safeLimit);
+
+        String sql = """
+                SELECT
+                    company_id,
+                    branch_id,
+                    id AS batch_id,
+                    status,
+                    created_at,
+                    sync_started_at,
+                    sync_completed_at,
+                    total_orders,
+                    synced_orders,
+                    failed_orders,
+                    duplicate_orders,
+                    needs_review_orders,
+                    COALESCE(validated_orders, 0) AS validated_orders,
+                    COALESCE(posting_failed_orders, 0) AS posting_failed_orders,
+                    COALESCE(validation_failed_orders, 0) AS validation_failed_orders
+                FROM %s
+                %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """.formatted(TenantSqlIdentifiers.posSyncBatchTable(companyId), where);
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            int needsReview = rs.getInt("needs_review_orders");
+            int postingFailed = rs.getInt("posting_failed_orders");
+            int validationFailed = rs.getInt("validation_failed_orders");
+            int failed = rs.getInt("failed_orders");
+            int warningCount = needsReview + postingFailed + validationFailed + failed;
+            return new OfflineAdminBatchListItem(
+                    rs.getLong("company_id"),
+                    rs.getLong("branch_id"),
+                    rs.getLong("batch_id"),
+                    rs.getString("status"),
+                    rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant() : null,
+                    rs.getTimestamp("sync_started_at") != null ? rs.getTimestamp("sync_started_at").toInstant() : null,
+                    rs.getTimestamp("sync_completed_at") != null ? rs.getTimestamp("sync_completed_at").toInstant() : null,
+                    rs.getInt("total_orders"),
+                    rs.getInt("synced_orders"),
+                    failed,
+                    rs.getInt("duplicate_orders"),
+                    needsReview,
+                    rs.getInt("validated_orders"),
+                    postingFailed,
+                    validationFailed,
+                    warningCount);
+        }, args.toArray());
     }
 
     // -------------------------------------------------------

@@ -109,9 +109,21 @@ public class PosIdempotencyService {
     public void markSynced(Long companyId, Long branchId, Long deviceId,
                            String idempotencyKey, Long officialOrderId,
                            String officialInvoiceNo) {
+        markSynced(companyId, branchId, deviceId, idempotencyKey, officialOrderId, officialInvoiceNo, null);
+    }
+
+    public void markSynced(Long companyId, Long branchId, Long deviceId,
+                           String idempotencyKey, Long officialOrderId,
+                           String officialInvoiceNo, String resultMetadataJson) {
         idempotencyRepo.markSynced(companyId, branchId, deviceId,
-                idempotencyKey, officialOrderId, officialInvoiceNo);
+                idempotencyKey, officialOrderId, officialInvoiceNo, resultMetadataJson);
         log.debug("Marked idempotency key as synced: {}", idempotencyKey);
+    }
+
+    public void updateResultMetadata(Long companyId, Long branchId, Long deviceId,
+                                     String idempotencyKey, String resultMetadataJson) {
+        idempotencyRepo.updateResultMetadata(companyId, branchId, deviceId, idempotencyKey, resultMetadataJson);
+        log.debug("Updated idempotency result metadata: {}", idempotencyKey);
     }
 
     /**
