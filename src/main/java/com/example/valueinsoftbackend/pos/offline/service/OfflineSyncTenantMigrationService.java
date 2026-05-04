@@ -8,6 +8,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * Service responsible for ensuring that all tenant-specific offline sync tables and procedures
+ * exist upon application startup. It iterates through all schemas matching the tenant pattern
+ * and invokes the master migration functions.
+ */
 @Service
 @Slf4j
 public class OfflineSyncTenantMigrationService {
@@ -15,11 +20,21 @@ public class OfflineSyncTenantMigrationService {
     private final JdbcTemplate jdbcTemplate;
     private final OfflinePosProperties properties;
 
+    /**
+     * Constructs a new OfflineSyncTenantMigrationService with required dependencies.
+     *
+     * @param jdbcTemplate the JDBC template for database operations
+     * @param properties   the general offline POS properties
+     */
     public OfflineSyncTenantMigrationService(JdbcTemplate jdbcTemplate, OfflinePosProperties properties) {
         this.jdbcTemplate = jdbcTemplate;
         this.properties = properties;
     }
 
+    /**
+     * Executes the migration logic if enabled in the configuration.
+     * It scans for schemas prefixed with "c_" and runs verification functions for each.
+     */
     @PostConstruct
     public void runIfEnabled() {
         if (!properties.isRunTenantMigrationOnStartup()) {
@@ -38,6 +53,16 @@ public class OfflineSyncTenantMigrationService {
             try {
                 jdbcTemplate.query(
                         "SELECT public.create_offline_sync_tables_for_tenant(?)",
+                        ps -> ps.setString(1, schema),
+                        rs -> {
+                        });
+                jdbcTemplate.query(
+                        "SELECT public.ensure_offline_sync_posting_mvp_for_tenant(?)",
+                        ps -> ps.setString(1, schema),
+                        rs -> {
+                        });
+                jdbcTemplate.query(
+                        "SELECT public.ensure_offline_sync_batch_finalization_for_tenant(?)",
                         ps -> ps.setString(1, schema),
                         rs -> {
                         });

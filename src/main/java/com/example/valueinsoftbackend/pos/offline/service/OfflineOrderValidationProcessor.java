@@ -10,6 +10,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Processor responsible for orchestrating the validation of offline order imports.
+ * It claims eligible records, invokes the validation service, and persists any errors found.
+ */
 @Service
 @Slf4j
 public class OfflineOrderValidationProcessor {
@@ -19,6 +23,14 @@ public class OfflineOrderValidationProcessor {
     private final SyncErrorService syncErrorService;
     private final AuditLogService auditLogService;
 
+    /**
+     * Constructs a new OfflineOrderValidationProcessor with required dependencies.
+     *
+     * @param importRepo        the repository for offline order imports
+     * @param validationService the service performing granular business validation
+     * @param syncErrorService  the service for logging synchronization errors
+     * @param auditLogService   the service for logging audit events
+     */
     public OfflineOrderValidationProcessor(OfflineOrderImportRepository importRepo,
                                            OfflineOrderImportValidationService validationService,
                                            SyncErrorService syncErrorService,
@@ -29,6 +41,15 @@ public class OfflineOrderValidationProcessor {
         this.auditLogService = auditLogService;
     }
 
+    /**
+     * Claims and validates the next available import record for a specific batch.
+     * This method is transactional to ensure atomic claiming and status updates.
+     *
+     * @param companyId the company ID
+     * @param branchId  the branch ID
+     * @param batchId   the batch ID
+     * @return true if a record was processed, false otherwise
+     */
     @Transactional
     public boolean validateNextReadyImport(Long companyId, Long branchId, Long batchId) {
         Optional<OfflineOrderImportModel> claimed = importRepo.claimNextReadyForValidation(companyId, branchId, batchId);
@@ -44,6 +65,14 @@ public class OfflineOrderValidationProcessor {
         return true;
     }
 
+    /**
+     * Claims and validates a specific import record by ID.
+     *
+     * @param companyId            the company ID
+     * @param branchId             the branch ID
+     * @param offlineOrderImportId the ID of the import record
+     * @return true if the record was successfully claimed and processed
+     */
     @Transactional
     public boolean validateSingleImport(Long companyId, Long branchId, Long offlineOrderImportId) {
         Optional<OfflineOrderImportModel> claimed =
@@ -60,6 +89,11 @@ public class OfflineOrderValidationProcessor {
         return true;
     }
 
+    /**
+     * Executes the validation logic for a claimed import record.
+     *
+     * @param importRecord the claimed import record
+     */
     private void validateClaimedImport(OfflineOrderImportModel importRecord) {
         Long companyId = importRecord.companyId();
         Long branchId = importRecord.branchId();
@@ -131,6 +165,12 @@ public class OfflineOrderValidationProcessor {
         }
     }
 
+    /**
+     * Determines the severity of a validation error.
+     *
+     * @param errorCode the error code
+     * @return the severity level
+     */
     private OfflineErrorSeverity severity(String errorCode) {
         if ("IDEMPOTENCY_PAYLOAD_MISMATCH".equals(errorCode)) {
             return OfflineErrorSeverity.HARD_FAIL;
@@ -138,6 +178,12 @@ public class OfflineOrderValidationProcessor {
         return OfflineErrorSeverity.NEEDS_REVIEW;
     }
 
+    /**
+     * Determines if a validation error requires manager review.
+     *
+     * @param errorCode the error code
+     * @return true if review is required
+     */
     private boolean managerReviewRequired(String errorCode) {
         return !"OFFLINE_INVALID_QUANTITY".equals(errorCode)
                 && !"OFFLINE_INVALID_PRICE".equals(errorCode);

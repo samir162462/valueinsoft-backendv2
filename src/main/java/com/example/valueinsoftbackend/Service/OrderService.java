@@ -29,19 +29,25 @@ public class OrderService {
     private final DbPosOrder dbPosOrder;
     private final com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod;
     private final FinanceOperationalPostingService financeOperationalPostingService;
+    private final PosSalePostingService posSalePostingService;
 
     public OrderService(DbPosOrder dbPosOrder,
             com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod,
-            FinanceOperationalPostingService financeOperationalPostingService) {
+            FinanceOperationalPostingService financeOperationalPostingService,
+            PosSalePostingService posSalePostingService) {
         this.dbPosOrder = dbPosOrder;
         this.dbPosShiftPeriod = dbPosShiftPeriod;
         this.financeOperationalPostingService = financeOperationalPostingService;
+        this.posSalePostingService = posSalePostingService;
     }
 
     @Transactional
     public int createOrder(CreateOrderRequest request, int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         Order order = toOrder(request);
+        if (posSalePostingService != null) {
+            return posSalePostingService.postSale(companyId, order).orderId();
+        }
         DbPosOrder.AddOrderResult result = dbPosOrder.addOrder(order, companyId);
 
         // Resolve shiftId: Prefer the result from addOrder, fallback to searching for

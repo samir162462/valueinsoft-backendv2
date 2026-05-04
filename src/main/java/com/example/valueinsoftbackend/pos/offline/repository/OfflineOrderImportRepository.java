@@ -191,6 +191,50 @@ public class OfflineOrderImportRepository {
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
+    public Optional<OfflineOrderImportModel> claimNextValidatedForPosting(Long companyId, Long branchId, Long syncBatchId) {
+        String table = TenantSqlIdentifiers.posOfflineOrderImportTable(companyId);
+        String sql = """
+                UPDATE %s
+                SET status = 'POSTING',
+                    posting_started_at = NOW(),
+                    posting_error_code = NULL,
+                    posting_error_message = NULL,
+                    updated_at = NOW()
+                WHERE id = (
+                    SELECT id
+                    FROM %s
+                    WHERE company_id = ?
+                      AND branch_id = ?
+                      AND sync_batch_id = ?
+                      AND status = 'VALIDATED'
+                    ORDER BY id ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                )
+                RETURNING *
+                """.formatted(table, table);
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, companyId, branchId, syncBatchId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public Optional<OfflineOrderImportModel> claimImportForPosting(Long companyId, Long branchId, Long id) {
+        String sql = """
+                UPDATE %s
+                SET status = 'POSTING',
+                    posting_started_at = NOW(),
+                    posting_error_code = NULL,
+                    posting_error_message = NULL,
+                    updated_at = NOW()
+                WHERE id = ?
+                  AND company_id = ?
+                  AND branch_id = ?
+                  AND status = 'VALIDATED'
+                RETURNING *
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        List<OfflineOrderImportModel> results = jdbcTemplate.query(sql, ROW_MAPPER, id, companyId, branchId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
     // -------------------------------------------------------
     // Status Updates
     // -------------------------------------------------------
@@ -265,6 +309,37 @@ public class OfflineOrderImportRepository {
         jdbcTemplate.update(sql, errorCode, errorMessage, id, companyId, branchId);
     }
 
+    public void markPostingSynced(Long companyId, Long branchId, Long id, Long postedOrderId) {
+        String sql = """
+                UPDATE %s
+                SET status = 'SYNCED',
+                    official_order_id = ?,
+                    posted_order_id = ?,
+                    posting_completed_at = NOW(),
+                    posting_error_code = NULL,
+                    posting_error_message = NULL,
+                    processed_at = NOW(),
+                    updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ? AND status = 'POSTING'
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, postedOrderId, postedOrderId, id, companyId, branchId);
+    }
+
+    public void markPostingFailed(Long companyId, Long branchId, Long id, String errorCode, String errorMessage) {
+        String sql = """
+                UPDATE %s
+                SET status = 'POSTING_FAILED',
+                    posting_completed_at = NOW(),
+                    posting_error_code = ?,
+                    posting_error_message = ?,
+                    error_code = ?,
+                    error_message = ?,
+                    updated_at = NOW()
+                WHERE id = ? AND company_id = ? AND branch_id = ?
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        jdbcTemplate.update(sql, errorCode, errorMessage, errorCode, errorMessage, id, companyId, branchId);
+    }
+
     public void markFailed(Long companyId, Long branchId, Long id, String errorCode, String errorMessage) {
         String sql = """
                 UPDATE %s
@@ -290,5 +365,60 @@ public class OfflineOrderImportRepository {
                   AND status IN ('FAILED', 'NEEDS_REVIEW')
                 """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
         return jdbcTemplate.update(sql, id, companyId, branchId);
+    }
+
+    public int markStuckProcessingFailed(Long companyId, Long branchId, Long syncBatchId, int thresholdMinutes) {
+        String sql = """
+                UPDATE %s
+                SET status = 'FAILED',
+                    error_code = 'OFFLINE_PROCESSING_STUCK',
+                    error_message = 'Processing exceeded the configured stuck-state threshold',
+                    processed_at = NOW(),
+                    updated_at = NOW()
+                WHERE company_id = ?
+                  AND branch_id = ?
+                  AND sync_batch_id = ?
+                  AND status = 'PROCESSING'
+                  AND processing_started_at IS NOT NULL
+                  AND processing_started_at < NOW() - (? * INTERVAL '1 minute')
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        return jdbcTemplate.update(sql, companyId, branchId, syncBatchId, thresholdMinutes);
+    }
+
+    public int markStuckValidatingFailed(Long companyId, Long branchId, Long syncBatchId, int thresholdMinutes) {
+        String sql = """
+                UPDATE %s
+                SET status = 'VALIDATION_FAILED',
+                    error_code = 'OFFLINE_VALIDATION_STUCK',
+                    error_message = 'Validation exceeded the configured stuck-state threshold',
+                    processed_at = NOW(),
+                    updated_at = NOW()
+                WHERE company_id = ?
+                  AND branch_id = ?
+                  AND sync_batch_id = ?
+                  AND status = 'VALIDATING'
+                  AND updated_at < NOW() - (? * INTERVAL '1 minute')
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        return jdbcTemplate.update(sql, companyId, branchId, syncBatchId, thresholdMinutes);
+    }
+
+    public int markStuckPostingNeedsReview(Long companyId, Long branchId, Long syncBatchId, int thresholdMinutes) {
+        String sql = """
+                UPDATE %s
+                SET status = 'NEEDS_REVIEW',
+                    posting_error_code = 'OFFLINE_POSTING_STUCK_REVIEW_REQUIRED',
+                    posting_error_message = 'Posting exceeded the configured stuck-state threshold; manual review is required before retry',
+                    error_code = 'OFFLINE_POSTING_STUCK_REVIEW_REQUIRED',
+                    error_message = 'Posting exceeded the configured stuck-state threshold; manual review is required before retry',
+                    posting_completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE company_id = ?
+                  AND branch_id = ?
+                  AND sync_batch_id = ?
+                  AND status = 'POSTING'
+                  AND posting_started_at IS NOT NULL
+                  AND posting_started_at < NOW() - (? * INTERVAL '1 minute')
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+        return jdbcTemplate.update(sql, companyId, branchId, syncBatchId, thresholdMinutes);
     }
 }

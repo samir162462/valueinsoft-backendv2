@@ -20,15 +20,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Service responsible for validating offline order imports.
+ * It performs various checks including tenant access, device validity, cashier ownership,
+ * idempotency, and detailed payload verification (totals, prices, quantities, products).
+ */
 @Service
 public class OfflineOrderImportValidationService {
 
+    /**
+     * Tolerance used for comparing BigDecimal amounts (e.g., to handle minor rounding differences).
+     */
     private static final BigDecimal AMOUNT_TOLERANCE = new BigDecimal("0.01");
 
     private final OfflineOrderValidationRepository validationRepo;
     private final PosDeviceRepository deviceRepo;
     private final PosIdempotencyService idempotencyService;
 
+    /**
+     * Constructs a new OfflineOrderImportValidationService with required dependencies.
+     *
+     * @param validationRepo     the repository for validation-related database queries
+     * @param deviceRepo         the repository for POS device management
+     * @param idempotencyService the service for handling request idempotency
+     */
     public OfflineOrderImportValidationService(OfflineOrderValidationRepository validationRepo,
                                                PosDeviceRepository deviceRepo,
                                                PosIdempotencyService idempotencyService) {
@@ -37,11 +52,18 @@ public class OfflineOrderImportValidationService {
         this.idempotencyService = idempotencyService;
     }
 
+    /**
+     * Validates an offline order import record.
+     *
+     * @param importRecord the import record to validate
+     * @return a list of validation errors, if any
+     */
     public List<ValidationError> validate(OfflineOrderImportModel importRecord) {
         List<ValidationError> errors = new ArrayList<>();
         Long companyId = importRecord.companyId();
         Long branchId = importRecord.branchId();
 
+        // 1. Basic tenant and ownership checks
         if (!validationRepo.branchBelongsToCompany(companyId, branchId)) {
             errors.add(error("INVALID_TENANT_ACCESS", "Branch does not belong to company", "branchId"));
         }
@@ -52,6 +74,7 @@ public class OfflineOrderImportValidationService {
             errors.add(error("OFFLINE_CASHIER_NOT_FOUND", "Cashier does not belong to branch", "cashierId"));
         }
 
+        // 2. Idempotency check
         try {
             idempotencyService.requireMatchingRecord(
                     companyId,
@@ -63,6 +86,7 @@ public class OfflineOrderImportValidationService {
             errors.add(error(ex.getErrorCode(), ex.getMessage(), "idempotencyKey"));
         }
 
+        // 3. Payload structure and content validation
         JsonObject order = parsePayload(importRecord.payloadJson(), errors);
         if (order == null) {
             return errors;
@@ -77,6 +101,7 @@ public class OfflineOrderImportValidationService {
             return errors;
         }
 
+        // 4. Product resolution and line-level validation
         ProductLookups products = loadProducts(companyId, branchId, items);
         BigDecimal lineSubtotal = BigDecimal.ZERO;
         BigDecimal lineDiscount = BigDecimal.ZERO;
@@ -132,11 +157,23 @@ public class OfflineOrderImportValidationService {
             }
         }
 
+        // 5. Header-level total consistency
         validateOrderTotals(order, lineSubtotal, lineDiscount, lineTax, linePayable, errors);
+        
+        // 6. Payment consistency
         validatePayments(order, linePayable, errors);
+        
         return errors;
     }
 
+    /**
+     * Loads product details from the database for all products referenced in the order items.
+     *
+     * @param companyId the company ID
+     * @param branchId  the branch ID
+     * @param items     the list of order items
+     * @return a lookup object containing product snapshots by ID and barcode
+     */
     private ProductLookups loadProducts(Long companyId, Long branchId, JsonArray items) {
         Set<Long> productIds = new HashSet<>();
         Set<String> barcodes = new HashSet<>();
@@ -167,6 +204,13 @@ public class OfflineOrderImportValidationService {
         return new ProductLookups(byId, byBarcode);
     }
 
+    /**
+     * Resolves a product for an item using either productId or barcode.
+     *
+     * @param item     the order item
+     * @param products the loaded product lookups
+     * @return the resolved product snapshot, or null if not found
+     */
     private OfflineValidationProductSnapshot resolveProduct(JsonObject item, ProductLookups products) {
         Long productId = longValue(item, "productId");
         if (productId != null && products.byId().containsKey(productId)) {
@@ -179,6 +223,16 @@ public class OfflineOrderImportValidationService {
         return null;
     }
 
+    /**
+     * Validates that the submitted header totals match the sum of line items.
+     *
+     * @param order    the order payload
+     * @param subtotal the calculated subtotal from lines
+     * @param discount the calculated discount from lines
+     * @param tax      the calculated tax from lines
+     * @param payable  the calculated payable amount from lines
+     * @param errors   the list to add errors to
+     */
     private void validateOrderTotals(JsonObject order, BigDecimal subtotal, BigDecimal discount,
                                      BigDecimal tax, BigDecimal payable, List<ValidationError> errors) {
         BigDecimal submittedSubtotal = decimal(order, "subtotalAmount");
@@ -199,6 +253,13 @@ public class OfflineOrderImportValidationService {
         }
     }
 
+    /**
+     * Validates that the sum of payments matches the payable amount of the order.
+     *
+     * @param order   the order payload
+     * @param payable the expected total payable amount
+     * @param errors  the list to add errors to
+     */
     private void validatePayments(JsonObject order, BigDecimal payable, List<ValidationError> errors) {
         JsonArray payments = array(order, "payments");
         if (payments == null || payments.isEmpty()) {
@@ -224,6 +285,13 @@ public class OfflineOrderImportValidationService {
         }
     }
 
+    /**
+     * Parses the raw JSON payload and handles parsing errors.
+     *
+     * @param payloadJson the raw JSON string
+     * @param errors      the list to add errors to
+     * @return the parsed JsonObject, or null if parsing fails
+     */
     private JsonObject parsePayload(String payloadJson, List<ValidationError> errors) {
         try {
             JsonElement element = JsonParser.parseString(payloadJson);
@@ -238,6 +306,14 @@ public class OfflineOrderImportValidationService {
         }
     }
 
+    /**
+     * Validates that a required string field exists and is not blank.
+     *
+     * @param object    the JSON object to check
+     * @param field     the field name
+     * @param errorCode the error code to use if missing
+     * @param errors    the list to add errors to
+     */
     private void validateRequiredString(JsonObject object, String field, String errorCode, List<ValidationError> errors) {
         String value = stringValue(object, field);
         if (value == null || value.isBlank()) {
@@ -245,10 +321,24 @@ public class OfflineOrderImportValidationService {
         }
     }
 
+    /**
+     * Compares two amounts for equality within a small tolerance.
+     *
+     * @param expected the expected amount
+     * @param actual   the actual amount
+     * @return true if the amounts are essentially equal
+     */
     private boolean sameAmount(BigDecimal expected, BigDecimal actual) {
         return expected.subtract(actual).abs().compareTo(AMOUNT_TOLERANCE) <= 0;
     }
 
+    /**
+     * Safely extracts a BigDecimal from a JSON object.
+     *
+     * @param object the JSON object
+     * @param field  the field name
+     * @return the BigDecimal value, or null if missing/invalid
+     */
     private BigDecimal decimal(JsonObject object, String field) {
         JsonElement value = object.get(field);
         if (value == null || value.isJsonNull()) {
@@ -261,10 +351,23 @@ public class OfflineOrderImportValidationService {
         }
     }
 
+    /**
+     * Ensures a BigDecimal is not null by returning zero if it is.
+     *
+     * @param value the value to check
+     * @return the value, or BigDecimal.ZERO if null
+     */
     private BigDecimal nonNull(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
     }
 
+    /**
+     * Safely extracts a Long from a JSON object.
+     *
+     * @param object the JSON object
+     * @param field  the field name
+     * @return the Long value, or null if missing/invalid
+     */
     private Long longValue(JsonObject object, String field) {
         JsonElement value = object.get(field);
         if (value == null || value.isJsonNull()) {
@@ -277,6 +380,13 @@ public class OfflineOrderImportValidationService {
         }
     }
 
+    /**
+     * Safely extracts a String from a JSON object.
+     *
+     * @param object the JSON object
+     * @param field  the field name
+     * @return the String value, or null if missing/invalid
+     */
     private String stringValue(JsonObject object, String field) {
         JsonElement value = object.get(field);
         if (value == null || value.isJsonNull()) {
@@ -289,23 +399,50 @@ public class OfflineOrderImportValidationService {
         }
     }
 
+    /**
+     * Safely extracts a JsonArray from a JSON object.
+     *
+     * @param object the JSON object
+     * @param field  the field name
+     * @return the JsonArray, or null if missing/invalid
+     */
     private JsonArray array(JsonObject object, String field) {
         JsonElement value = object.get(field);
         return value != null && value.isJsonArray() ? value.getAsJsonArray() : null;
     }
 
+    /**
+     * Safely extracts a JsonObject from a JsonElement.
+     *
+     * @param element the JSON element
+     * @return the JsonObject, or null if missing/invalid
+     */
     private JsonObject object(JsonElement element) {
         return element != null && element.isJsonObject() ? element.getAsJsonObject() : null;
     }
 
+    /**
+     * Helper to create a new ValidationError.
+     *
+     * @param code      the error code
+     * @param message   the error message
+     * @param fieldPath the path to the field causing the error
+     * @return a new ValidationError object
+     */
     private ValidationError error(String code, String message, String fieldPath) {
         return new ValidationError(code, message, fieldPath);
     }
 
+    /**
+     * Internal record for batch-loading products for validation.
+     */
     private record ProductLookups(Map<Long, OfflineValidationProductSnapshot> byId,
                                   Map<String, OfflineValidationProductSnapshot> byBarcode) {
     }
 
+    /**
+     * Represents a single validation error found during order import.
+     */
     public record ValidationError(String code, String message, String fieldPath) {
     }
 }

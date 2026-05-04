@@ -24,6 +24,11 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.List;
 
+/**
+ * Facade service for orchestrating the POS offline synchronization lifecycle.
+ * It manages batch reception, per-import processing, validation, and final posting
+ * while ensuring data integrity through idempotency and auditing.
+ */
 @Service
 @Slf4j
 public class PosOfflineSyncService {
@@ -37,9 +42,25 @@ public class PosOfflineSyncService {
         private final AuditLogService auditLogService;
         private final OfflineSingleOrderProcessor singleOrderProcessor;
         private final OfflineOrderValidationProcessor validationProcessor;
+        private final OfflineOrderPostingProcessor postingProcessor;
         private final OfflinePosProperties props;
         private final Gson gson = new Gson();
 
+        /**
+         * Constructs a new PosOfflineSyncService with all required internal processors and services.
+         *
+         * @param batchRepo           the repository for sync batches
+         * @param importRepo          the repository for individual order imports
+         * @param deviceService       the service for hardware eligibility checks
+         * @param validationService   the service for batch-level validation
+         * @param idempotencyService  the service for duplicate prevention
+         * @param syncErrorService    the service for error logging
+         * @param auditLogService     the service for lifecycle auditing
+         * @param singleOrderProcessor the processor for the initial skeleton phase
+         * @param validationProcessor the processor for the business validation phase
+         * @param postingProcessor    the processor for the final database posting phase
+         * @param props               the configuration properties for offline sync
+         */
         public PosOfflineSyncService(PosSyncBatchRepository batchRepo,
                         OfflineOrderImportRepository importRepo,
                         PosDeviceService deviceService,
@@ -49,6 +70,7 @@ public class PosOfflineSyncService {
                         AuditLogService auditLogService,
                         OfflineSingleOrderProcessor singleOrderProcessor,
                         OfflineOrderValidationProcessor validationProcessor,
+                        OfflineOrderPostingProcessor postingProcessor,
                         OfflinePosProperties props) {
                 this.batchRepo = batchRepo;
                 this.importRepo = importRepo;
@@ -59,6 +81,7 @@ public class PosOfflineSyncService {
                 this.auditLogService = auditLogService;
                 this.singleOrderProcessor = singleOrderProcessor;
                 this.validationProcessor = validationProcessor;
+                this.postingProcessor = postingProcessor;
                 this.props = props;
         }
 
@@ -66,6 +89,11 @@ public class PosOfflineSyncService {
          * Receives an offline sync upload, validates basic fields,
          * stores each order as a raw import record, and returns a
          * RECEIVED status. Processing is handled through separate per-import boundaries.
+         *
+         * @param request       the upload request payload
+         * @param principalName the name of the authenticated user
+         * @return the result of the batch upload reception
+         * @throws OfflineSyncException if sync is disabled, the batch is too large, or hardware is ineligible
          */
         public OfflineSyncUploadResponse uploadOfflineSync(OfflineSyncUploadRequest request, String principalName) {
                 // 1. Global feature gate
@@ -125,57 +153,172 @@ public class PosOfflineSyncService {
         }
 
         /**
-         * Internal Phase 6 processing skeleton. This deliberately does not run
-         * invoice, payment, inventory, or finance posting.
+         * Executes the initial "skeleton" processing for all pending imports in a batch.
+         * This transitions records from PENDING to READY_FOR_VALIDATION.
+         *
+         * @param companyId the company ID
+         * @param branchId  the branch ID
+         * @param batchId   the batch ID
+         * @return the number of records successfully processed
          */
         public int processPendingImports(Long companyId, Long branchId, Long batchId) {
                 batchRepo.findById(companyId, branchId, batchId)
                                 .orElseThrow(() -> new OfflineSyncException(
-                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
                 int processed = 0;
                 while (singleOrderProcessor.processNextPendingImport(companyId, branchId, batchId)) {
                         processed++;
                 }
+                batchRepo.recalculateSummary(companyId, branchId, batchId);
                 return processed;
         }
 
         /**
-         * Internal Phase 6 single-import boundary. The processor claims only
-         * PENDING/PENDING_RETRY imports and skips all other statuses.
+         * Processes a specific import record through the initial skeleton phase.
+         *
+         * @param companyId            the company ID
+         * @param branchId             the branch ID
+         * @param offlineOrderImportId the ID of the import record
+         * @return true if the record was processed
          */
         public boolean processSingleImport(Long companyId, Long branchId, Long offlineOrderImportId) {
-                return singleOrderProcessor.processSingleImport(companyId, branchId, offlineOrderImportId);
+                boolean processed = singleOrderProcessor.processSingleImport(companyId, branchId, offlineOrderImportId);
+                importRepo.findByImportId(companyId, branchId, offlineOrderImportId)
+                                .ifPresent(importRecord -> batchRepo.recalculateSummary(
+                                                companyId, branchId, importRecord.syncBatchId()));
+                return processed;
         }
 
         /**
-         * Internal Phase 7 validation loop. Validates one import per transaction
-         * through OfflineOrderValidationProcessor and does not post final business rows.
+         * Executes the business validation phase for all eligible imports in a batch.
+         * This transitions records from READY_FOR_VALIDATION to VALIDATED or FAILED.
+         *
+         * @param companyId the company ID
+         * @param branchId  the branch ID
+         * @param batchId   the batch ID
+         * @return the number of records successfully validated
          */
         public int validateReadyImports(Long companyId, Long branchId, Long batchId) {
                 batchRepo.findById(companyId, branchId, batchId)
                                 .orElseThrow(() -> new OfflineSyncException(
-                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
                 int validated = 0;
                 while (validationProcessor.validateNextReadyImport(companyId, branchId, batchId)) {
                         validated++;
                 }
+                batchRepo.recalculateSummary(companyId, branchId, batchId);
                 return validated;
         }
 
         /**
-         * Internal Phase 7 single-import validation boundary.
+         * Validates a specific import record through the business validation phase.
+         *
+         * @param companyId            the company ID
+         * @param branchId             the branch ID
+         * @param offlineOrderImportId the ID of the import record
+         * @return true if the record was validated
          */
         public boolean validateSingleImport(Long companyId, Long branchId, Long offlineOrderImportId) {
-                return validationProcessor.validateSingleImport(companyId, branchId, offlineOrderImportId);
+                boolean validated = validationProcessor.validateSingleImport(companyId, branchId, offlineOrderImportId);
+                importRepo.findByImportId(companyId, branchId, offlineOrderImportId)
+                                .ifPresent(importRecord -> batchRepo.recalculateSummary(
+                                                companyId, branchId, importRecord.syncBatchId()));
+                return validated;
         }
 
         /**
-         * Query current status of a sync batch.
+         * Executes the final posting phase for all validated imports in a batch.
+         * This transitions records from VALIDATED to SYNCED and creates the official POS orders.
+         *
+         * @param companyId the company ID
+         * @param branchId  the branch ID
+         * @param batchId   the batch ID
+         * @return the number of records successfully posted
+         */
+        public int postValidatedImports(Long companyId, Long branchId, Long batchId) {
+                batchRepo.findById(companyId, branchId, batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                int posted = 0;
+                while (postingProcessor.postNextValidatedImport(companyId, branchId, batchId)) {
+                        posted++;
+                }
+                batchRepo.recalculateSummary(companyId, branchId, batchId);
+                return posted;
+        }
+
+        /**
+         * Posts a specific validated import record to create an official POS order.
+         *
+         * @param companyId            the company ID
+         * @param branchId             the branch ID
+         * @param offlineOrderImportId the ID of the import record
+         * @return true if the record was posted
+         */
+        public boolean postSingleImport(Long companyId, Long branchId, Long offlineOrderImportId) {
+                boolean posted = postingProcessor.postSingleImport(companyId, branchId, offlineOrderImportId);
+                importRepo.findByImportId(companyId, branchId, offlineOrderImportId)
+                                .ifPresent(importRecord -> batchRepo.recalculateSummary(
+                                                companyId, branchId, importRecord.syncBatchId()));
+                return posted;
+        }
+
+        /**
+         * Recovers imports that have been stuck in an intermediate status for too long.
+         * Records in PROCESSING or VALIDATING are marked as FAILED, while those in POSTING
+         * are moved to NEEDS_REVIEW for manual intervention.
+         *
+         * @param companyId        the company ID
+         * @param branchId         the branch ID
+         * @param batchId          the batch ID
+         * @param thresholdMinutes the number of minutes to consider a record as stuck
+         * @return the total number of recovered records
+         */
+        public int recoverStuckImports(Long companyId, Long branchId, Long batchId, int thresholdMinutes) {
+                batchRepo.findById(companyId, branchId, batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                int processing = importRepo.markStuckProcessingFailed(companyId, branchId, batchId, thresholdMinutes);
+                int validating = importRepo.markStuckValidatingFailed(companyId, branchId, batchId, thresholdMinutes);
+                int posting = importRepo.markStuckPostingNeedsReview(companyId, branchId, batchId, thresholdMinutes);
+                batchRepo.recalculateSummary(companyId, branchId, batchId);
+                auditLogService.logSyncEvent(
+                                companyId, branchId, batchId, null, null, null,
+                                "OFFLINE_STUCK_IMPORT_RECOVERY",
+                                "Recovered stuck imports: processing=" + processing
+                                                + ", validating=" + validating
+                                                + ", postingNeedsReview=" + posting,
+                                null);
+                return processing + validating + posting;
+        }
+
+        /**
+         * Forces a recalculation of the batch summary totals (synced, failed, etc.).
+         *
+         * @param companyId the company ID
+         * @param branchId  the branch ID
+         * @param batchId   the batch ID
+         */
+        public void recalculateBatchSummary(Long companyId, Long branchId, Long batchId) {
+                batchRepo.findById(companyId, branchId, batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                batchRepo.recalculateSummary(companyId, branchId, batchId);
+        }
+
+        /**
+         * Retrieves the current status and summary statistics of a sync batch.
+         *
+         * @param companyId     the company ID
+         * @param branchId      the branch ID
+         * @param batchId       the batch ID
+         * @param principalName the name of the requesting user
+         * @return the sync status response
          */
         public SyncStatusResponse getSyncStatus(Long companyId, Long branchId, Long batchId, String principalName) {
                 PosSyncBatchModel batch = batchRepo.findById(companyId, branchId, batchId)
                                 .orElseThrow(() -> new OfflineSyncException(
-                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
                 auditLogService.logSyncEvent(
                                 companyId, branchId,
                                 batchId, null, batch.deviceId(), batch.cashierId(),
@@ -192,13 +335,21 @@ public class PosOfflineSyncService {
         }
 
         /**
-         * Get errors for all orders in a sync batch.
+         * Retrieves a paginated list of errors for a sync batch.
+         *
+         * @param companyId     the company ID
+         * @param branchId      the branch ID
+         * @param batchId       the batch ID
+         * @param cursor        the pagination cursor (error ID)
+         * @param size          the page size
+         * @param principalName the name of the requesting user
+         * @return the paginated error list response
          */
         public SyncErrorListResponse getSyncErrors(Long companyId, Long branchId, Long batchId,
                         String cursor, Integer size, String principalName) {
                 PosSyncBatchModel batch = batchRepo.findById(companyId, branchId, batchId)
                                 .orElseThrow(() -> new OfflineSyncException(
-                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
                 int pageSize = normalizePageSize(size);
                 long afterErrorId = parseCursor(cursor);
                 auditLogService.logSyncEvent(
@@ -212,14 +363,21 @@ public class PosOfflineSyncService {
         }
 
         /**
-         * Retry processing a single failed offline order import.
+         * Requests a retry for a failed offline order import.
+         * This verifies idempotency and marks the record as PENDING_RETRY.
+         *
+         * @param companyId            the company ID
+         * @param branchId             the branch ID
+         * @param offlineOrderImportId the ID of the import record
+         * @param principalName        the name of the requesting user
+         * @return the result of the retry request
          */
         public OfflineRetryResultResponse retryOfflineOrder(Long companyId, Long branchId, Long offlineOrderImportId,
                         String principalName) {
                 OfflineOrderImportModel importRecord = importRepo.findByImportId(companyId, branchId, offlineOrderImportId)
                                 .orElseThrow(() -> new OfflineSyncException(
-                                                "IMPORT_NOT_FOUND",
-                                                "Offline order import not found: " + offlineOrderImportId));
+                                                 "IMPORT_NOT_FOUND",
+                                                 "Offline order import not found: " + offlineOrderImportId));
 
                 log.info("Retry requested for offlineOrderImportId={}, current status={}",
                                 offlineOrderImportId, importRecord.status());
@@ -274,6 +432,7 @@ public class PosOfflineSyncService {
                                 "OFFLINE_ORDER_RETRY_ACCEPTED",
                                 "Retry accepted by " + principalName + "; import marked PENDING_RETRY",
                                 null);
+                batchRepo.recalculateSummary(companyId, branchId, importRecord.syncBatchId());
 
                 return new OfflineRetryResultResponse(
                                 importRecord.id(),
@@ -287,10 +446,15 @@ public class PosOfflineSyncService {
                                 "Retry accepted. Import marked PENDING_RETRY; posting is not executed yet.");
         }
 
-        // -------------------------------------------------------
-        // Private helpers
-        // -------------------------------------------------------
-
+        /**
+         * Stores an individual offline order as an import record.
+         * Verifies idempotency before insertion.
+         *
+         * @param batchId the internal batch ID
+         * @param batch   the original upload request
+         * @param order   the specific order to store
+         * @return the result of storing the order
+         */
         private OfflineOrderSyncResult storeOfflineOrder(Long batchId,
                         OfflineSyncUploadRequest batch,
                         OfflineOrderRequest order) {
@@ -352,6 +516,13 @@ public class PosOfflineSyncService {
                 }
         }
 
+        /**
+         * Resolves the result for an idempotent replay (duplicate request).
+         *
+         * @param batch the original upload request
+         * @param order the specific order request
+         * @return the result response based on the existing record's state
+         */
         private OfflineOrderSyncResult existingIdempotentResult(OfflineSyncUploadRequest batch, OfflineOrderRequest order) {
                 return importRepo.findByIdempotencyKey(
                                 batch.companyId(), batch.branchId(), batch.deviceId(), order.idempotencyKey())
@@ -375,6 +546,12 @@ public class PosOfflineSyncService {
                                                 List.of("IDEMPOTENT_CLAIM_IN_PROGRESS")));
         }
 
+        /**
+         * Generates a SHA-256 hash of a string.
+         *
+         * @param input the string to hash
+         * @return the hex-encoded hash
+         */
         private String sha256(String input) {
                 try {
                         MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -386,11 +563,24 @@ public class PosOfflineSyncService {
                 }
         }
 
+        /**
+         * Normalizes the page size for error retrieval based on configuration limits.
+         *
+         * @param size the requested size
+         * @return the normalized size
+         */
         private int normalizePageSize(Integer size) {
                 int requested = size != null ? size : props.getMaxBootstrapPageSize();
                 return Math.max(1, Math.min(requested, props.getMaxBootstrapPageSize()));
         }
 
+        /**
+         * Parses a pagination cursor string into a long.
+         *
+         * @param cursor the cursor string
+         * @return the parsed long value
+         * @throws OfflineSyncException if the cursor is invalid
+         */
         private long parseCursor(String cursor) {
                 if (cursor == null || cursor.isBlank()) {
                         return 0L;

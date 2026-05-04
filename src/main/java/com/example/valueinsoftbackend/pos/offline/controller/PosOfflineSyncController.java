@@ -30,6 +30,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+/**
+ * Controller for handling POS offline synchronization operations.
+ * This includes device registration, heartbeats, bootstrapping data, and managing offline sync uploads and status.
+ */
 @RestController
 @Validated
 @RequestMapping("/api/pos")
@@ -41,6 +45,14 @@ public class PosOfflineSyncController {
     private final PosOfflineSyncService syncService;
     private final AuthorizationService authorizationService;
 
+    /**
+     * Constructs a new PosOfflineSyncController with the required services.
+     *
+     * @param deviceService        the service for managing POS devices
+     * @param bootstrapDataService the service for retrieving bootstrap data
+     * @param syncService          the service for handling offline synchronization
+     * @param authorizationService the service for handling authorization checks
+     */
     public PosOfflineSyncController(PosDeviceService deviceService,
                                     BootstrapDataService bootstrapDataService,
                                     PosOfflineSyncService syncService,
@@ -51,6 +63,13 @@ public class PosOfflineSyncController {
         this.authorizationService = authorizationService;
     }
 
+    /**
+     * Registers a new POS device.
+     *
+     * @param request   the device registration request containing company, branch, and device details
+     * @param principal the authenticated principal
+     * @return a response entity containing the registration result
+     */
     @PostMapping("/device/register")
     public ResponseEntity<RegisterPosDeviceResponse> registerDevice(
             @Valid @RequestBody RegisterPosDeviceRequest request,
@@ -61,6 +80,13 @@ public class PosOfflineSyncController {
         return ResponseEntity.status(201).body(deviceService.registerDevice(request, principalName));
     }
 
+    /**
+     * Processes a heartbeat from a POS device to update its status.
+     *
+     * @param request   the heartbeat request containing company, branch, and device info
+     * @param principal the authenticated principal
+     * @return a response entity containing the heartbeat response
+     */
     @PostMapping("/device/heartbeat")
     public ResponseEntity<DeviceHeartbeatResponse> heartbeat(
             @Valid @RequestBody DeviceHeartbeatRequest request,
@@ -69,6 +95,18 @@ public class PosOfflineSyncController {
         return ResponseEntity.ok(deviceService.heartbeat(request, principalName));
     }
 
+    /**
+     * Retrieves bootstrap data for a POS device.
+     *
+     * @param companyId    the company ID
+     * @param branchId     the branch ID
+     * @param dataType     the type of data to retrieve (e.g., products, customers)
+     * @param versionNo    optional version number for incremental updates
+     * @param cursor       optional cursor for pagination
+     * @param size         the number of records to retrieve (default 500)
+     * @param principal    the authenticated principal
+     * @return a response entity containing the requested bootstrap data
+     */
     @GetMapping("/bootstrap-data")
     public ResponseEntity<BootstrapDataResponse> getBootstrapData(
             @RequestParam @Positive Long companyId,
@@ -83,6 +121,13 @@ public class PosOfflineSyncController {
                 companyId, branchId, dataType, versionNo, cursor, size, principalName));
     }
 
+    /**
+     * Uploads offline synchronization data (e.g., offline orders).
+     *
+     * @param request   the sync upload request containing orders and metadata
+     * @param principal the authenticated principal
+     * @return a response entity indicating the upload was accepted
+     */
     @PostMapping("/offline-sync/upload")
     public ResponseEntity<OfflineSyncUploadResponse> uploadOfflineSync(
             @Valid @RequestBody OfflineSyncUploadRequest request,
@@ -94,6 +139,15 @@ public class PosOfflineSyncController {
         return ResponseEntity.status(202).body(syncService.uploadOfflineSync(request, principalName));
     }
 
+    /**
+     * Retrieves the status of a specific synchronization batch.
+     *
+     * @param companyId the company ID
+     * @param branchId  the branch ID
+     * @param batchId   the synchronization batch ID
+     * @param principal the authenticated principal
+     * @return a response entity containing the sync status
+     */
     @GetMapping("/offline-sync/status/{batchId}")
     public ResponseEntity<SyncStatusResponse> getSyncStatus(
             @RequestParam @Positive Long companyId,
@@ -104,6 +158,17 @@ public class PosOfflineSyncController {
         return ResponseEntity.ok(syncService.getSyncStatus(companyId, branchId, batchId, principalName));
     }
 
+    /**
+     * Retrieves errors associated with a specific synchronization batch.
+     *
+     * @param companyId the company ID
+     * @param branchId  the branch ID
+     * @param batchId   the synchronization batch ID
+     * @param cursor    optional cursor for pagination
+     * @param size      the number of error records to retrieve (default 100)
+     * @param principal the authenticated principal
+     * @return a response entity containing the list of sync errors
+     */
     @GetMapping("/offline-sync/errors/{batchId}")
     public ResponseEntity<SyncErrorListResponse> getSyncErrors(
             @RequestParam @Positive Long companyId,
@@ -116,6 +181,15 @@ public class PosOfflineSyncController {
         return ResponseEntity.ok(syncService.getSyncErrors(companyId, branchId, batchId, cursor, size, principalName));
     }
 
+    /**
+     * Retries the processing of a specific offline order that failed during synchronization.
+     *
+     * @param companyId            the company ID
+     * @param branchId             the branch ID
+     * @param offlineOrderImportId the ID of the offline order import record to retry
+     * @param principal            the authenticated principal
+     * @return a response entity containing the retry result
+     */
     @PostMapping("/offline-sync/retry/{offlineOrderImportId}")
     public ResponseEntity<OfflineRetryResultResponse> retryOfflineOrder(
             @RequestParam @Positive Long companyId,
@@ -126,6 +200,16 @@ public class PosOfflineSyncController {
         return ResponseEntity.ok(syncService.retryOfflineOrder(companyId, branchId, offlineOrderImportId, principalName));
     }
 
+    /**
+     * Authorizes the current request by checking the principal and required capability.
+     *
+     * @param principal  the authenticated principal
+     * @param companyId  the company ID
+     * @param branchId   the branch ID
+     * @param capability the required capability for the operation
+     * @return the principal name if authorized
+     * @throws ApiException if authentication fails or authorization is denied
+     */
     private String authorize(Principal principal, Long companyId, Long branchId, String capability) {
         String principalName = principalName(principal);
         authorizationService.assertAuthenticatedCapability(
@@ -136,6 +220,13 @@ public class PosOfflineSyncController {
         return principalName;
     }
 
+    /**
+     * Extracts the principal name and validates authentication.
+     *
+     * @param principal the principal to check
+     * @return the principal name
+     * @throws ApiException if the principal is null or has no name
+     */
     private String principalName(Principal principal) {
         if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Authentication is required");
@@ -143,6 +234,14 @@ public class PosOfflineSyncController {
         return principal.getName();
     }
 
+    /**
+     * Safely converts a Long value to an Integer for compatibility with internal services.
+     *
+     * @param value     the long value to convert
+     * @param fieldName the name of the field (used for error reporting)
+     * @return the integer value
+     * @throws ApiException if the value is out of range for an Integer
+     */
     private Integer toInteger(Long value, String fieldName) {
         try {
             return Math.toIntExact(value);

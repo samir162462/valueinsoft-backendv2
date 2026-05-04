@@ -18,6 +18,7 @@ public class OfflinePosProperties {
     private int maxOfflineHoursDefault = 24;
     private boolean allowOfflineSync = true;
     private boolean runTenantMigrationOnStartup = false;
+    private Worker worker = new Worker();
 
     // -------------------------------------------------------
     // Getters / Setters (required for @ConfigurationProperties binding)
@@ -69,5 +70,79 @@ public class OfflinePosProperties {
 
     public void setRunTenantMigrationOnStartup(boolean runTenantMigrationOnStartup) {
         this.runTenantMigrationOnStartup = runTenantMigrationOnStartup;
+    }
+
+    public Worker getWorker() {
+        return worker;
+    }
+
+    public void setWorker(Worker worker) {
+        this.worker = worker;
+    }
+
+    public static class Worker {
+        private boolean enabled = false;
+        private boolean processingEnabled = false;
+        private boolean validationEnabled = false;
+        private boolean postingEnabled = false;
+        private int batchSize = 25;
+        private long fixedDelayMs = 30000;
+        private int stuckThresholdMinutes = 15;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public boolean isProcessingEnabled() {
+            return processingEnabled;
+        }
+
+        public void setProcessingEnabled(boolean processingEnabled) {
+            this.processingEnabled = processingEnabled;
+        }
+
+        public boolean isValidationEnabled() {
+            return validationEnabled;
+        }
+
+        public void setValidationEnabled(boolean validationEnabled) {
+            this.validationEnabled = validationEnabled;
+        }
+
+        public boolean isPostingEnabled() {
+            return postingEnabled;
+        }
+
+        public void setPostingEnabled(boolean postingEnabled) {
+            this.postingEnabled = postingEnabled;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        public long getFixedDelayMs() {
+            return fixedDelayMs;
+        }
+
+        public void setFixedDelayMs(long fixedDelayMs) {
+            this.fixedDelayMs = fixedDelayMs;
+        }
+
+        public int getStuckThresholdMinutes() {
+            return stuckThresholdMinutes;
+        }
+
+        public void setStuckThresholdMinutes(int stuckThresholdMinutes) {
+            this.stuckThresholdMinutes = stuckThresholdMinutes;
+        }
     }
 }

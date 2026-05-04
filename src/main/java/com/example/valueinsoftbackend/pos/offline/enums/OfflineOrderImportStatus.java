@@ -8,6 +8,8 @@ public enum OfflineOrderImportStatus {
     VALIDATING,
     VALIDATED,
     VALIDATION_FAILED,
+    POSTING,
+    POSTING_FAILED,
     SYNCED,
     FAILED,
     DUPLICATE,
