@@ -2,7 +2,6 @@ package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
-import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
@@ -11,8 +10,12 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
+
+import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 
 @Service
 @Slf4j
@@ -23,8 +26,8 @@ public class PosSalePostingService {
     private final FinanceOperationalPostingService financeOperationalPostingService;
 
     public PosSalePostingService(DbPosOrder dbPosOrder,
-                                 DbPosShiftPeriod dbPosShiftPeriod,
-                                 FinanceOperationalPostingService financeOperationalPostingService) {
+            DbPosShiftPeriod dbPosShiftPeriod,
+            FinanceOperationalPostingService financeOperationalPostingService) {
         this.dbPosOrder = dbPosOrder;
         this.dbPosShiftPeriod = dbPosShiftPeriod;
         this.financeOperationalPostingService = financeOperationalPostingService;
@@ -37,8 +40,8 @@ public class PosSalePostingService {
     public DbPosOrder.AddOrderResult postSale(
             int companyId,
             Order order,
-            BiConsumer<DbPosOrder.AddOrderResult, Optional<FinancePostingRequestItem>> financeSuccessCallback,
-            BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> financeFailureCallback) {
+            BiConsumer<DbPosOrder.AddOrderResult, Optional<FinancePostingRequestItem>> onSuccess,
+            BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> onFailure) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         DbPosOrder.AddOrderResult result = dbPosOrder.addOrder(order, companyId);
 
@@ -60,7 +63,7 @@ public class PosSalePostingService {
                     null, "ORDER", String.valueOf(result.orderId()));
         }
 
-        enqueueFinancePosSaleAfterCommit(companyId, order, result, financeSuccessCallback, financeFailureCallback);
+        enqueueFinancePosSaleAfterCommit(companyId, order, result, onSuccess, onFailure);
         log.info("Saved order {} for company {} branch {} with {} items",
                 result.orderId(), companyId, order.getBranchId(), order.getOrderDetails().size());
         return result;
@@ -69,29 +72,33 @@ public class PosSalePostingService {
     private boolean isDirectSale(String type) {
         return "Dirict".equalsIgnoreCase(type)
                 || "Direct".equalsIgnoreCase(type)
-                || "ظ…ط¨ط§ط´ط±".equals(type);
+                || "مباشر".equals(type);
     }
 
     private void enqueueFinancePosSaleAfterCommit(
             int companyId,
             Order order,
             DbPosOrder.AddOrderResult result,
-            BiConsumer<DbPosOrder.AddOrderResult, Optional<FinancePostingRequestItem>> financeSuccessCallback,
-            BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> financeFailureCallback) {
+            BiConsumer<DbPosOrder.AddOrderResult, Optional<FinancePostingRequestItem>> onSuccess,
+            BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> onFailure) {
         if (order.getOrderTotal() <= 0) {
-            notifyFinanceSuccess(financeSuccessCallback, result, Optional.empty());
+            if (onSuccess != null) {
+                onSuccess.accept(result, Optional.empty());
+            }
             return;
         }
 
         Runnable enqueue = () -> {
             try {
-                FinancePostingRequestItem postingRequest = financeOperationalPostingService.enqueuePosSaleAndReturnRequest(
+                FinancePostingRequestItem request = financeOperationalPostingService.enqueuePosSaleAndReturnRequest(
                         companyId,
                         order,
                         result.orderId(),
                         result.orderTime(),
                         dbPosOrder.getOrderFinanceCostLines(result.orderId(), order.getBranchId(), companyId));
-                notifyFinanceSuccess(financeSuccessCallback, result, Optional.ofNullable(postingRequest));
+                if (onSuccess != null) {
+                    onSuccess.accept(result, Optional.ofNullable(request));
+                }
             } catch (RuntimeException exception) {
                 log.warn(
                         "POS order {} saved for company {} branch {}, but finance posting request was not enqueued: {}",
@@ -99,7 +106,9 @@ public class PosSalePostingService {
                         companyId,
                         order.getBranchId(),
                         exception.getMessage());
-                notifyFinanceFailure(financeFailureCallback, result, exception);
+                if (onFailure != null) {
+                    onFailure.accept(result, exception);
+                }
             }
         };
 
@@ -114,35 +123,5 @@ public class PosSalePostingService {
                 enqueue.run();
             }
         });
-    }
-
-    private void notifyFinanceSuccess(
-            BiConsumer<DbPosOrder.AddOrderResult, Optional<FinancePostingRequestItem>> callback,
-            DbPosOrder.AddOrderResult result,
-            Optional<FinancePostingRequestItem> postingRequest) {
-        if (callback == null) {
-            return;
-        }
-        try {
-            callback.accept(result, postingRequest);
-        } catch (RuntimeException callbackException) {
-            log.warn("Finance enqueue success callback failed for POS order {}: {}",
-                    result.orderId(), callbackException.getMessage());
-        }
-    }
-
-    private void notifyFinanceFailure(
-            BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> callback,
-            DbPosOrder.AddOrderResult result,
-            RuntimeException exception) {
-        if (callback == null) {
-            return;
-        }
-        try {
-            callback.accept(result, exception);
-        } catch (RuntimeException callbackException) {
-            log.warn("Finance enqueue failure callback failed for POS order {}: {}",
-                    result.orderId(), callbackException.getMessage());
-        }
     }
 }
