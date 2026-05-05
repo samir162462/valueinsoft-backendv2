@@ -313,6 +313,16 @@ public class PosOfflineSyncService {
                                                 "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
         }
 
+        public List<OfflineAdminImportListItem> getAdminImportList(Long companyId, Long branchId, Long batchId,
+                                                                   OfflineOrderImportStatus status,
+                                                                   String errorCode,
+                                                                   Instant cursorCreatedAt, Long cursorId,
+                                                                   int limit) {
+                getBatch(companyId, branchId, batchId);
+                return importRepo.findAdminImportList(companyId, branchId, batchId, status, errorCode, cursorCreatedAt, cursorId, limit);
+        }
+
+
         public OfflineImportStatusCounts getImportStatusCounts(Long companyId, Long branchId, Long batchId) {
                 getBatch(companyId, branchId, batchId);
                 return batchRepo.findImportStatusCounts(companyId, branchId, batchId);
@@ -344,6 +354,32 @@ public class PosOfflineSyncService {
                                 batch.failedOrders(), batch.duplicateOrders(),
                                 batch.needsReviewOrders(),
                                 batch.createdAt(), batch.syncCompletedAt());
+        }
+
+        /**
+         * Retrieves the individual order sync results for a specific batch.
+         * This is intended for cashier-side status polling.
+         *
+         * @param companyId     the company ID
+         * @param branchId      the branch ID
+         * @param batchId       the batch ID
+         * @param principalName the name of the requesting user
+         * @return the batch order results response
+         */
+        public OfflineBatchOrderResultsResponse getBatchOrderResults(Long companyId, Long branchId, Long batchId, String principalName) {
+                PosSyncBatchModel batch = batchRepo.findById(companyId, branchId, batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                "BATCH_NOT_FOUND", "Sync batch not found: " + batchId));
+
+                List<OfflineBatchOrderResultItem> orders = importRepo.findBatchOrderResults(companyId, branchId, batchId);
+
+                return new OfflineBatchOrderResultsResponse(
+                                batch.id(),
+                                companyId,
+                                branchId,
+                                batch.status(),
+                                orders
+                );
         }
 
         /**
@@ -494,13 +530,19 @@ public class PosOfflineSyncService {
                                 return existingIdempotentResult(batch, order);
                         }
 
+                        // Extract reference fields with fallbacks to ensure compatibility with old/minimal clients
+                        String localOrderId = order.localOrderId() != null ? order.localOrderId() : order.offlineOrderNo();
+                        String deviceCode = order.deviceCode(); 
+                        Instant clientCreatedAt = order.clientCreatedAt() != null ? order.clientCreatedAt() : order.localOrderCreatedAt();
+                        Long cashierId = order.cashierId() != null ? order.cashierId() : batch.cashierId();
+
                         Long importId;
                         try {
                                 importId = importRepo.insertImport(
                                                 batchId, batch.companyId(), batch.branchId(),
-                                                batch.deviceId(), batch.cashierId(),
-                                                order.offlineOrderNo(), order.idempotencyKey(),
-                                                order.localOrderCreatedAt(),
+                                                batch.deviceId(), cashierId,
+                                                order.offlineOrderNo(), localOrderId, order.idempotencyKey(),
+                                                deviceCode, order.localOrderCreatedAt(), clientCreatedAt,
                                                 payloadJson, payloadHash);
                         } catch (DuplicateKeyException duplicate) {
                                 return existingIdempotentResult(batch, order);

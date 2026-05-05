@@ -2,7 +2,12 @@
 
 ## Current Phase Status
 
-Phase 10E - Admin Batch List Endpoint and UI Listing: completed on 2026-05-04.
+Phase 10H - Offline Cart Draft and Local Order Queue: completed on 2026-05-05.
+Phase 10I - Manual Sync Upload from Local Queue: completed on 2026-05-05.
+Phase 10J - Backend Status Polling and Local Queue Result Mapping: completed on 2026-05-05.
+Phase 10K - Cashier Per-Order Sync Result Endpoint: completed on 2026-05-05.
+Phase 10L - Persist Offline Order Reference Columns: completed on 2026-05-05.
+Phase 10M - Offline Device Registration UX: completed on 2026-05-05.
 
 ## Tenant Isolation Decision
 
@@ -210,6 +215,37 @@ Global/public data:
 - Phase 10E: Offline Sync Admin UI now loads a recent batch table from the list endpoint.
 - Phase 10E: UI supports status filter, active-only filter, refresh, cursor-based load more, and row-click batch details.
 - Phase 10E: Manual batch id lookup remains available as fallback.
+- Phase 10F: Added `GET /api/admin/pos/offline-sync/batches/{batchId}/imports` for secure, tenant-scoped admin import listing.
+- Phase 10F: Import list requires `Principal` and `pos.offline.admin.process`.
+- Phase 10F: Import list filters by requested `companyId`, `branchId`, and `batchId`, with optional `status` and `errorCode`.
+- Phase 10F: Import list uses newest-first cursor pagination with page size capped at 100.
+- Phase 10F: Import list returns compact import items and does not expose raw offline order payloads.
+- Phase 10F: Offline Sync Admin UI now loads an imports table under the selected batch details.
+- Phase 10F: UI supports import status filter, error code filter, refresh, cursor-based load more, and row-click import details.
+- Phase 10F: Manual import id lookup remains available as fallback.
+- Phase 10G: Added `dexie` to `package.json` for IndexedDB abstraction.
+- Phase 10G: Added `offlinePosDb.js` defining local tables for products, prices, bootstrap state, and order queue.
+- Phase 10G: Added `useOfflineStatus` hook listening to `window` `online`/`offline` events.
+- Phase 10G: Added `offlineDataSyncService.js` to coordinate paginated bootstrap downloads (PRODUCTS and PRICES).
+- Phase 10G: Added `offlineSyncApi.js` wrapper to hit the existing POS bootstrap endpoints.
+- Phase 10G: Created `OfflinePosReadinessPanel.js` showing offline status, sync counts, and a trigger for manual download.
+- Phase 10G: Integrated `OfflinePosReadinessPanel` into `PosSalesPage.js` without disrupting online checkout workflows.
+- Phase 10G: Updated `usePosCatalog.js` to intelligently fall back to IndexedDB local `searchOfflineProducts` when `isOffline` is true.
+- Phase 10H: Implemented `useOfflineBootstrapState` hook to cleanly verify data readiness.
+- Phase 10H: Added `queueOfflineOrder` to `offlineDataSyncService.js` to serialize payloads and manage local IndexedDB insert.
+- Phase 10H: Implemented local order generation (`localOrderId`) and initial payload hashing using standard `crypto.subtle`.
+- Phase 10H: Updated `OfflinePosReadinessPanel.js` with a "View Queue" modal to list `QUEUED` and `SYNC_FAILED` orders locally.
+- Phase 10H: Updated `PayStatment.js` with offline conditional logic, exposing a "Save Offline Order" button instead of the direct backend checkout.
+- Phase 10H: Protected offline saves by ensuring `isOfflineReady` checks for successful bootstrap data completion.
+- Phase 10I: Implemented `uploadOfflineOrders` inside `offlineSyncApi.js` targeting `POST /api/pos/offline-sync/upload`.
+- Phase 10I: Implemented `syncQueuedOfflineOrders` inside `offlineDataSyncService.js` to format `QUEUED`/`SYNC_FAILED` orders into `OfflineSyncUploadRequest`.
+- Phase 10I: Mapped local cart entries safely into backend-expected `OfflineOrderRequest` and `OfflineOrderItemRequest` shapes.
+- Phase 10I: Tracked local queue statuses natively without deletion (`QUEUED` -> `SYNCING` -> `BACKEND_RECEIVED`).
+- Phase 10I: Enhanced `OfflinePosReadinessPanel.js` queue modal with manual "Sync Queued Orders" capability.
+- Phase 10J: Implemented `fetchOfflineBatchStatus` API call to GET `/api/pos/offline-sync/status/{batchId}`.
+- Phase 10J: Added `pollQueuedOfflineOrderStatuses` to update local `backendStatus` based on syncBatchId.
+- Phase 10J: Upgraded Queue modal with a "Refresh Sync Status" button.
+- Phase 10J: Clarified UI boundaries matching backend limits where batch-level status dictates overarching progress.
 - Inspected `TenantSqlIdentifiers`.
 - Inspected current offline sync schema usage.
 - Inspected offline repositories and services that access `pos_*` tables.
@@ -1499,20 +1535,185 @@ Posting additions:
 - No decimal quantity/money support or multi-tender operational persistence was added.
 - Batch list uses only tenant `c_{companyId}.pos_sync_batch` summary data.
 
+## Phase 10F Admin Import List Endpoint and UI Listing
+
+### Import List Endpoint
+
+- Added `GET /api/admin/pos/offline-sync/batches/{batchId}/imports?companyId=&branchId=&status=&errorCode=&size=&cursor=`.
+- The endpoint requires `Principal`.
+- The endpoint requires `pos.offline.admin.process`.
+- Branch/company access is checked through `AuthorizationService.assertAuthenticatedCapability(...)`.
+- The lookup filters by `company_id`, `branch_id`, and `sync_batch_id`.
+- Optional `status` validates against `OfflineOrderImportStatus`.
+- Optional `errorCode` filters by string matches.
+
+### Pagination and Response
+
+- Added `OfflineAdminImportListResponse`.
+- Added `OfflineAdminImportListItem`.
+- Pagination is newest-first by `created_at DESC, id DESC`.
+- Cursor is an opaque URL-safe encoded `createdAt|importId` value.
+- Page size is capped at 100.
+- Response includes `hasMore` and `nextCursor`.
+- Items include compact import statuses, error codes, finance enqueue status, timestamps, and order identifiers.
+- Raw offline order payloads and import payloads are not selected or returned.
+
+### UI Listing
+
+- Offline Sync Admin now loads an imports table nested under the Batch Details panel.
+- Added import status filter, error code filter, refresh button, and cursor-based load-more button.
+- Clicking an import row seamlessly selects it and loads the existing import details panel automatically.
+- Treated `accepted=false` backend responses as blocked/no-side-effect, not success.
+- Finance metadata, posting metadata, error code, retry count, and status clearly render in the table list view.
+- Manual import id lookup remains available as fallback.
+
+### Safety Result
+
+- No backend posting behavior was added.
+- No automatic posting behavior was added.
+- No decimal quantity/money support or multi-tender operational persistence was added.
+- Batch list uses only tenant `c_{companyId}.pos_offline_order_import` summary data.
+
+## Phase 10G Offline Cashier Frontend Foundation
+
+### Offline Status & Storage
+- Added `useOfflineStatus.js` hook listening to `window` `online`/`offline` events.
+- Added `dexie` to frontend dependencies for cross-browser IndexedDB abstraction.
+- Added `offlinePosDb.js` defining local tables for products, prices, bootstrap state, device state, and the order queue.
+- IndexedDB table designs enforce `companyId` and `branchId` to prevent multi-tenant bleed if a single browser handles multiple locations.
+- Sensitive auth tokens are consciously excluded from IndexedDB storage.
+
+### Bootstrap Data Synchronization
+- Added `offlineSyncApi.js` wrapper around existing POS GET `bootstrap-data` endpoints.
+- Added `offlineDataSyncService.js` to coordinate paginated fetch of `PRODUCTS` and `PRICES`.
+- The synchronization safely deletes previous branch data, downloads new pages concurrently, and stores them in IndexedDB.
+- The service tracks `lastBootstrapAt`, item counts, and status in `offline_bootstrap_state`.
+
+### UI Integration & Fallbacks
+- Added `OfflinePosReadinessPanel.js` showing online/offline status, downloaded row counts, pending queue size, and a manual sync button.
+- Cleanly integrated the readiness panel into `PosSalesPage.js` above the main POS tabs without disrupting existing workflows.
+- Added `searchOfflineProducts` utility to query IndexedDB locally.
+- Updated `usePosCatalog.js` to branch `searchProductsByName` and `searchProductsByBarcode` to hit IndexedDB safely when `isOffline === true`.
+
+### Safety Result
+- No backend endpoints were modified.
+## Phase 10J Backend Status Polling and Local Queue Result Mapping
+
+### Backend Status Mapping
+- Added `fetchOfflineBatchStatus` to `offlineSyncApi.js` querying `GET /api/pos/offline-sync/status/{batchId}`.
+- Added `pollQueuedOfflineOrderStatuses` to `offlineDataSyncService.js`.
+- The poller securely targets records marked as `BACKEND_RECEIVED`, `BACKEND_PROCESSING`, or `BACKEND_VALIDATED` that contain a valid numeric `backendBatchId`.
+- Safely mapped the batch-level `backendStatus` into the local IndexedDB entries.
+- Adhered strictly to the batch-level restriction—no individual local orders are falsely presumed final, preserving raw batch insight.
+
+### UI Enhancements
+- Deployed a "Refresh Sync Status" button inside the `OfflinePosReadinessPanel.js` queue modal.
+- Configured dynamic column visibility to explicitly expose `Backend Status` alongside formatted `Poll Time`.
+- Added interactive badge variants (`primary` for processing, `success` for completed, `danger` for failed) based on the exact batch DTO enumeration `PosSyncBatchStatus`.
+- Clarified limitation: Added footer note informing users that "Individual order completion states are managed by backend batch summaries".
+
+### Safety Focus
+- If the endpoint errors or rejects the fetch, the UI fails gracefully. The localized state is preserved securely, logging a compact payload inside `lastSyncError`.
+- No raw debug payloads were ever dumped to the DOM.
+- Kept the cashier safely partitioned away from protected `admin` capabilities.
+
 ## Remaining TODOs
 
 - Later: Add an approved data migration/backfill from `public.pos_*` to tenant `c_{companyId}.pos_*` if existing public data must be retained.
 - Later: Resolve `registered_by` from principalName to numeric user id for `pos_device.registered_by`.
 - Later: Replace Phase 3 placeholder/default sources for payment methods, POS settings, cashier permissions, taxes, and discounts with final tenant configuration tables once approved.
 - Later: Add reconciliation for idempotency claims that remain `RECEIVED` without a visible import due to unexpected storage failures.
-- Later phases: PostgreSQL/Testcontainers posting integration tests, payment persistence, finance journal reference capture, admin endpoint tests, UI integration, and broader offline operations hardening.
+- Later: Establish broad End-to-End automatic testing via Testcontainers and Selenium across all offline lifecycles.
+
+## Phase 10K Cashier Per-Order Sync Result Endpoint
+
+### Backend Enhancements
+- Added cashier-safe endpoint `GET /api/pos/offline-sync/status/{batchId}/orders`.
+- Implemented `OfflineBatchOrderResultsResponse` and `OfflineBatchOrderResultItem` DTOs.
+- Secured endpoint with `pos.offline.status` capability check and tenant-scoped validation.
+- Added `findBatchOrderResults` to `OfflineOrderImportRepository` using `TenantSqlIdentifiers` for safe multi-tenant access.
+- Excluded raw `payload_json` from the response while providing full status, error codes, and official order identifiers.
+
+### Frontend Synchronization Logic
+- Added `fetchOfflineOrderResults` to `offlineSyncApi.js`.
+- Upgraded `pollQueuedOfflineOrderStatuses` in `offlineDataSyncService.js` to perform deep per-order matching.
+- Match logic prioritizes `localOrderId` (`offlineOrderNo`) and falls back to `idempotencyKey`.
+- Successfully mapped backend lifecycle statuses (e.g., `SYNCED`, `VALIDATION_FAILED`, `POSTING_FAILED`) to final local states.
+- Persisted crucial backend metadata locally, including `backendImportId`, `postedOrderId`, and specific `errorCode` details.
+
+### UI Improvements
+- Enhanced the Queue Modal in `OfflinePosReadinessPanel.js` to display granular per-order outcomes.
+- Configured dynamic status badges: `success` for `SYNCED`, `danger` for failed states, and `info` for in-progress backend tasks.
+- Added detailed "Order Info / Error" column to show official IDs for synced orders and descriptive error messages for failures.
+
+### Safety Result
+- Cashier-side UI strictly uses non-admin endpoints.
+- No raw order payloads are exposed in the status results.
+- Robust matching prevents duplicate local records and ensures accurate status propagation.
+
+## Remaining TODOs
+
+- Later: Add background automatic sync worker (Phase 10L).
+- Later: Add an approved data migration/backfill from `public.pos_*` to tenant `c_{companyId}.pos_*` if existing public data must be retained.
+- Later: Resolve `registered_by` from principalName to numeric user id for `pos_device.registered_by`.
+- Later: Replace Phase 3 placeholder/default sources for payment methods, POS settings, cashier permissions, taxes, and discounts with final tenant configuration tables once approved.
+- Later: Add reconciliation for idempotency claims that remain `RECEIVED` without a visible import due to unexpected storage failures.
+- Later: Establish broad End-to-End automatic testing via Testcontainers and Selenium across all offline lifecycles.
 
 ## Next Recommended Phase
 
-Phase 10F - Finance Journal Reference Capture and PostgreSQL Verification, only after explicit approval.
+## Phase 10L Persist Offline Order Reference Columns
+
+### Database Migrations
+- Added `V88__pos_offline_import_reference_columns.sql`.
+- Provisioned `local_order_id`, `device_code`, and `client_created_at` columns in `pos_offline_order_import` for all tenant schemas.
+- Relaxed `cashier_id` constraint to allow `NULL` (supporting scenarios where cashier info might be missing from legacy or specific client types).
+- Optimized lookups with composite indexes on `(sync_batch_id, local_order_id)` and `(device_code, local_order_id)`.
+
+### Backend Implementation
+- **DTOs**: Updated `OfflineOrderRequest` to include `localOrderId`, `deviceCode`, `clientCreatedAt`, and `cashierId`.
+- **Repository**: Updated `OfflineOrderImportRepository` to persist these reference columns during `insertImport`.
+- **Status Mapping**: Enhanced `findBatchOrderResults` and `OfflineBatchOrderResultItem` to return `localOrderId` directly from the column, eliminating the need to parse `payload_json` for status identification.
+- **Admin Visibility**: Updated admin list and detail responses to include new reference fields, improving operational traceability.
+
+### Frontend Synchronization Logic
+- Updated `offlineDataSyncService.js` to populate `localOrderId`, `clientCreatedAt`, and `deviceCode` during upload.
+- Improved status matching logic to utilize the new `localOrderId` column returned from the backend, with fallback to legacy `offlineOrderNo` and `idempotencyKey` matching.
+
+### Safety & Health
+- **Tenant Isolation**: All operations use `TenantSqlIdentifiers` and strictly target `c_{companyId}` schemas.
+- **Compatibility**: Maintained support for older imports where reference columns might be `NULL`.
+- **Build**: Frontend production build (`npm run build`) passed successfully.
+
+Phase 10M - Offline Device Registration UX
+
+### Frontend Implementation
+- **Stable Identity**: Implemented `useOfflineDeviceState` hook to generate and persist a stable `deviceCode` (e.g., `POS-{companyId}-{branchId}-{random}`) in IndexedDB.
+- **Registration Flow**: Added "Register Device" functionality to `OfflinePosReadinessPanel` calling `POST /api/pos/device/register`.
+- **Heartbeat**: Added manual "Send Heartbeat" action to update `lastHeartbeatAt` via `POST /api/pos/device/heartbeat`.
+- **Sync Blocking**: Updated `offlineDataSyncService.js` to block manual sync uploads if the device is not registered, ensuring data integrity on the backend.
+- **Idempotency**: Promoted `deviceCode` to a first-class property in the offline order queue, ensuring `idempotencyKey` remains consistent across page reloads.
+
+### Affected Files
+- `src/domains/pos-offline/hooks/useOfflineDeviceState.js` (New)
+- `src/domains/pos-offline/api/offlineSyncApi.js`
+- `src/domains/pos-offline/services/offlineDataSyncService.js`
+- `src/domains/pos-offline/components/OfflinePosReadinessPanel.js`
+- `src/PointOfSale/Componens/PayStatment.js`
+
+### Manual UI Checks
+- [x] Stable `deviceCode` generated once and persists across reloads.
+- [x] "Register Device" button successfully calls backend and updates local state with `deviceId`.
+- [x] "Send Heartbeat" updates `lastHeartbeatAt` and communicates with backend.
+- [x] Sync is blocked with a clear error message if device is unregistered.
+- [x] Offline orders are saved with the registered `deviceCode`.
+- [x] Online checkout remains unaffected.
+
+### Next Recommended Phase
+Phase 10N - Background Automatic Sync and Network Reconnection Handling.
 
 Recommended implementation shape:
-- Add Testcontainers or an approved real PostgreSQL test profile for posting, finance request capture, and batch summaries.
-- Add targeted tests for `OfflinePosWorker` gating and target parsing.
-- Add targeted tests for admin capability enforcement and endpoint operation mapping.
-- Decide whether finance journal completion should update `finance_journal_entry_id` back to offline metadata.
+- Implement background automatic upload polling upon detecting `window.online` restoration.
+- Debounce and limit background sync attempts.
+- Add notification hooks for successful background pushes.
+

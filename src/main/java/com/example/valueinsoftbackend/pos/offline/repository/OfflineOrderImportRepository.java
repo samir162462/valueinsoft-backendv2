@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus
 import com.example.valueinsoftbackend.pos.offline.model.OfflineAdminImportDetailsSnapshot;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineOrderImportModel;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminImportListItem;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,9 +39,13 @@ public class OfflineOrderImportRepository {
             rs.getLong("device_id"),
             rs.getLong("cashier_id"),
             rs.getString("offline_order_no"),
+            rs.getString("local_order_id"),
+            rs.getString("device_code"),
             rs.getString("idempotency_key"),
             rs.getTimestamp("local_order_created_at") != null
                     ? rs.getTimestamp("local_order_created_at").toInstant() : null,
+            rs.getTimestamp("client_created_at") != null
+                    ? rs.getTimestamp("client_created_at").toInstant() : null,
             rs.getString("payload_json"),
             rs.getString("payload_hash"),
             OfflineOrderImportStatus.valueOf(rs.getString("status")),
@@ -62,21 +68,23 @@ public class OfflineOrderImportRepository {
 
     public Long insertImport(Long syncBatchId, Long companyId, Long branchId,
                              Long deviceId, Long cashierId,
-                             String offlineOrderNo, String idempotencyKey,
-                             Instant localOrderCreatedAt,
+                             String offlineOrderNo, String localOrderId, String idempotencyKey,
+                             String deviceCode, Instant localOrderCreatedAt, Instant clientCreatedAt,
                              String payloadJson, String payloadHash) {
         String sql = """
                 INSERT INTO %s
                     (sync_batch_id, company_id, branch_id, device_id, cashier_id,
-                     offline_order_no, idempotency_key, local_order_created_at,
+                     offline_order_no, local_order_id, device_code, idempotency_key, 
+                     local_order_created_at, client_created_at,
                      payload_json, payload_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
                 RETURNING id
                 """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
         return jdbcTemplate.queryForObject(sql, Long.class,
                 syncBatchId, companyId, branchId, deviceId, cashierId,
-                offlineOrderNo, idempotencyKey,
+                offlineOrderNo, localOrderId, deviceCode, idempotencyKey,
                 localOrderCreatedAt != null ? Timestamp.from(localOrderCreatedAt) : null,
+                clientCreatedAt != null ? Timestamp.from(clientCreatedAt) : null,
                 payloadJson, payloadHash);
     }
 
@@ -102,6 +110,55 @@ public class OfflineOrderImportRepository {
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
+    public List<com.example.valueinsoftbackend.pos.offline.dto.response.OfflineBatchOrderResultItem> findBatchOrderResults(Long companyId, Long branchId, Long syncBatchId) {
+        String sql = """
+                SELECT
+                    id,
+                    offline_order_no,
+                    local_order_id,
+                    idempotency_key,
+                    status,
+                    created_at,
+                    updated_at,
+                    posted_order_id,
+                    official_order_id,
+                    error_code,
+                    error_message,
+                    posting_error_code,
+                    posting_error_message,
+                    finance_enqueue_status,
+                    finance_posting_request_id,
+                    payload_hash
+                FROM %s
+                WHERE sync_batch_id = ? AND company_id = ? AND branch_id = ?
+                ORDER BY id ASC
+                """.formatted(TenantSqlIdentifiers.posOfflineOrderImportTable(companyId));
+                
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
+            String hash = rs.getString("payload_hash");
+            String hashPrefix = (hash != null && hash.length() > 8) ? hash.substring(0, 8) : hash;
+            
+            return new com.example.valueinsoftbackend.pos.offline.dto.response.OfflineBatchOrderResultItem(
+                rs.getLong("id"),
+                rs.getString("offline_order_no"),
+                rs.getString("local_order_id"),
+                rs.getString("idempotency_key"),
+                com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus.valueOf(rs.getString("status")),
+                rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant() : null,
+                rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toInstant() : null,
+                rs.getObject("posted_order_id") != null ? rs.getLong("posted_order_id") : null,
+                rs.getObject("official_order_id") != null ? rs.getLong("official_order_id") : null,
+                rs.getString("error_code"),
+                rs.getString("error_message"),
+                rs.getString("posting_error_code"),
+                rs.getString("posting_error_message"),
+                rs.getString("finance_enqueue_status"),
+                rs.getObject("finance_posting_request_id") != null ? rs.getLong("finance_posting_request_id") : null,
+                hashPrefix
+            );
+        }, syncBatchId, companyId, branchId);
+    }
+
     public Optional<OfflineOrderImportModel> findByIdempotencyKey(Long companyId, Long branchId,
                                                                   Long deviceId, String idempotencyKey) {
         String sql = """
@@ -123,9 +180,11 @@ public class OfflineOrderImportRepository {
                     oi.sync_batch_id,
                     oi.id AS offline_order_import_id,
                     oi.offline_order_no,
+                    oi.local_order_id,
                     oi.status,
                     oi.created_at,
                     oi.updated_at,
+                    oi.client_created_at,
                     oi.processing_started_at,
                     oi.posting_started_at,
                     oi.posting_completed_at,
@@ -140,7 +199,7 @@ public class OfflineOrderImportRepository {
                     oi.retry_count,
                     oi.last_retry_at,
                     oi.device_id,
-                    d.device_code,
+                    COALESCE(oi.device_code, d.device_code) AS device_code,
                     oi.cashier_id,
                     oi.idempotency_key,
                     oi.payload_hash,
@@ -170,9 +229,11 @@ public class OfflineOrderImportRepository {
                                 rs.getLong("sync_batch_id"),
                                 rs.getLong("offline_order_import_id"),
                                 rs.getString("offline_order_no"),
+                                rs.getString("local_order_id"),
                                 rs.getString("status"),
                                 rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant() : null,
                                 rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toInstant() : null,
+                                rs.getTimestamp("client_created_at") != null ? rs.getTimestamp("client_created_at").toInstant() : null,
                                 rs.getTimestamp("processing_started_at") != null ? rs.getTimestamp("processing_started_at").toInstant() : null,
                                 rs.getTimestamp("posting_started_at") != null ? rs.getTimestamp("posting_started_at").toInstant() : null,
                                 rs.getTimestamp("posting_completed_at") != null ? rs.getTimestamp("posting_completed_at").toInstant() : null,
@@ -196,6 +257,82 @@ public class OfflineOrderImportRepository {
                         ),
                 id, companyId, branchId);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    public List<OfflineAdminImportListItem> findAdminImportList(Long companyId, Long branchId, Long batchId,
+                                                                OfflineOrderImportStatus status,
+                                                                String errorCode,
+                                                                Instant cursorCreatedAt, Long cursorId,
+                                                                int limit) {
+        String baseSql = """
+                SELECT
+                    oi.id AS offline_order_import_id,
+                    oi.offline_order_no,
+                    oi.local_order_id,
+                    oi.status,
+                    oi.created_at,
+                    oi.updated_at,
+                    oi.posted_order_id,
+                    oi.official_order_id,
+                    oi.finance_posting_request_id,
+                    oi.finance_enqueue_status,
+                    oi.error_code,
+                    oi.error_message,
+                    oi.retry_count,
+                    COALESCE(oi.device_code, d.device_code) AS device_code,
+                    oi.cashier_id
+                FROM %s oi
+                LEFT JOIN %s d
+                    ON d.id = oi.device_id
+                   AND d.company_id = oi.company_id
+                   AND d.branch_id = oi.branch_id
+                WHERE oi.company_id = ?
+                  AND oi.branch_id = ?
+                  AND oi.sync_batch_id = ?
+                """.formatted(
+                TenantSqlIdentifiers.posOfflineOrderImportTable(companyId),
+                TenantSqlIdentifiers.posDeviceTable(companyId)
+        );
+
+        StringBuilder sql = new StringBuilder(baseSql);
+        List<Object> args = new ArrayList<>(List.of(companyId, branchId, batchId));
+
+        if (status != null) {
+            sql.append(" AND oi.status = ?");
+            args.add(status.name());
+        }
+        if (errorCode != null && !errorCode.isBlank()) {
+            sql.append(" AND oi.error_code = ?");
+            args.add(errorCode);
+        }
+
+        if (cursorCreatedAt != null && cursorId != null) {
+            sql.append(" AND (oi.created_at < ? OR (oi.created_at = ? AND oi.id < ?))");
+            args.add(Timestamp.from(cursorCreatedAt));
+            args.add(Timestamp.from(cursorCreatedAt));
+            args.add(cursorId);
+        }
+
+        sql.append(" ORDER BY oi.created_at DESC, oi.id DESC LIMIT ?");
+        args.add(limit);
+
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new OfflineAdminImportListItem(
+                rs.getLong("offline_order_import_id"),
+                rs.getString("offline_order_no"),
+                rs.getString("local_order_id"),
+                rs.getString("status"),
+                rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toInstant() : null,
+                rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toInstant() : null,
+                rs.getObject("posted_order_id") != null ? rs.getLong("posted_order_id") : null,
+                rs.getObject("official_order_id") != null ? rs.getLong("official_order_id") : null,
+                rs.getObject("finance_posting_request_id", UUID.class),
+                rs.getString("finance_enqueue_status"),
+                rs.getString("error_code"),
+                rs.getString("error_message"),
+                rs.getInt("retry_count"),
+                rs.getString("device_code"),
+                rs.getObject("cashier_id") != null ? rs.getLong("cashier_id") : null
+        ), args.toArray());
     }
 
     public Optional<OfflineOrderImportModel> claimNextPendingImport(Long companyId, Long branchId, Long syncBatchId) {

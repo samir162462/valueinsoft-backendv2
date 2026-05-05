@@ -165,11 +165,9 @@ public class SubscriptionService {
     public BranchBillingCheckoutResponse createBranchCheckout(int branchId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         BranchBillingCheckoutCandidate candidate = dbBillingWriteModels.findBranchCheckoutCandidate(branchId);
-        if (candidate == null) {
-            if (!dbModernSubscription.hasBranchSubscriptionRecords(branchId)) {
-                createDefaultPayableBranchSubscription(branchId);
-                candidate = dbBillingWriteModels.findBranchCheckoutCandidate(branchId);
-            }
+        if (candidate == null && shouldCreateCheckoutRecoverySubscription(branchId)) {
+            createDefaultPayableBranchSubscription(branchId);
+            candidate = dbBillingWriteModels.findBranchCheckoutCandidate(branchId);
         }
         if (candidate == null) {
             throw new ApiException(
@@ -236,6 +234,15 @@ public class SubscriptionService {
                 candidate.getDueAmount(),
                 normalizeCurrency(candidate.getCurrencyCode())
         );
+    }
+
+    private boolean shouldCreateCheckoutRecoverySubscription(int branchId) {
+        if (!dbModernSubscription.hasBranchSubscriptionRecords(branchId)) {
+            return true;
+        }
+
+        Map<String, Object> branchActiveState = dbModernSubscription.getBranchActiveState(branchId);
+        return branchActiveState == null || !Boolean.TRUE.equals(branchActiveState.get("active"));
     }
 
     private long createDefaultPayableBranchSubscription(int branchId) {

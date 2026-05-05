@@ -11,16 +11,25 @@ import java.util.List;
  * A single offline order within a sync upload batch.
  */
 public record OfflineOrderRequest(
-
         @NotBlank(message = "offlineOrderNo is required")
         @Size(max = 150)
         String offlineOrderNo,
+
+        @Size(max = 150)
+        String localOrderId,
 
         @NotBlank(message = "idempotencyKey is required")
         @Size(max = 200)
         String idempotencyKey,
 
         Instant localOrderCreatedAt,
+
+        Instant clientCreatedAt,
+
+        @Size(max = 150)
+        String deviceCode,
+
+        Long cashierId,
 
         Long customerId,
 

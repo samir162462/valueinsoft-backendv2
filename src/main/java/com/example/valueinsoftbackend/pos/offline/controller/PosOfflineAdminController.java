@@ -9,9 +9,12 @@ import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminBatch
 import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminBatchListItem;
 import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminBatchListResponse;
 import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminImportDetailsResponse;
+import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminImportListItem;
+import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminImportListResponse;
 import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminOnlineOrderReference;
 import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminReadiness;
 import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineAdminOperationResponse;
+import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus;
 import com.example.valueinsoftbackend.pos.offline.enums.PosSyncBatchStatus;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineAdminImportDetailsSnapshot;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineImportStatusCounts;
@@ -146,6 +149,36 @@ public class PosOfflineAdminController {
                         "Offline import was not found for the requested company and branch"));
         return ResponseEntity.ok(importDetailsResponse(snapshot));
     }
+
+    @GetMapping("/batches/{batchId}/imports")
+    public ResponseEntity<OfflineAdminImportListResponse> listImports(
+            @RequestParam @Positive Long companyId,
+            @RequestParam @Positive Long branchId,
+            @PathVariable @Positive Long batchId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String errorCode,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor,
+            Principal principal) {
+        authorize(principal, companyId, branchId);
+        int pageSize = Math.min(Math.max(size != null ? size : 25, 1), 100);
+        ImportCursor decodedCursor = decodeImportCursor(cursor);
+        OfflineOrderImportStatus statusFilter = parseImportStatus(status);
+        
+        List<OfflineAdminImportListItem> rows = syncService.getAdminImportList(
+                companyId, branchId, batchId, statusFilter, errorCode, 
+                decodedCursor.createdAt(), decodedCursor.importId(), pageSize + 1);
+                
+        boolean hasMore = rows.size() > pageSize;
+        List<OfflineAdminImportListItem> items = hasMore ? rows.subList(0, pageSize) : rows;
+        String nextCursor = hasMore && !items.isEmpty() ? encodeImportCursor(items.get(items.size() - 1)) : null;
+        
+        return ResponseEntity.ok(new OfflineAdminImportListResponse(
+                companyId, branchId, batchId, 
+                statusFilter != null ? statusFilter.name() : null, 
+                errorCode, pageSize, hasMore, nextCursor, List.copyOf(items)));
+    }
+
 
     @GetMapping("/batches/{batchId}")
     public ResponseEntity<OfflineAdminBatchDetailsResponse> batchDetails(
@@ -459,9 +492,11 @@ public class PosOfflineAdminController {
                 snapshot.batchId(),
                 snapshot.offlineOrderImportId(),
                 snapshot.offlineOrderNo(),
+                snapshot.localOrderId(),
                 snapshot.status(),
                 snapshot.createdAt(),
                 snapshot.updatedAt(),
+                snapshot.clientCreatedAt(),
                 snapshot.processingStartedAt(),
                 snapshot.postingStartedAt(),
                 snapshot.postingCompletedAt(),
@@ -678,6 +713,49 @@ public class PosOfflineAdminController {
             return new BatchCursor(null, null);
         }
     }
+
+    private OfflineOrderImportStatus parseImportStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return OfflineOrderImportStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMPORT_STATUS", "Unsupported import status filter");
+        }
+    }
+
+    private ImportCursor decodeImportCursor(String cursor) {
+        if (cursor == null || cursor.isBlank()) {
+            return ImportCursor.empty();
+        }
+        try {
+            String decoded = new String(Base64.getUrlDecoder().decode(cursor.trim()), java.nio.charset.StandardCharsets.UTF_8);
+            String[] parts = decoded.split("\\|", 2);
+            if (parts.length != 2) {
+                throw new IllegalArgumentException("Invalid cursor");
+            }
+            return new ImportCursor(Instant.parse(parts[0]), Long.parseLong(parts[1]));
+        } catch (Exception ex) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_IMPORT_CURSOR", "Invalid import list cursor");
+        }
+    }
+
+    private String encodeImportCursor(OfflineAdminImportListItem item) {
+        if (item == null || item.createdAt() == null || item.offlineOrderImportId() == null) {
+            return null;
+        }
+        String raw = item.createdAt() + "|" + item.offlineOrderImportId();
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private record ImportCursor(Instant createdAt, Long importId) {
+        static ImportCursor empty() {
+            return new ImportCursor(null, null);
+        }
+    }
+
 
     /**
      * Authorizes the admin request by checking capabilities.

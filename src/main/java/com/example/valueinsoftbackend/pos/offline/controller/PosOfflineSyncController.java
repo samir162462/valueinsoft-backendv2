@@ -5,13 +5,7 @@ import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.pos.offline.dto.request.DeviceHeartbeatRequest;
 import com.example.valueinsoftbackend.pos.offline.dto.request.OfflineSyncUploadRequest;
 import com.example.valueinsoftbackend.pos.offline.dto.request.RegisterPosDeviceRequest;
-import com.example.valueinsoftbackend.pos.offline.dto.response.BootstrapDataResponse;
-import com.example.valueinsoftbackend.pos.offline.dto.response.DeviceHeartbeatResponse;
-import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineRetryResultResponse;
-import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineSyncUploadResponse;
-import com.example.valueinsoftbackend.pos.offline.dto.response.RegisterPosDeviceResponse;
-import com.example.valueinsoftbackend.pos.offline.dto.response.SyncErrorListResponse;
-import com.example.valueinsoftbackend.pos.offline.dto.response.SyncStatusResponse;
+import com.example.valueinsoftbackend.pos.offline.dto.response.*;
 import com.example.valueinsoftbackend.pos.offline.service.BootstrapDataService;
 import com.example.valueinsoftbackend.pos.offline.service.PosDeviceService;
 import com.example.valueinsoftbackend.pos.offline.service.PosOfflineSyncService;
@@ -156,6 +150,26 @@ public class PosOfflineSyncController {
             Principal principal) {
         String principalName = authorize(principal, companyId, branchId, "pos.offline.status");
         return ResponseEntity.ok(syncService.getSyncStatus(companyId, branchId, batchId, principalName));
+    }
+
+    /**
+     * Retrieves individual order results for a specific synchronization batch.
+     * intended for cashier-side status polling.
+     *
+     * @param companyId the company ID
+     * @param branchId  the branch ID
+     * @param batchId   the synchronization batch ID
+     * @param principal the authenticated principal
+     * @return a response entity containing the batch order results
+     */
+    @GetMapping("/offline-sync/status/{batchId}/orders")
+    public ResponseEntity<OfflineBatchOrderResultsResponse> getBatchOrderResults(
+            @RequestParam @Positive Long companyId,
+            @RequestParam @Positive Long branchId,
+            @PathVariable @Positive Long batchId,
+            Principal principal) {
+        String principalName = authorize(principal, companyId, branchId, "pos.offline.status");
+        return ResponseEntity.ok(syncService.getBatchOrderResults(companyId, branchId, batchId, principalName));
     }
 
     /**
