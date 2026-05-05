@@ -13,6 +13,9 @@ import com.example.valueinsoftbackend.pos.offline.model.BootstrapVersionModel;
 import com.example.valueinsoftbackend.pos.offline.repository.BootstrapDataRepository;
 import com.example.valueinsoftbackend.pos.offline.repository.BootstrapVersionRepository;
 import com.example.valueinsoftbackend.pos.offline.exception.OfflineSyncException;
+import com.example.valueinsoftbackend.Service.AuthenticatedEffectiveConfigurationService;
+import com.example.valueinsoftbackend.Service.LegacyInventoryBackfillService;
+import com.example.valueinsoftbackend.Model.Configuration.ResolvedCapabilityConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -30,15 +33,21 @@ public class BootstrapDataService {
     private final BootstrapDataRepository dataRepo;
     private final OfflinePosProperties props;
     private final AuditLogService auditLogService;
+    private final AuthenticatedEffectiveConfigurationService authConfigService;
+    private final LegacyInventoryBackfillService legacyInventoryBackfillService;
 
     public BootstrapDataService(BootstrapVersionRepository versionRepo,
                                 BootstrapDataRepository dataRepo,
                                 OfflinePosProperties props,
-                                AuditLogService auditLogService) {
+                                AuditLogService auditLogService,
+                                AuthenticatedEffectiveConfigurationService authConfigService,
+                                LegacyInventoryBackfillService legacyInventoryBackfillService) {
         this.versionRepo = versionRepo;
         this.dataRepo = dataRepo;
         this.props = props;
         this.auditLogService = auditLogService;
+        this.authConfigService = authConfigService;
+        this.legacyInventoryBackfillService = legacyInventoryBackfillService;
     }
 
     /**
@@ -75,12 +84,16 @@ public class BootstrapDataService {
                     Instant.now(), Collections.emptyList(), false, null);
         }
 
+        if (resolvedType == BootstrapDataType.PRODUCTS || resolvedType == BootstrapDataType.PRICES) {
+            legacyInventoryBackfillService.backfillBranchProducts(companyId.intValue(), branchId.intValue());
+        }
+
         BootstrapPage<?> page = switch (resolvedType) {
             case PRODUCTS -> dataRepo.findProducts(companyId, branchId, afterId, pageSize);
             case PRICES -> dataRepo.findPrices(companyId, branchId, afterId, pageSize);
-            case PAYMENT_METHODS -> staticPage(defaultPaymentMethods());
+            case PAYMENT_METHODS -> staticPage(dataRepo.findPaymentMethods(companyId, branchId));
             case POS_SETTINGS -> staticPage(defaultPosSettings());
-            case CASHIER_PERMISSIONS -> staticPage(defaultCashierPermissions());
+            case CASHIER_PERMISSIONS -> staticPage(fetchRealCashierPermissions(principalName, companyId, branchId));
             case TAXES -> staticPage(defaultTaxes());
             case DISCOUNTS -> staticPage(defaultDiscounts());
         };
@@ -142,11 +155,24 @@ public class BootstrapDataService {
         );
     }
 
-    private List<OfflineBootstrapCashierPermissionItem> defaultCashierPermissions() {
-        return List.of(
-                new OfflineBootstrapCashierPermissionItem("pos.offline.sync", true),
-                new OfflineBootstrapCashierPermissionItem("pos.offline.retry", false)
-        );
+    private List<OfflineBootstrapCashierPermissionItem> fetchRealCashierPermissions(String principalName, Long companyId, Long branchId) {
+        try {
+            ArrayList<ResolvedCapabilityConfig> configs = authConfigService.getEffectiveCapabilitiesForAuthenticatedUser(
+                    principalName, companyId.intValue(), branchId.intValue());
+
+            return configs.stream()
+                    .filter(c -> c.getCapabilityKey().startsWith("pos."))
+                    .map(c -> new OfflineBootstrapCashierPermissionItem(
+                            c.getCapabilityKey(),
+                            "allow".equalsIgnoreCase(c.getGrantMode())))
+                    .toList();
+        } catch (Exception e) {
+            log.error("Failed to fetch real cashier permissions for {}: {}", principalName, e.getMessage());
+            return List.of(
+                    new OfflineBootstrapCashierPermissionItem("pos.offline.sync", true),
+                    new OfflineBootstrapCashierPermissionItem("pos.offline.retry", false)
+            );
+        }
     }
 
     private List<OfflineBootstrapTaxItem> defaultTaxes() {

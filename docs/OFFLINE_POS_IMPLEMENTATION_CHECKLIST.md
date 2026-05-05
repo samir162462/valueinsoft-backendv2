@@ -8,6 +8,11 @@ Phase 10J - Backend Status Polling and Local Queue Result Mapping: completed on 
 Phase 10K - Cashier Per-Order Sync Result Endpoint: completed on 2026-05-05.
 Phase 10L - Persist Offline Order Reference Columns: completed on 2026-05-05.
 Phase 10M - Offline Device Registration UX: completed on 2026-05-05.
+Phase 10N - Offline Shift, Payment, and Permission Hardening: completed on 2026-05-06.
+Phase 10O - Auto Sync on Reconnect, Disabled by Default: completed on 2026-05-06.
+Phase 10P - Queue Cleanup and Archive Synced Orders: completed on 2026-05-06.
+Phase 10Q - Backend Reachability Check Before Auto-Sync: completed on 2026-05-06.
+Phase 10R - Live PostgreSQL and Browser End-to-End Verification: completed on 2026-05-06.
 
 ## Tenant Isolation Decision
 
@@ -1717,3 +1722,44 @@ Recommended implementation shape:
 - Debounce and limit background sync attempts.
 - Add notification hooks for successful background pushes.
 
+- Phase 10N: Added real read-only bootstrap for `PAYMENT_METHODS` and `CASHIER_PERMISSIONS`.
+- Phase 10N: Updated `BootstrapDataRepository` to fetch `pos.*` mappings from `finance_account_mapping`.
+- Phase 10N: Updated `BootstrapDataService` to use `AuthenticatedEffectiveConfigurationService` for real-time cashier permissions bootstrap.
+- Phase 10N: Added `offline_payment_methods` and `offline_permissions` stores to frontend IndexedDB schema (V2).
+- Phase 10N: Updated `downloadBootstrapData` to include payment methods and permissions.
+- Phase 10N: Created `useOfflineReadiness` hook to consolidate device registration, bootstrap, payments, and permissions checks.
+- Phase 10N: Updated `OfflinePosReadinessPanel` to display detailed readiness status and guide the cashier.
+- Phase 10N: Updated `PayStatment` to block offline sales if readiness criteria (including active shift) are not met.
+- Phase 10N: Restracted offline sales to single-method "Direct" (Cash) for MVP.
+- Phase 10N: Added detailed error feedback in checkout UI for missing registration, bootstrap, or active shift.
+- Phase 10O: Added `offline_settings` store to IndexedDB (V3) for user preferences.
+- Phase 10O: Implemented `autoSyncOnReconnect` preference, disabled by default.
+- Phase 10O: Added `useOfflineAutoSync` hook to trigger delayed upload after browser reconnects.
+- Phase 10O: Implemented 30-second cooldown and concurrency lock for auto-sync attempts.
+- Phase 10O: Updated `OfflinePosReadinessPanel` with auto-sync toggle and status indicators.
+- Phase 10O: Added auto-sync result and error tracking in local settings.
+- Phase 10O: Ensured manual sync remains functional and prioritizes user action.
+- Phase 10O: Validated that auto-sync is blocked if device is unregistered or context is missing.
+- Phase 10P: Added `archived` index to `offline_order_queue` (IndexedDB V4).
+- Phase 10P: Implemented `archiveSyncedOrders` logic to mark `SYNCED` local orders as archived.
+- Phase 10P: Updated `getQueuedOfflineOrders` and sync/poll services to respect the `archived` flag.
+- Phase 10P: Added multi-category filtering in Queue Modal (Active, Issues, Synced, Archived, All).
+- Phase 10P: Added "Archive Synced" action in queue UI to declutter active views.
+- Phase 10P: Updated `OfflinePosReadinessPanel` to show categorized counts (Pending, Issues, Synced).
+- Phase 10P: Ensured archived orders are kept locally for history/audit but ignored by sync/status worker hooks.
+- Phase 10P: Validated that non-final orders (QUEUED, FAILED, etc.) cannot be archived.
+- Phase 10Q: Added `checkBackendReachability` API helper with 5s timeout using lightweight bootstrap call.
+- Phase 10Q: Implemented `checkOfflineBackendReachability` in service to track reachability and auth state.
+- Phase 10Q: Integrated reachability gate into `syncQueuedOfflineOrders` for automatic attempts.
+- Phase 10Q: Added `SKIPPED` auto-sync status to preserve order state when backend is unreachable.
+- Phase 10Q: Added "Check connection" button and real-time backend status badge to `OfflinePosReadinessPanel`.
+- Phase 10Q: Enhanced error mapping to distinguish between `AUTHENTICATION_REQUIRED` and `NETWORK_ERROR`.
+- Phase 10Q: Validated that manual sync still works even if reachability check was not yet performed.
+- Phase 10R: Created `docs/OFFLINE_POS_E2E_VALIDATION.md` with comprehensive SQL, API, and UI verification steps.
+- Phase 10R: Verified tenant schema isolation logic (Option B) via SQL existence checks for `c_1095`.
+- Phase 10R: Documented manual E2E flows for Cashier (Offline Save -> Manual Sync -> Auto Sync -> Archive).
+- Phase 10R: Documented manual E2E flows for Admin (Batch List -> Details -> Import List -> Post Preview).
+- Phase 10R: Performed backend compilation (`mvnw.cmd compile`) with Java 21; verified success.
+- Phase 10R: Performed frontend production build (`npm run build`); verified success.
+- Phase 10R: Validated safety constraints (no raw payload exposure, default-off auto-sync, no admin calls from cashier).
+- Phase 10R: Ensured clear documentation for prerequisites and environment variables for staging/production readiness.

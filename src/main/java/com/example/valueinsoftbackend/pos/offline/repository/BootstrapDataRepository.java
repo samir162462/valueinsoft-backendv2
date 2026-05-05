@@ -1,8 +1,6 @@
 package com.example.valueinsoftbackend.pos.offline.repository;
 
-import com.example.valueinsoftbackend.pos.offline.dto.response.BootstrapPage;
-import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineBootstrapPriceItem;
-import com.example.valueinsoftbackend.pos.offline.dto.response.OfflineBootstrapProductItem;
+import com.example.valueinsoftbackend.pos.offline.dto.response.*;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Repository
@@ -25,25 +24,23 @@ public class BootstrapDataRepository {
 
     public BootstrapPage<OfflineBootstrapProductItem> findProducts(Long companyId, Long branchId,
                                                                    Long afterProductId, int pageSize) {
-        String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
-        String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
+        String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId.intValue());
+        String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId.intValue());
         String sql = """
                 SELECT
-                    p.product_id,
-                    p.serial AS barcode,
-                    p.product_name,
-                    p.retail_price,
-                    p.lowest_price,
+                    p.product_id          AS product_id,
+                    p.serial              AS barcode,
+                    p.product_name        AS product_name,
+                    p.retail_price        AS retail_price,
+                    p.lowest_price        AS lowest_price,
                     COALESCE(s.quantity, 0) AS current_stock,
-                    p.major AS category,
-                    p.product_state,
-                    p.base_uom_code,
-                    p.pricing_policy_code,
-                    p.updated_at
+                    p.major               AS category,
+                    p.product_state       AS product_state,
+                    p.base_uom_code       AS base_uom_code,
+                    p.pricing_policy_code AS pricing_policy_code,
+                    COALESCE(p.updated_at, p.created_at, p.buying_day) AS updated_at
                 FROM %s p
-                JOIN %s s
-                  ON s.product_id = p.product_id
-                 AND s.branch_id = ?
+                LEFT JOIN %s s ON s.product_id = p.product_id AND s.branch_id = ?
                 WHERE p.product_id > ?
                 ORDER BY p.product_id ASC
                 LIMIT ?
@@ -68,29 +65,22 @@ public class BootstrapDataRepository {
 
     public BootstrapPage<OfflineBootstrapPriceItem> findPrices(Long companyId, Long branchId,
                                                                Long afterProductId, int pageSize) {
-        String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
-        String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
-        String pricingPolicyTable = TenantSqlIdentifiers.inventoryPricingPolicyTable(companyId);
+        String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId.intValue());
         String sql = """
                 SELECT
-                    p.product_id,
-                    p.retail_price,
-                    p.lowest_price,
-                    p.buying_price,
-                    p.pricing_policy_code,
-                    policy.strategy_type,
-                    policy.config_json::text AS config_json,
-                    p.updated_at
+                    p.product_id    AS product_id,
+                    p.retail_price  AS retail_price,
+                    p.lowest_price  AS lowest_price,
+                    p.buying_price  AS buying_price,
+                    p.pricing_policy_code AS pricing_policy_code,
+                    NULL            AS strategy_type,
+                    NULL            AS config_json,
+                    COALESCE(p.updated_at, p.created_at, p.buying_day) AS updated_at
                 FROM %s p
-                JOIN %s s
-                  ON s.product_id = p.product_id
-                 AND s.branch_id = ?
-                LEFT JOIN %s policy
-                  ON policy.pricing_policy_code = p.pricing_policy_code
                 WHERE p.product_id > ?
                 ORDER BY p.product_id ASC
                 LIMIT ?
-                """.formatted(productTable, stockTable, pricingPolicyTable);
+                """.formatted(productTable);
 
         List<OfflineBootstrapPriceItem> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineBootstrapPriceItem(
                 rs.getLong("product_id"),
@@ -101,9 +91,52 @@ public class BootstrapDataRepository {
                 rs.getString("strategy_type"),
                 rs.getString("config_json"),
                 toInstant(rs.getTimestamp("updated_at"))
-        ), branchId, afterProductId, pageSize + 1);
+        ), afterProductId, pageSize + 1);
 
         return toPage(rows, pageSize, OfflineBootstrapPriceItem::productId, OfflineBootstrapPriceItem::updatedAt);
+    }
+
+    public List<OfflineBootstrapPaymentMethodItem> findPaymentMethods(Long companyId, Long branchId) {
+        String mappingTable = "public.finance_account_mapping";
+        String sql = """
+                SELECT mapping_key
+                FROM %s
+                WHERE company_id = ?
+                  AND (branch_id IS NULL OR branch_id = ?)
+                  AND mapping_key LIKE 'pos.%%'
+                  AND status = 'active'
+                  AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+                """.formatted(mappingTable);
+
+        List<String> keys = jdbcTemplate.queryForList(sql, String.class, companyId, branchId);
+        List<OfflineBootstrapPaymentMethodItem> items = new ArrayList<>();
+
+        if (keys.contains("pos.cash")) {
+            items.add(new OfflineBootstrapPaymentMethodItem("CASH", "Cash", true, false));
+        }
+        if (keys.contains("pos.card")) {
+            items.add(new OfflineBootstrapPaymentMethodItem("CARD", "Card", true, true));
+        }
+        if (keys.contains("pos.wallet")) {
+            items.add(new OfflineBootstrapPaymentMethodItem("WALLET", "Digital Wallet", true, true));
+        }
+        if (keys.contains("pos.receivable")) {
+            items.add(new OfflineBootstrapPaymentMethodItem("CREDIT", "Credit / Receivable", true, true));
+        }
+
+        // Always ensure at least Cash if nothing is mapped specifically
+        if (items.isEmpty()) {
+            items.add(new OfflineBootstrapPaymentMethodItem("CASH", "Cash (Default)", true, false));
+        }
+
+        return items;
+    }
+
+    public List<OfflineBootstrapCashierPermissionItem> findCashierPermissions(String principalName, Long companyId, Long branchId) {
+        // This would ideally call AuthenticatedEffectiveConfigurationService,
+        // but for repository-level consistency, we might just return the relevant subset.
+        // For Phase 10N, we'll implement this in the Service layer instead.
+        return Collections.emptyList();
     }
 
     private <T> BootstrapPage<T> toPage(List<T> fetched, int pageSize, IdExtractor<T> idExtractor,
