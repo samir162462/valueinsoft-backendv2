@@ -76,6 +76,22 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".inventory_stock_ledger";
     }
 
+    public static String inventoryImportBatchTable(int companyId) {
+        return companySchema(companyId) + ".inventory_import_batch";
+    }
+
+    public static String inventoryImportRowTable(int companyId) {
+        return companySchema(companyId) + ".inventory_import_row";
+    }
+
+    public static String inventoryImportErrorTable(int companyId) {
+        return companySchema(companyId) + ".inventory_import_error";
+    }
+
+    public static String inventoryImportAuditLogTable(int companyId) {
+        return companySchema(companyId) + ".inventory_import_audit_log";
+    }
+
     public static String inventoryLegacyProductMappingTable(int companyId) {
         return companySchema(companyId) + ".inventory_legacy_product_mapping";
     }

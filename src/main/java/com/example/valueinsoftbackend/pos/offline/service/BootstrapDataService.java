@@ -92,10 +92,10 @@ public class BootstrapDataService {
             case PRODUCTS -> dataRepo.findProducts(companyId, branchId, afterId, pageSize);
             case PRICES -> dataRepo.findPrices(companyId, branchId, afterId, pageSize);
             case PAYMENT_METHODS -> staticPage(dataRepo.findPaymentMethods(companyId, branchId));
-            case POS_SETTINGS -> staticPage(defaultPosSettings());
+            case POS_SETTINGS -> staticPage(posSettings(companyId, branchId));
             case CASHIER_PERMISSIONS -> staticPage(fetchRealCashierPermissions(principalName, companyId, branchId));
-            case TAXES -> staticPage(defaultTaxes());
-            case DISCOUNTS -> staticPage(defaultDiscounts());
+            case TAXES -> staticPage(dataRepo.findTaxes(companyId));
+            case DISCOUNTS -> staticPage(dataRepo.findDiscounts(companyId, branchId));
         };
 
         log.info("Bootstrap data request: companyId={}, branchId={}, dataType={}, pageSize={}",
@@ -141,18 +141,15 @@ public class BootstrapDataService {
         return new BootstrapPage<>(items, false, null, Instant.now());
     }
 
-    private List<OfflineBootstrapPaymentMethodItem> defaultPaymentMethods() {
-        return List.of(
-                new OfflineBootstrapPaymentMethodItem("CASH", "Cash", true, false),
-                new OfflineBootstrapPaymentMethodItem("CARD", "Card", true, true)
-        );
-    }
-
-    private List<OfflineBootstrapPosSettingItem> defaultPosSettings() {
-        return List.of(
-                new OfflineBootstrapPosSettingItem("allowOfflineSales", true),
-                new OfflineBootstrapPosSettingItem("stockPolicy", "WARN")
-        );
+    private List<OfflineBootstrapPosSettingItem> posSettings(Long companyId, Long branchId) {
+        List<OfflineBootstrapPosSettingItem> items = new ArrayList<>();
+        items.add(new OfflineBootstrapPosSettingItem("allowOfflineSales", props.isAllowOfflineSync()));
+        items.add(new OfflineBootstrapPosSettingItem("stockPolicy", "WARN"));
+        items.add(new OfflineBootstrapPosSettingItem("maxOrdersPerBatch", props.getMaxOrdersPerBatch()));
+        items.add(new OfflineBootstrapPosSettingItem("maxItemsPerOrder", props.getMaxItemsPerOrder()));
+        items.add(new OfflineBootstrapPosSettingItem("maxOfflineHoursDefault", props.getMaxOfflineHoursDefault()));
+        items.addAll(dataRepo.findPosSettings(companyId, branchId));
+        return items;
     }
 
     private List<OfflineBootstrapCashierPermissionItem> fetchRealCashierPermissions(String principalName, Long companyId, Long branchId) {
@@ -175,11 +172,4 @@ public class BootstrapDataService {
         }
     }
 
-    private List<OfflineBootstrapTaxItem> defaultTaxes() {
-        return Collections.emptyList();
-    }
-
-    private List<OfflineBootstrapDiscountItem> defaultDiscounts() {
-        return Collections.emptyList();
-    }
 }

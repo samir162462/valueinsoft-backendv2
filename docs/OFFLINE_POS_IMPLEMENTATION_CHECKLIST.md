@@ -13,6 +13,8 @@ Phase 10O - Auto Sync on Reconnect, Disabled by Default: completed on 2026-05-06
 Phase 10P - Queue Cleanup and Archive Synced Orders: completed on 2026-05-06.
 Phase 10Q - Backend Reachability Check Before Auto-Sync: completed on 2026-05-06.
 Phase 10R - Live PostgreSQL and Browser End-to-End Verification: completed on 2026-05-06.
+Phase 10S - Cashier POS Settings Readiness Enforcement: completed on 2026-05-08.
+Phase 10T - Real POS Settings, Tax, and Discount Bootstrap Sources: completed on 2026-05-08.
 
 ## Tenant Isolation Decision
 
@@ -1763,3 +1765,39 @@ Recommended implementation shape:
 - Phase 10R: Performed frontend production build (`npm run build`); verified success.
 - Phase 10R: Validated safety constraints (no raw payload exposure, default-off auto-sync, no admin calls from cashier).
 - Phase 10R: Ensured clear documentation for prerequisites and environment variables for staging/production readiness.
+
+## Phase 10S Cashier POS Settings Readiness Enforcement
+
+### Frontend Readiness
+- Persisted POS settings bootstrap counts alongside product, price, payment method, permission, tax, and discount counts.
+- Added local POS settings lookup from `offline_pos_settings`.
+- Updated cashier readiness to require downloaded POS settings.
+- Enforced `allowOfflineSales=false` from cached POS settings as a local checkout block.
+- Updated the readiness panel to show payment, permission, and POS settings readiness signals.
+- Updated offline checkout feedback to distinguish missing POS settings from disabled offline sales.
+
+### Safety Result
+- Existing taxes and discounts remain cached for future rules but are not mandatory for the current single-cash offline MVP.
+- No backend posting behavior was changed.
+- No admin endpoint behavior was changed.
+- Frontend production build (`npm run build`) passed.
+- Backend compilation (`mvnw.cmd -q -DskipTests compile`) passed with Java 21.
+
+## Phase 10T Real POS Settings, Tax, and Discount Bootstrap Sources
+
+### Backend Bootstrap Sources
+- Replaced hardcoded `POS_SETTINGS`-only bootstrap behavior with branch setting reads from `public.branch_setting_definitions` and `public.branch_setting_values`.
+- Kept synthetic offline safety settings in the response: `allowOfflineSales`, `stockPolicy`, `maxOrdersPerBatch`, `maxItemsPerOrder`, and `maxOfflineHoursDefault`.
+- Replaced empty `TAXES` bootstrap with active company sales tax codes from `public.finance_tax_code`.
+- Replaced empty `DISCOUNTS` bootstrap with active branch tenant POS offers from `c_{companyId}.pos_offers`.
+- Parsed JSON branch setting values through `ObjectMapper` so booleans, numbers, and strings retain their proper JSON types in bootstrap responses.
+
+### Frontend Visibility
+- Extended the cashier readiness panel to show cached tax, discount, and POS settings counts after offline data update.
+
+### Safety Result
+- Bootstrap remains read-only.
+- Tenant POS discounts are read only from tenant schema `c_{companyId}`.
+- No backend posting behavior was changed.
+- Frontend production build (`npm run build`) passed.
+- Backend compilation (`mvnw.cmd -q -DskipTests compile`) passed with Java 21.

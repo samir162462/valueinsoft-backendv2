@@ -15,6 +15,7 @@ public class Order {
     int clientId;
     int orderIncome;
     int totalBouncedBack;
+    Integer requestedShiftId;
     ArrayList<OrderDetails> orderDetails;
 
 
@@ -32,6 +33,7 @@ public class Order {
         this.clientId = clientId;
         this.orderIncome = orderIncome;
         this.totalBouncedBack = totalBouncedBack;
+        this.requestedShiftId = null;
         this.orderDetails = orderDetails;
     }
 
@@ -121,6 +123,14 @@ public class Order {
 
     public void setTotalBouncedBack(int totalBouncedBack) {
         this.totalBouncedBack = totalBouncedBack;
+    }
+
+    public Integer getRequestedShiftId() {
+        return requestedShiftId;
+    }
+
+    public void setRequestedShiftId(Integer requestedShiftId) {
+        this.requestedShiftId = requestedShiftId;
     }
 
     public ArrayList<OrderDetails> getOrderDetails() {

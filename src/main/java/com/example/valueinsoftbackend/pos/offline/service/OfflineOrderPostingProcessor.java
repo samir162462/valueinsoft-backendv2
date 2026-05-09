@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.pos.offline.service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
+import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
@@ -42,6 +43,7 @@ public class OfflineOrderPostingProcessor {
     private static final int COMPACT_ERROR_LENGTH = 300;
 
     private final OfflineOrderImportRepository importRepo;
+    private final DbPosShiftPeriod dbPosShiftPeriod;
     private final PosIdempotencyService idempotencyService;
     private final PosSalePostingService posSalePostingService;
     private final SyncErrorService syncErrorService;
@@ -60,12 +62,14 @@ public class OfflineOrderPostingProcessor {
      * @param transactionTemplate  the template for transactional execution
      */
     public OfflineOrderPostingProcessor(OfflineOrderImportRepository importRepo,
+                                        DbPosShiftPeriod dbPosShiftPeriod,
                                         PosIdempotencyService idempotencyService,
                                         PosSalePostingService posSalePostingService,
                                         SyncErrorService syncErrorService,
                                         AuditLogService auditLogService,
                                         TransactionTemplate transactionTemplate) {
         this.importRepo = importRepo;
+        this.dbPosShiftPeriod = dbPosShiftPeriod;
         this.idempotencyService = idempotencyService;
         this.posSalePostingService = posSalePostingService;
         this.syncErrorService = syncErrorService;
@@ -191,14 +195,14 @@ public class OfflineOrderPostingProcessor {
                 importRecord.idempotencyKey(),
                 postedOrderId,
                 null,
-                resultMetadata(postedOrderId, null, FINANCE_STATUS_UNAVAILABLE, null));
+                resultMetadata(postedOrderId, posted.shiftId(), null, FINANCE_STATUS_UNAVAILABLE, null));
 
         auditLogService.logSyncEvent(
                 importRecord.companyId(), importRecord.branchId(), importRecord.syncBatchId(), importRecord.id(),
                 importRecord.deviceId(), importRecord.cashierId(),
                 "OFFLINE_POSTING_SUCCEEDED",
                 "Offline import posted as POS order " + postedOrderId,
-                resultMetadata(postedOrderId, null, FINANCE_STATUS_UNAVAILABLE, null));
+                resultMetadata(postedOrderId, posted.shiftId(), null, FINANCE_STATUS_UNAVAILABLE, null));
     }
 
     private void handleFinanceEnqueued(OfflineOrderImportModel importRecord,
@@ -209,7 +213,7 @@ public class OfflineOrderPostingProcessor {
                 .map(FinancePostingRequestItem::getPostingRequestId)
                 .orElse(null);
         String financeStatus = requestId == null ? FINANCE_STATUS_UNAVAILABLE : FINANCE_STATUS_ENQUEUED;
-        String metadataJson = resultMetadata(postedOrderId, requestId, financeStatus, null);
+        String metadataJson = resultMetadata(postedOrderId, postedResult.shiftId(), requestId, financeStatus, null);
         try {
             importRepo.updateFinanceEnqueueMetadata(
                     importRecord.companyId(),
@@ -243,7 +247,7 @@ public class OfflineOrderPostingProcessor {
                                             RuntimeException exception) {
         Long postedOrderId = (long) postedResult.orderId();
         String compactError = compact(exception.getMessage());
-        String metadataJson = resultMetadata(postedOrderId, null, FINANCE_STATUS_ENQUEUE_FAILED, compactError);
+        String metadataJson = resultMetadata(postedOrderId, postedResult.shiftId(), null, FINANCE_STATUS_ENQUEUE_FAILED, compactError);
         try {
             importRepo.updateFinanceEnqueueMetadata(
                     importRecord.companyId(),
@@ -282,11 +286,14 @@ public class OfflineOrderPostingProcessor {
         }
     }
 
-    private String resultMetadata(Long postedOrderId, UUID financePostingRequestId,
+    private String resultMetadata(Long postedOrderId, Integer shiftId, UUID financePostingRequestId,
                                   String financeStatus, String financeError) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("postedOrderId", postedOrderId);
         metadata.put("officialOrderId", postedOrderId);
+        if (shiftId != null) {
+            metadata.put("shiftId", shiftId);
+        }
         if (financePostingRequestId != null) {
             metadata.put("financePostingRequestId", financePostingRequestId.toString());
         }
@@ -357,7 +364,9 @@ public class OfflineOrderPostingProcessor {
         String orderType = paymentMethod(payload, payments);
         String salesUser = "offline-cashier-" + importRecord.cashierId();
 
-        return new Order(
+        Integer requestedShiftId = resolvePostingShiftId(importRecord, payload);
+
+        Order order = new Order(
                 0,
                 new Timestamp(System.currentTimeMillis()),
                 clientName,
@@ -370,6 +379,30 @@ public class OfflineOrderPostingProcessor {
                 orderTotal,
                 0,
                 details);
+        order.setRequestedShiftId(requestedShiftId);
+        return order;
+    }
+
+    private Integer resolvePostingShiftId(OfflineOrderImportModel importRecord, JsonObject payload) {
+        Integer preferredShiftId = optionalPositiveInteger(text(payload, "localShiftId", null));
+        Optional<Integer> resolved = dbPosShiftPeriod.findOpenShiftIdForPosting(
+                importRecord.companyId().intValue(),
+                importRecord.branchId().intValue(),
+                preferredShiftId);
+
+        if (resolved.isPresent()) {
+            return resolved.get();
+        }
+
+        if (preferredShiftId != null) {
+            throw new OfflineSyncException(
+                    "OFFLINE_SHIFT_NOT_OPEN",
+                    "Offline order references shift " + preferredShiftId + ", but that shift is not open for this branch");
+        }
+
+        throw new OfflineSyncException(
+                "OFFLINE_SHIFT_REQUIRED",
+                "Offline order cannot be posted because no open POS shift exists for this branch");
     }
 
     /**
@@ -453,6 +486,18 @@ public class OfflineOrderPostingProcessor {
             return parsed > 0 ? parsed : 0;
         } catch (Exception ex) {
             return 0;
+        }
+    }
+
+    private Integer optionalPositiveInteger(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            int parsed = Integer.parseInt(value.trim());
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException ex) {
+            return null;
         }
     }
 

@@ -45,12 +45,20 @@ public class DbPosOrder {
         Timestamp orderTime = new Timestamp(System.currentTimeMillis());
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         
-        // Resolve active shift for formal FK linkage
+        // Resolve shift for formal FK linkage. Offline sync can provide a preferred
+        // shift id; regular online POS sales fall back to the active branch shift.
         Integer shiftId = null;
         try {
             String shiftTable = TenantSqlIdentifiers.shiftPeriodTable(companyId);
-            String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable + " WHERE \"branchId\" = ? AND status = 'OPEN' ORDER BY \"PosSOID\" DESC LIMIT 1";
-            shiftId = jdbcTemplate.queryForObject(shiftSql, Integer.class, branchId);
+            if (order.getRequestedShiftId() != null && order.getRequestedShiftId() > 0) {
+                String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable +
+                        " WHERE \"PosSOID\" = ? AND \"branchId\" = ? AND status = 'OPEN' LIMIT 1";
+                shiftId = jdbcTemplate.queryForObject(shiftSql, Integer.class, order.getRequestedShiftId(), branchId);
+            } else {
+                String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable +
+                        " WHERE \"branchId\" = ? AND status = 'OPEN' ORDER BY \"PosSOID\" DESC LIMIT 1";
+                shiftId = jdbcTemplate.queryForObject(shiftSql, Integer.class, branchId);
+            }
         } catch (Exception e) {
             log.warn("No open shift found for company {} branch {} when creating order. Continuing with null shift_id.", companyId, branchId);
         }

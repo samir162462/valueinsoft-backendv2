@@ -14,6 +14,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Repository
 public class DbPosShiftPeriod {
@@ -80,6 +81,27 @@ public class DbPosShiftPeriod {
 
         List<Shift> shifts = jdbcTemplate.query(sql, SHIFT_ROW_MAPPER, branchId);
         return shifts.isEmpty() ? null : shifts.get(0);
+    }
+
+    public Optional<Integer> findOpenShiftIdForPosting(int companyId, int branchId, Integer preferredShiftId) {
+        String shiftTable = TenantSqlIdentifiers.shiftPeriodTable(companyId);
+
+        if (preferredShiftId != null && preferredShiftId > 0) {
+            String preferredSql = "SELECT \"PosSOID\" FROM " + shiftTable +
+                    " WHERE \"PosSOID\" = ? AND \"branchId\" = ? AND status = 'OPEN' LIMIT 1";
+            List<Integer> preferred = jdbcTemplate.query(preferredSql,
+                    (rs, rowNum) -> rs.getInt("PosSOID"),
+                    preferredShiftId,
+                    branchId);
+            return preferred.isEmpty() ? Optional.empty() : Optional.of(preferred.get(0));
+        }
+
+        String activeSql = "SELECT \"PosSOID\" FROM " + shiftTable +
+                " WHERE \"branchId\" = ? AND status = 'OPEN' ORDER BY \"PosSOID\" DESC LIMIT 1";
+        List<Integer> active = jdbcTemplate.query(activeSql,
+                (rs, rowNum) -> rs.getInt("PosSOID"),
+                branchId);
+        return active.isEmpty() ? Optional.empty() : Optional.of(active.get(0));
     }
 
     public Shift getShiftById(int companyId, int shiftId) {

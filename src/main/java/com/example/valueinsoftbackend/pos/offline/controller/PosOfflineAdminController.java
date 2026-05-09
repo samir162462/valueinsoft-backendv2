@@ -311,28 +311,39 @@ public class PosOfflineAdminController {
                     0, Math.max(0, beforeCounts.totalCount() - beforeCounts.validatedCount()),
                     false, blockedWarnings));
         }
+        int prepared = prepareImportsForPosting(companyId, branchId, batchId, beforeCounts);
+        OfflineImportStatusCounts postingCounts = syncService.getImportStatusCounts(companyId, branchId, batchId);
+        warnings = postingWarnings(postingCounts);
         int maxPostBatchSize = Math.max(1, adminProperties.getMaxPostBatchSize());
-        if (beforeCounts.validatedCount() > maxPostBatchSize) {
+        if (postingCounts.validatedCount() > maxPostBatchSize) {
             String message = "Eligible posting count exceeds configured admin posting limit of " + maxPostBatchSize + ".";
             List<String> blockedWarnings = withWarning(warnings, message);
             audit(companyId, branchId, batchId, "OFFLINE_ADMIN_POST_BLOCKED", principalName, reason, message);
             return ResponseEntity.ok(response(companyId, branchId, batchId, "POST", false, message,
-                    0, Math.max(0, beforeCounts.totalCount() - beforeCounts.validatedCount()),
+                    prepared, Math.max(0, postingCounts.totalCount() - postingCounts.validatedCount()),
                     false, blockedWarnings));
         }
-        if (forceRequired(beforeCounts) && !force(request)) {
+        if (postingCounts.validatedCount() == 0) {
+            String message = "No validated offline imports are eligible for posting after processing and validation.";
+            List<String> blockedWarnings = withWarning(warnings, message);
+            audit(companyId, branchId, batchId, "OFFLINE_ADMIN_POST_BLOCKED", principalName, reason, message);
+            return ResponseEntity.ok(response(companyId, branchId, batchId, "POST", false, message,
+                    prepared, postingCounts.totalCount(),
+                    true, blockedWarnings));
+        }
+        if (forceRequired(postingCounts) && !force(request)) {
             String message = "Force confirmation is required because the batch has posting safety warnings.";
             List<String> blockedWarnings = withWarning(warnings, message);
             audit(companyId, branchId, batchId, "OFFLINE_ADMIN_POST_BLOCKED", principalName, reason, message);
             return ResponseEntity.ok(response(companyId, branchId, batchId, "POST", false, message,
-                    0, Math.max(0, beforeCounts.totalCount() - beforeCounts.validatedCount()),
+                    prepared, Math.max(0, postingCounts.totalCount() - postingCounts.validatedCount()),
                     false, blockedWarnings));
         }
         audit(companyId, branchId, batchId, "OFFLINE_ADMIN_POST_REQUESTED", principalName, reason, null);
         int posted = syncService.postValidatedImports(companyId, branchId, batchId);
-        int skipped = Math.max(0, beforeCounts.totalCount() - beforeCounts.validatedCount());
+        int skipped = Math.max(0, postingCounts.totalCount() - postingCounts.validatedCount());
         return ResponseEntity.ok(response(companyId, branchId, batchId, "POST", true,
-                "Operation completed", posted, skipped, true, warnings));
+                "Operation completed", prepared + posted, skipped, true, warnings));
     }
 
     @PostMapping("/batches/{batchId}/post-preview")
@@ -448,16 +459,44 @@ public class PosOfflineAdminController {
 
     private List<String> postingWarnings(OfflineImportStatusCounts counts) {
         List<String> warnings = new ArrayList<>();
+        if (counts.pendingCount() + counts.pendingRetryCount() > 0) {
+            warnings.add("Batch contains pending imports; posting will process them before validation.");
+        }
+        if (counts.readyForValidationCount() > 0) {
+            warnings.add("Batch contains imports ready for validation; posting will validate them first.");
+        }
         if (counts.postingCount() > 0) {
             warnings.add("Batch contains POSTING imports; review them before retrying any stuck posting rows.");
         }
         if (counts.needsReviewCount() > 0) {
             warnings.add("Batch contains NEEDS_REVIEW imports requiring manual review.");
         }
-        if (counts.validatedCount() == 0) {
-            warnings.add("No VALIDATED imports are currently eligible for posting.");
+        if (postCandidateCount(counts) == 0) {
+            if (counts.totalCount() > 0 && counts.syncedCount() == counts.totalCount()) {
+                warnings.add("All imports are already synced; nothing remains to post.");
+            } else if (counts.issueCount() > 0) {
+                warnings.add("No postable imports remain; review failed, duplicate, validation-failed, posting-failed, or needs-review rows.");
+            } else if (counts.totalCount() == 0) {
+                warnings.add("No imports exist in this batch.");
+            } else {
+                warnings.add("No VALIDATED imports are currently eligible for posting.");
+            }
         }
         return warnings;
+    }
+
+    private int prepareImportsForPosting(Long companyId, Long branchId, Long batchId, OfflineImportStatusCounts counts) {
+        int prepared = 0;
+        if (counts.pendingCount() + counts.pendingRetryCount() > 0) {
+            prepared += syncService.processPendingImports(companyId, branchId, batchId);
+        }
+
+        OfflineImportStatusCounts afterProcessing = syncService.getImportStatusCounts(companyId, branchId, batchId);
+        if (afterProcessing.readyForValidationCount() > 0) {
+            prepared += syncService.validateReadyImports(companyId, branchId, batchId);
+        }
+
+        return prepared;
     }
 
     private OfflineAdminBatchDetailsResponse batchDetailsResponse(Long companyId, Long branchId, Long batchId) {
@@ -576,14 +615,8 @@ public class PosOfflineAdminController {
         if (!adminProperties.isPostingEnabled()) {
             reasons.add("ADMIN_POSTING_DISABLED");
         }
-        if (counts.validatedCount() == 0) {
-            reasons.add("NO_VALIDATED_IMPORTS");
-        }
-        if (counts.postingCount() > 0) {
-            reasons.add("POSTING_ROWS_EXIST");
-        }
-        if (counts.needsReviewCount() > 0) {
-            reasons.add("NEEDS_REVIEW_ROWS_EXIST");
+        if (postCandidateCount(counts) == 0) {
+            reasons.add("NO_POSTABLE_IMPORTS");
         }
         if (counts.validatedCount() > Math.max(1, adminProperties.getMaxPostBatchSize())) {
             reasons.add("MAX_POST_BATCH_SIZE_EXCEEDED");
@@ -591,8 +624,15 @@ public class PosOfflineAdminController {
         return reasons;
     }
 
+    private int postCandidateCount(OfflineImportStatusCounts counts) {
+        return counts.pendingCount()
+                + counts.pendingRetryCount()
+                + counts.readyForValidationCount()
+                + counts.validatedCount();
+    }
+
     private List<String> detailsWarnings(OfflineImportStatusCounts counts) {
-        List<String> warnings = previewWarnings(counts);
+        List<String> warnings = postingWarnings(counts);
         if (!adminProperties.isPostingEnabled()) {
             warnings.add("Admin posting is disabled by configuration.");
         }

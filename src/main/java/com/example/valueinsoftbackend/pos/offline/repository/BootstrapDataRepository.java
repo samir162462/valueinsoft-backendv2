@@ -2,6 +2,8 @@ package com.example.valueinsoftbackend.pos.offline.repository;
 
 import com.example.valueinsoftbackend.pos.offline.dto.response.*;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -17,9 +19,11 @@ import java.util.List;
 public class BootstrapDataRepository {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
 
-    public BootstrapDataRepository(JdbcTemplate jdbcTemplate) {
+    public BootstrapDataRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public BootstrapPage<OfflineBootstrapProductItem> findProducts(Long companyId, Long branchId,
@@ -132,11 +136,85 @@ public class BootstrapDataRepository {
         return items;
     }
 
+    public List<OfflineBootstrapPosSettingItem> findPosSettings(Long companyId, Long branchId) {
+        String sql = """
+                SELECT d.setting_key AS setting_key,
+                       COALESCE(v.value_json, d.default_value_json)::text AS value_json
+                FROM public.branch_setting_definitions d
+                LEFT JOIN public.branch_setting_values v
+                  ON v.setting_key = d.setting_key
+                 AND v.tenant_id = ?
+                 AND v.branch_id = ?
+                 AND v.active = TRUE
+                WHERE d.active = TRUE
+                  AND d.group_key = 'pos'
+                ORDER BY d.sort_order, d.setting_key
+                """;
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineBootstrapPosSettingItem(
+                rs.getString("setting_key"),
+                readJsonValue(rs.getString("value_json"))
+        ), companyId, branchId);
+    }
+
+    public List<OfflineBootstrapTaxItem> findTaxes(Long companyId) {
+        String sql = """
+                SELECT code, name, rate, status
+                FROM public.finance_tax_code
+                WHERE company_id = ?
+                  AND status = 'active'
+                  AND effective_from <= CURRENT_DATE
+                  AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+                  AND tax_type IN ('sales_vat', 'exempt', 'zero_rated')
+                ORDER BY code
+                """;
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineBootstrapTaxItem(
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getBigDecimal("rate"),
+                "active".equalsIgnoreCase(rs.getString("status"))
+        ), companyId);
+    }
+
+    public List<OfflineBootstrapDiscountItem> findDiscounts(Long companyId, Long branchId) {
+        String offerTable = TenantSqlIdentifiers.offerTable(companyId.intValue());
+        String sql = """
+                SELECT offer_id, offer_name, offer_type, offer_value, is_active
+                FROM %s
+                WHERE branch_id = ?
+                  AND is_active = TRUE
+                  AND (start_date IS NULL OR start_date <= CURRENT_TIMESTAMP)
+                  AND (end_date IS NULL OR end_date >= CURRENT_TIMESTAMP)
+                ORDER BY offer_id
+                """.formatted(offerTable);
+
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineBootstrapDiscountItem(
+                "OFFER-" + rs.getLong("offer_id"),
+                rs.getString("offer_name"),
+                rs.getString("offer_type"),
+                rs.getBigDecimal("offer_value"),
+                rs.getBoolean("is_active")
+        ), branchId);
+    }
+
     public List<OfflineBootstrapCashierPermissionItem> findCashierPermissions(String principalName, Long companyId, Long branchId) {
         // This would ideally call AuthenticatedEffectiveConfigurationService,
         // but for repository-level consistency, we might just return the relevant subset.
         // For Phase 10N, we'll implement this in the Service layer instead.
         return Collections.emptyList();
+    }
+
+    private Object readJsonValue(String valueJson) {
+        if (valueJson == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(valueJson, Object.class);
+        } catch (JsonProcessingException ex) {
+            log.warn("Unable to parse branch setting JSON value for offline bootstrap");
+            return valueJson;
+        }
     }
 
     private <T> BootstrapPage<T> toPage(List<T> fetched, int pageSize, IdExtractor<T> idExtractor,

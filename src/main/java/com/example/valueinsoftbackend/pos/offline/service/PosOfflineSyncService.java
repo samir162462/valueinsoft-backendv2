@@ -16,6 +16,7 @@ import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -96,7 +97,11 @@ public class PosOfflineSyncService {
          * @return the result of the batch upload reception
          * @throws OfflineSyncException if sync is disabled, the batch is too large, or hardware is ineligible
          */
+        @Transactional
         public OfflineSyncUploadResponse uploadOfflineSync(OfflineSyncUploadRequest request, String principalName) {
+                log.info("Starting offline sync upload: clientBatchId={}, companyId={}, branchId={}, orders={}",
+                                request.clientBatchId(), request.companyId(), request.branchId(), request.orders().size());
+
                 // 1. Global feature gate
                 if (!props.isAllowOfflineSync()) {
                         throw new OfflineSyncException("OFFLINE_SYNC_DISABLED",
@@ -145,12 +150,43 @@ public class PosOfflineSyncService {
                                 "Received batch with " + request.orders().size() + " orders from " + principalName,
                                 null);
 
+                runImmediateLifecycle(request.companyId(), request.branchId(), batchId);
+                PosSyncBatchModel completedBatch = batchRepo.findById(request.companyId(), request.branchId(), batchId)
+                                .orElseThrow(() -> new OfflineSyncException(
+                                                "BATCH_NOT_FOUND", "Sync batch not found after upload: " + batchId));
+
                 return new OfflineSyncUploadResponse(
                                 batchId, request.clientBatchId(),
-                                PosSyncBatchStatus.RECEIVED,
-                                request.orders().size(),
-                                0, 0, 0, 0,
-                                results);
+                                completedBatch.status(),
+                                completedBatch.totalOrders(),
+                                completedBatch.syncedOrders(),
+                                completedBatch.failedOrders(),
+                                completedBatch.duplicateOrders(),
+                                completedBatch.needsReviewOrders(),
+                                uploadResultsFromImports(request.companyId(), request.branchId(), batchId));
+        }
+
+        private void runImmediateLifecycle(Long companyId, Long branchId, Long batchId) {
+                int processed = processPendingImports(companyId, branchId, batchId);
+                int validated = validateReadyImports(companyId, branchId, batchId);
+                int posted = postValidatedImports(companyId, branchId, batchId);
+                batchRepo.recalculateSummary(companyId, branchId, batchId);
+                log.info("Offline sync batch immediate lifecycle completed: companyId={}, branchId={}, batchId={}, processed={}, validated={}, posted={}",
+                                companyId, branchId, batchId, processed, validated, posted);
+        }
+
+        private List<OfflineOrderSyncResult> uploadResultsFromImports(Long companyId, Long branchId, Long batchId) {
+                return importRepo.findByBatchId(companyId, branchId, batchId).stream()
+                                .map(importRecord -> new OfflineOrderSyncResult(
+                                                importRecord.offlineOrderNo(),
+                                                importRecord.idempotencyKey(),
+                                                importRecord.status(),
+                                                importRecord.officialOrderId(),
+                                                importRecord.officialInvoiceNo(),
+                                                importRecord.errorCode(),
+                                                importRecord.errorMessage(),
+                                                Collections.emptyList()))
+                                .toList();
         }
 
         /**
