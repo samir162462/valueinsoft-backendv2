@@ -1,10 +1,10 @@
 package com.example.valueinsoftbackend.pos.offline.service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
+import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
 import com.example.valueinsoftbackend.Service.PosSalePostingService;
 import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus;
 import com.example.valueinsoftbackend.pos.offline.enums.PosIdempotencyStatus;
-import com.example.valueinsoftbackend.pos.offline.exception.OfflineSyncException;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineOrderImportModel;
 import com.example.valueinsoftbackend.pos.offline.model.PosIdempotencyModel;
 import com.example.valueinsoftbackend.pos.offline.repository.OfflineOrderImportRepository;
@@ -42,13 +42,16 @@ class OfflineOrderPostingProcessorTest {
     private PosSalePostingService posSalePostingService;
 
     @Mock
+    private TransactionTemplate transactionTemplate;
+
+    @Mock
+    private DbPosShiftPeriod dbPosShiftPeriod;
+
+    @Mock
     private SyncErrorService syncErrorService;
 
     @Mock
     private AuditLogService auditLogService;
-
-    @Mock
-    private TransactionTemplate transactionTemplate;
 
     @InjectMocks
     private OfflineOrderPostingProcessor postingProcessor;
@@ -72,6 +75,10 @@ class OfflineOrderPostingProcessorTest {
             callback.accept(mock(TransactionStatus.class));
             return null;
         }).when(transactionTemplate).executeWithoutResult(any());
+
+        // Mock shift period to return a valid shift ID
+        lenient().when(dbPosShiftPeriod.findOpenShiftIdForPosting(anyInt(), anyInt(), any()))
+                .thenReturn(Optional.of(1));
     }
 
     @Test
@@ -96,13 +103,13 @@ class OfflineOrderPostingProcessorTest {
                 .thenReturn(createIdempotencyModel(null));
 
         DbPosOrder.AddOrderResult result = new DbPosOrder.AddOrderResult(999, 1, new java.sql.Timestamp(System.currentTimeMillis()));
-        when(posSalePostingService.postSale(anyInt(), any())).thenReturn(result);
+        when(posSalePostingService.postSale(anyInt(), any(), any(), any())).thenReturn(result);
 
         boolean processed = postingProcessor.postNextValidatedImport(COMPANY_ID, BRANCH_ID, BATCH_ID);
 
         assertTrue(processed);
-        verify(importRepo).markPostingSynced(eq(COMPANY_ID), eq(BRANCH_ID), eq(IMPORT_ID), eq(999L));
-        verify(idempotencyService).markSynced(eq(COMPANY_ID), eq(BRANCH_ID), anyLong(), eq(IDEMPOTENCY_KEY), eq(999L), isNull());
+        verify(importRepo).markPostingSynced(eq(COMPANY_ID), eq(BRANCH_ID), eq(IMPORT_ID), eq(999L), anyString(), isNull());
+        verify(idempotencyService).markSynced(eq(COMPANY_ID), eq(BRANCH_ID), anyLong(), eq(IDEMPOTENCY_KEY), eq(999L), isNull(), anyString());
     }
 
     @Test
@@ -172,11 +179,32 @@ class OfflineOrderPostingProcessorTest {
     }
 
     private OfflineOrderImportModel createImportModel(String payloadJson, Long officialOrderId) {
+        Instant now = Instant.now();
         return new OfflineOrderImportModel(
-                IMPORT_ID, BATCH_ID, COMPANY_ID, BRANCH_ID, 10L, 5L,
-                "ORD-001", IDEMPOTENCY_KEY, Instant.now(), payloadJson, PAYLOAD_HASH,
-                OfflineOrderImportStatus.VALIDATED, officialOrderId, null, null, null, 0,
-                Instant.now(), null, null, Instant.now()
+                IMPORT_ID,            // id
+                BATCH_ID,             // syncBatchId
+                COMPANY_ID,           // companyId
+                BRANCH_ID,            // branchId
+                10L,                  // deviceId
+                5L,                   // cashierId
+                "ORD-001",          // offlineOrderNo
+                "local-ord-001",    // localOrderId
+                "DEV-001",          // deviceCode
+                IDEMPOTENCY_KEY,      // idempotencyKey
+                now,                  // localOrderCreatedAt
+                now,                  // clientCreatedAt
+                payloadJson,          // payloadJson
+                PAYLOAD_HASH,         // payloadHash
+                OfflineOrderImportStatus.VALIDATED, // status
+                officialOrderId,      // officialOrderId
+                null,                 // officialInvoiceNo
+                null,                 // errorCode
+                null,                 // errorMessage
+                0,                    // retryCount
+                now,                  // createdAt
+                null,                 // processingStartedAt
+                null,                 // processedAt
+                now                   // updatedAt
         );
     }
 

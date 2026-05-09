@@ -1,8 +1,10 @@
 package com.example.valueinsoftbackend.pos.offline.service;
 
 import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus;
+import com.example.valueinsoftbackend.pos.offline.enums.PosIdempotencyStatus;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineOrderImportModel;
 import com.example.valueinsoftbackend.pos.offline.model.OfflineValidationProductSnapshot;
+import com.example.valueinsoftbackend.pos.offline.model.PosIdempotencyModel;
 import com.example.valueinsoftbackend.pos.offline.model.PosDeviceModel;
 import com.example.valueinsoftbackend.pos.offline.repository.OfflineOrderValidationRepository;
 import com.example.valueinsoftbackend.pos.offline.repository.PosDeviceRepository;
@@ -17,9 +19,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.lenient;
@@ -51,8 +51,24 @@ class OfflineOrderImportValidationServiceTest {
     void setUp() {
         // Default mocks for basic tenant checks
         lenient().when(validationRepo.branchBelongsToCompany(COMPANY_ID, BRANCH_ID)).thenReturn(true);
+        lenient().when(validationRepo.cashierBelongsToBranch(20L, BRANCH_ID)).thenReturn(true);
         lenient().when(deviceRepo.findById(eq(COMPANY_ID), eq(BRANCH_ID), eq(DEVICE_ID)))
                 .thenReturn(Optional.of(mock(PosDeviceModel.class)));
+        lenient().when(idempotencyService.requireMatchingRecord(
+                        eq(COMPANY_ID), eq(BRANCH_ID), eq(DEVICE_ID), eq(IDEMPOTENCY_KEY), eq(PAYLOAD_HASH)))
+                .thenReturn(new PosIdempotencyModel(
+                        1L,
+                        COMPANY_ID,
+                        BRANCH_ID,
+                        DEVICE_ID,
+                        IDEMPOTENCY_KEY,
+                        "ORD-001",
+                        PAYLOAD_HASH,
+                        PosIdempotencyStatus.RECEIVED,
+                        null,
+                        null,
+                        Instant.now(),
+                        Instant.now()));
     }
 
     @Test
@@ -193,11 +209,32 @@ class OfflineOrderImportValidationServiceTest {
     }
 
     private OfflineOrderImportModel createImportModel(String payloadJson) {
+        Instant now = Instant.now();
         return new OfflineOrderImportModel(
-                1L, 100L, COMPANY_ID, BRANCH_ID, DEVICE_ID, null,
-                "ORD-001", IDEMPOTENCY_KEY, Instant.now(), payloadJson, PAYLOAD_HASH,
-                OfflineOrderImportStatus.PENDING, null, null, null, null, 0,
-                Instant.now(), null, null, Instant.now()
+                1L,            // id
+                100L,          // syncBatchId
+                COMPANY_ID,    // companyId
+                BRANCH_ID,     // branchId
+                DEVICE_ID,     // deviceId
+                20L,           // cashierId
+                "ORD-001",   // offlineOrderNo
+                "local-ord-001", // localOrderId
+                "DEV-001",   // deviceCode
+                IDEMPOTENCY_KEY, // idempotencyKey
+                now,           // localOrderCreatedAt
+                now,           // clientCreatedAt
+                payloadJson,   // payloadJson
+                PAYLOAD_HASH,  // payloadHash
+                OfflineOrderImportStatus.PENDING, // status
+                null,          // officialOrderId
+                null,          // officialInvoiceNo
+                null,          // errorCode
+                null,          // errorMessage
+                0,             // retryCount
+                now,           // createdAt
+                null,          // processingStartedAt
+                null,          // processedAt
+                now            // updatedAt
         );
     }
 

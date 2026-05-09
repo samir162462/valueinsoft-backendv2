@@ -67,6 +67,12 @@ class PosOfflineSyncServiceTest {
         when(batchRepo.insertBatch(anyLong(), anyLong(), anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyInt(), any(), any()))
                 .thenReturn(1000L);
 
+        PosSyncBatchModel batch = new PosSyncBatchModel(
+                1000L, COMPANY_ID, BRANCH_ID, DEVICE_ID, 50L, "B-123", "ANDROID", "Pixel", "1.0",
+                PosSyncBatchStatus.RECEIVED, 0, 0, 0, 0, 0, Instant.now(), Instant.now(), null, Instant.now(), Instant.now()
+        );
+        when(batchRepo.findById(eq(COMPANY_ID), eq(BRANCH_ID), eq(1000L))).thenReturn(Optional.of(batch));
+
         OfflineSyncUploadResponse response = syncService.uploadOfflineSync(request, "user1");
 
         assertNotNull(response);

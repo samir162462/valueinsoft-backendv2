@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.example.valueinsoftbackend.pos.offline.dto.request.OfflineOrderItemRequest;
 import com.example.valueinsoftbackend.pos.offline.dto.request.OfflineOrderRequest;
+import com.example.valueinsoftbackend.pos.offline.dto.request.OfflinePaymentRequest;
 import java.math.BigDecimal;
 import java.security.Principal;
 import java.time.Instant;
@@ -129,11 +130,26 @@ class PosOfflineSyncControllerTest {
     @Test
     void uploadOfflineSyncSuccess() throws Exception {
         OfflineOrderRequest order = new OfflineOrderRequest(
-                "ORD-001", "IDEM-001", Instant.now(), null, null, "POS", "USD",
-                BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.TEN,
-                "PAID", "SHIFT-1", null, 
-                List.of(new OfflineOrderItemRequest(1L, "BAR-001", "Product Snapshot", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.TEN)), 
-                List.of());
+                "ORD-001",                // offlineOrderNo
+                "local-ord-001",          // localOrderId
+                "IDEM-001",               // idempotencyKey
+                Instant.now(),             // localOrderCreatedAt
+                null,                      // clientCreatedAt
+                "POS",                    // deviceCode
+                501L,                      // cashierId
+                null,                      // customerId
+                null,                      // localCustomer
+                "POS",                    // saleType
+                "USD",                    // currencyCode
+                BigDecimal.TEN,            // subtotalAmount
+                BigDecimal.ZERO,           // discountAmount
+                BigDecimal.ZERO,           // taxAmount
+                BigDecimal.TEN,            // totalAmount
+                "PAID",                   // paymentStatus
+                "SHIFT-1",                // localShiftId
+                null,                      // notes
+                List.of(new OfflineOrderItemRequest(1L, "BAR-001", "Product Snapshot", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.TEN)),
+                List.<OfflinePaymentRequest>of());
 
         OfflineSyncUploadRequest request = new OfflineSyncUploadRequest(
                 COMPANY_ID, BRANCH_ID, 1001L, 501L, PosClientType.DESKTOP_POS, "Windows", "1.0.1", "BATCH-001", Instant.now(), Instant.now(), List.of(order));

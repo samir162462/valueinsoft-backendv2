@@ -101,11 +101,32 @@ class OfflineOrderValidationProcessorTest {
     }
 
     private OfflineOrderImportModel createImportModel() {
+        Instant now = Instant.now();
         return new OfflineOrderImportModel(
-                IMPORT_ID, BATCH_ID, COMPANY_ID, BRANCH_ID, 10L, 5L,
-                "ORD-001", "idem-123", Instant.now(), "{}", "hash-123",
-                OfflineOrderImportStatus.READY_FOR_VALIDATION, null, null, null, null, 0,
-                Instant.now(), null, null, Instant.now()
+                IMPORT_ID,           // id
+                BATCH_ID,            // syncBatchId
+                COMPANY_ID,          // companyId
+                BRANCH_ID,           // branchId
+                10L,                 // deviceId
+                5L,                  // cashierId
+                "ORD-001",         // offlineOrderNo
+                "local-ord-001",   // localOrderId
+                "DEV-001",         // deviceCode
+                "idem-123",        // idempotencyKey
+                now,                 // localOrderCreatedAt
+                now,                 // clientCreatedAt
+                "{}",              // payloadJson
+                "hash-123",        // payloadHash
+                OfflineOrderImportStatus.READY_FOR_VALIDATION, // status
+                null,                // officialOrderId
+                null,                // officialInvoiceNo
+                null,                // errorCode
+                null,                // errorMessage
+                0,                   // retryCount
+                now,                 // createdAt
+                null,                // processingStartedAt
+                null,                // processedAt
+                now                  // updatedAt
         );
     }
 }
