@@ -98,14 +98,7 @@ public class AiPermissionService {
     public void validateToolAccess(String toolName, AiSecurityContext context, Long branchId) {
         validateBranchAccess(context, branchId);
         String normalizedTool = toolName == null ? "" : toolName.trim().toLowerCase(Locale.ROOT);
-        AiMode inferredMode = switch (normalizedTool) {
-            case "inventory", "inventoryaitools" -> AiMode.INVENTORY;
-            case "sales", "salesaitools" -> AiMode.SALES;
-            case "shift", "shiftaitools" -> AiMode.SHIFT;
-            case "supplier", "supplieraitools" -> AiMode.SUPPLIERS;
-            case "customer", "customeraitools" -> AiMode.CUSTOMERS;
-            default -> throw new AiPermissionException("AI_TOOL_ACCESS_DENIED", "AI tool is not available");
-        };
+        AiMode inferredMode = inferModeFromTool(normalizedTool);
         validateBranchRequired(inferredMode, branchId);
         validateModeAccess(context, inferredMode);
     }
@@ -140,8 +133,8 @@ public class AiPermissionService {
     }
 
     private List<String> capabilitiesFor(AiMode mode) {
-        return switch (mode) {
-            case BUSINESS -> List.of(
+        if (mode == AiMode.BUSINESS) {
+            return List.of(
                     "dashboard.home.view",
                     "pos.sale.read",
                     "inventory.item.read",
@@ -150,13 +143,44 @@ public class AiPermissionService {
                     "suppliers.list.view",
                     "pos.shift.read"
             );
-            case SALES -> List.of("pos.sale.read", "finance.report.read");
-            case INVENTORY -> List.of("inventory.item.read");
-            case SUPPLIERS -> List.of("suppliers.account.read", "suppliers.list.view", "suppliers.statement.view");
-            case CUSTOMERS -> List.of("clients.account.read");
-            case SHIFT -> List.of("pos.shift.read");
-            case ADMIN -> List.of("platform.admin.read");
-            case HELP -> List.of();
-        };
+        }
+        if (mode == AiMode.SALES) {
+            return List.of("pos.sale.read", "finance.report.read");
+        }
+        if (mode == AiMode.INVENTORY) {
+            return List.of("inventory.item.read");
+        }
+        if (mode == AiMode.SUPPLIERS) {
+            return List.of("suppliers.account.read", "suppliers.list.view", "suppliers.statement.view");
+        }
+        if (mode == AiMode.CUSTOMERS) {
+            return List.of("clients.account.read");
+        }
+        if (mode == AiMode.SHIFT) {
+            return List.of("pos.shift.read");
+        }
+        if (mode == AiMode.ADMIN) {
+            return List.of("platform.admin.read");
+        }
+        return List.of();
+    }
+
+    private AiMode inferModeFromTool(String normalizedTool) {
+        if ("inventory".equals(normalizedTool) || "inventoryaitools".equals(normalizedTool)) {
+            return AiMode.INVENTORY;
+        }
+        if ("sales".equals(normalizedTool) || "salesaitools".equals(normalizedTool)) {
+            return AiMode.SALES;
+        }
+        if ("shift".equals(normalizedTool) || "shiftaitools".equals(normalizedTool)) {
+            return AiMode.SHIFT;
+        }
+        if ("supplier".equals(normalizedTool) || "supplieraitools".equals(normalizedTool)) {
+            return AiMode.SUPPLIERS;
+        }
+        if ("customer".equals(normalizedTool) || "customeraitools".equals(normalizedTool)) {
+            return AiMode.CUSTOMERS;
+        }
+        throw new AiPermissionException("AI_TOOL_ACCESS_DENIED", "AI tool is not available");
     }
 }

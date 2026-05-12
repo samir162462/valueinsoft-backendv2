@@ -49,6 +49,14 @@ public class AiToolAuditService {
                     safeText(errorMessage, 500),
                     durationMs
             );
+            log.debug("AI tool audit stored conversationId={} companyId={} branchId={} userId={} tool={} success={} durationMs={}",
+                    conversationId,
+                    companyId,
+                    branchId,
+                    userId,
+                    toolName,
+                    success,
+                    durationMs);
         } catch (RuntimeException exception) {
             log.warn("Failed to write AI tool audit row for tool {}", toolName, exception);
         }

@@ -40,9 +40,13 @@ public class AiPromptPolicyService {
                 || normalized.contains("token");
     }
 
+    public boolean isGeneralHelpQuestion(String message) {
+        return isGeneralHelpQuestionNormalized(normalize(message));
+    }
+
     public boolean requiresBusinessData(String message) {
         String normalized = normalize(message);
-        if (isGeneralHelpQuestion(normalized)) {
+        if (isGeneralHelpQuestionNormalized(normalized)) {
             return false;
         }
         return normalized.contains("today")
@@ -85,7 +89,7 @@ public class AiPromptPolicyService {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 
-    private boolean isGeneralHelpQuestion(String normalized) {
+    private boolean isGeneralHelpQuestionNormalized(String normalized) {
         return normalized.startsWith("how ")
                 || normalized.startsWith("how do ")
                 || normalized.startsWith("how can ")

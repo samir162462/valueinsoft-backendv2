@@ -58,10 +58,20 @@ public class SpringAiChatModelClient implements AiModelClient {
     @Override
     public AiModelResponse generate(AiModelRequest request) {
         if (chatModel == null) {
+            log.debug("AI model skipped because no ChatModel bean is loaded mode={} configuredModel={}", request.mode(), aiProperties.getModel());
             return new AiModelResponse("AI engine not loaded correctly.", aiProperties.getModel(), true);
         }
         
         try {
+            log.debug("AI model call queued provider={} configuredModel={} mode={} systemPromptLength={} userMessageLength={} knowledgeLength={} conversationLength={} timeoutSeconds={}",
+                    normalizeProvider(aiProperties.getProvider()),
+                    aiProperties.getModel(),
+                    request.mode(),
+                    request.systemPrompt() == null ? 0 : request.systemPrompt().length(),
+                    request.userMessage() == null ? 0 : request.userMessage().length(),
+                    request.knowledgeContext() == null ? 0 : request.knowledgeContext().length(),
+                    request.conversationContext() == null ? 0 : request.conversationContext().length(),
+                    aiProperties.getTimeoutSeconds());
             return CompletableFuture.supplyAsync(() -> callModel(request))
                     .orTimeout(Math.max(1, aiProperties.getTimeoutSeconds()), TimeUnit.SECONDS)
                     .exceptionally(exception -> {
@@ -85,6 +95,11 @@ public class SpringAiChatModelClient implements AiModelClient {
 
     private AiModelResponse callModel(AiModelRequest request) {
         String userMessageContent = buildUserMessageContent(request);
+        long startedAt = System.nanoTime();
+        log.debug("AI model call start bean={} mode={} finalUserMessageLength={}",
+                chatModel.getClass().getSimpleName(),
+                request.mode(),
+                userMessageContent.length());
 
         SystemMessage systemMessage = new SystemMessage(request.systemPrompt());
         UserMessage userMessage = new UserMessage(userMessageContent);
@@ -93,7 +108,11 @@ public class SpringAiChatModelClient implements AiModelClient {
                 .getResult()
                 .getOutput()
                 .getText();
-                
+        log.debug("AI model call completed bean={} mode={} durationMs={} responseLength={}",
+                chatModel.getClass().getSimpleName(),
+                request.mode(),
+                Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L),
+                content == null ? 0 : content.length());
         return new AiModelResponse(content, aiProperties.getModel(), false);
     }
 

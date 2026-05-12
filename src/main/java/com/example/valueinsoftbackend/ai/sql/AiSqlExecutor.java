@@ -29,6 +29,7 @@ public class AiSqlExecutor {
 
     @Transactional(readOnly = true)
     public List<Map<String, Object>> execute(String sql, long companyId, Long branchId) {
+        long startedAt = System.nanoTime();
         MapSqlParameterSource params = new MapSqlParameterSource();
         params.addValue("companyId", Math.toIntExact(companyId));
         params.addValue("companyid", Math.toIntExact(companyId));
@@ -50,12 +51,18 @@ public class AiSqlExecutor {
                 maxRows
         );
 
-        return jdbcTemplate.getJdbcTemplate().query(connection -> {
+        List<Map<String, Object>> rows = jdbcTemplate.getJdbcTemplate().query(connection -> {
             PreparedStatement statement = connection.prepareStatement(sqlToUse);
             statement.setQueryTimeout(timeoutSeconds);
             statement.setMaxRows(maxRows);
             setter.setValues(statement);
             return statement;
         }, new ColumnMapRowMapper());
+        log.debug("AI SQL SELECT result companyId={} branchId={} rowCount={} durationMs={}",
+                companyId,
+                branchId,
+                rows.size(),
+                Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L));
+        return rows;
     }
 }

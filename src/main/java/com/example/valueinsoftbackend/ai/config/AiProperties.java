@@ -19,6 +19,10 @@ public class AiProperties {
     private boolean sqlAgentEnabled = true;
     private int sqlQueryTimeoutSeconds = 5;
     private int sqlMaxRows = 100;
+    private int maxResultRows = 50;
+    private int maxSchemaTables = 8;
+    private int maxColumnsPerTable = 20;
+    private int cacheTtlMinutes = 30;
 
     public boolean isEnabled() {
         return enabled;
@@ -130,5 +134,37 @@ public class AiProperties {
 
     public void setSqlMaxRows(int sqlMaxRows) {
         this.sqlMaxRows = sqlMaxRows;
+    }
+
+    public int getMaxResultRows() {
+        return maxResultRows;
+    }
+
+    public void setMaxResultRows(int maxResultRows) {
+        this.maxResultRows = maxResultRows;
+    }
+
+    public int getMaxSchemaTables() {
+        return maxSchemaTables;
+    }
+
+    public void setMaxSchemaTables(int maxSchemaTables) {
+        this.maxSchemaTables = maxSchemaTables;
+    }
+
+    public int getMaxColumnsPerTable() {
+        return maxColumnsPerTable;
+    }
+
+    public void setMaxColumnsPerTable(int maxColumnsPerTable) {
+        this.maxColumnsPerTable = maxColumnsPerTable;
+    }
+
+    public int getCacheTtlMinutes() {
+        return cacheTtlMinutes;
+    }
+
+    public void setCacheTtlMinutes(int cacheTtlMinutes) {
+        this.cacheTtlMinutes = cacheTtlMinutes;
     }
 }

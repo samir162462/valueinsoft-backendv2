@@ -48,8 +48,16 @@ public class AiSqlAgentService {
         long startedAt = System.nanoTime();
         String generatedSql = null;
         try {
+            log.debug("AI SQL agent start conversationId={} companyId={} userId={} branchId={} questionLength={} contextLength={}",
+                    conversationId,
+                    context.companyId(),
+                    context.userId(),
+                    branchId,
+                    userQuestion == null ? 0 : userQuestion.length(),
+                    conversationContext == null ? 0 : conversationContext.length());
             AiSqlPlan plan = planSql(context, branchId, userQuestion, conversationContext);
             generatedSql = plan.sql();
+            log.debug("AI SQL plan generated conversationId={} sqlLength={}", conversationId, generatedSql == null ? 0 : generatedSql.length());
             String validatedSql = sqlValidator.validate(generatedSql, context.companyId(), branchId);
             log.info(
                     "AI SQL SELECT approved conversationId={} companyId={} branchId={} userId={} sql={}",
@@ -69,6 +77,11 @@ public class AiSqlAgentService {
                     elapsedMs(startedAt)
             );
             String answer = summarize(userQuestion, conversationContext, validatedSql, rows);
+            log.debug("AI SQL summary completed conversationId={} rowCount={} answerLength={} durationMs={}",
+                    conversationId,
+                    rows.size(),
+                    answer == null ? 0 : answer.length(),
+                    elapsedMs(startedAt));
             auditService.logToolCall(
                     conversationId,
                     context.companyId(),
@@ -109,6 +122,7 @@ public class AiSqlAgentService {
     }
 
     private AiSqlPlan planSql(AiSecurityContext context, Long branchId, String userQuestion, String conversationContext) {
+        String schemaPrompt = schemaCatalog.promptCatalog(context.companyId(), branchId, userQuestion);
         String systemPrompt = """
                 You create safe PostgreSQL SELECT queries for ValueInSoft.
                 Return JSON only with this shape: {"sql":"select ..."}
@@ -126,9 +140,14 @@ public class AiSqlAgentService {
                 """.formatted(
                 userQuestion,
                 conversationContext == null || conversationContext.isBlank() ? "(none)" : conversationContext,
-                schemaCatalog.promptCatalog(context.companyId(), branchId)
+                schemaPrompt
         );
 
+        log.debug("AI SQL plan prompt ready companyId={} branchId={} schemaPromptLength={} userPromptLength={}",
+                context.companyId(),
+                branchId,
+                schemaPrompt.length(),
+                userPrompt.length());
         AiModelResponse response = modelClient.generate(new AiModelRequest(systemPrompt, userPrompt, "SQL", ""));
         try {
             String json = stripCodeFence(response.answer());
@@ -149,7 +168,7 @@ public class AiSqlAgentService {
                 You answer ValueInSoft business questions from already-executed read-only SQL results.
                 Do not mention SQL unless the user asks.
                 If rows are empty, say no matching data was found.
-                Keep the answer concise.
+                Be concise, practical, and business-focused. Include clear numbers and one next action when useful.
                 """;
         String userPrompt = """
                 User question:
@@ -158,17 +177,14 @@ public class AiSqlAgentService {
                 Recent conversation context:
                 %s
 
-                Validated SQL that was executed:
-                %s
-
-                Result rows as JSON:
+                Result rows as compact JSON:
                 %s
                 """.formatted(
                 userQuestion,
                 conversationContext == null || conversationContext.isBlank() ? "(none)" : conversationContext,
-                sql,
                 gson.toJson(rows)
         );
+        log.debug("AI SQL summarize prompt ready rowCount={} userPromptLength={}", rows == null ? 0 : rows.size(), userPrompt.length());
         AiModelResponse response = modelClient.generate(new AiModelRequest(systemPrompt, userPrompt, "SQL_SUMMARY", ""));
         return response.answer();
     }

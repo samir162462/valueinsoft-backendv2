@@ -10,6 +10,23 @@ import java.util.Set;
 @Service
 public class AiSqlSchemaCatalog {
 
+    private final AiSchemaMetadataService metadataService;
+
+    public AiSqlSchemaCatalog() {
+        this.metadataService = null;
+    }
+
+    public AiSqlSchemaCatalog(AiSchemaMetadataService metadataService) {
+        this.metadataService = metadataService;
+    }
+
+    public String promptCatalog(long companyId, Long branchId, String question) {
+        if (metadataService != null) {
+            return metadataService.compactPromptCatalog(companyId, branchId, question);
+        }
+        return promptCatalog(companyId, branchId);
+    }
+
     public String promptCatalog(long companyId, Long branchId) {
         String schema = TenantSqlIdentifiers.companySchema(companyId);
         String dynamicBranchTables = branchId == null

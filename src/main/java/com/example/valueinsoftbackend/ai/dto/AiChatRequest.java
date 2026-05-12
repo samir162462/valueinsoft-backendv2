@@ -9,6 +9,10 @@ public record AiChatRequest(
         @NotBlank(message = "Message is required")
         @Size(max = 2000, message = "Message is too long")
         String message,
-        Long branchId
+        Long branchId,
+        Boolean realAiOnly
 ) {
+    public boolean useRealAiOnly() {
+        return Boolean.TRUE.equals(realAiOnly);
+    }
 }

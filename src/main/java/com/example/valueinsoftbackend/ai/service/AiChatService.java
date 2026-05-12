@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.ai.service;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.ai.audit.AiUsageLogService;
+import com.example.valueinsoftbackend.ai.cache.AiInsightCacheService;
 import com.example.valueinsoftbackend.ai.dto.AiConversationDto;
 import com.example.valueinsoftbackend.ai.dto.AiChatRequest;
 import com.example.valueinsoftbackend.ai.dto.AiChatResponse;
@@ -31,6 +32,7 @@ public class AiChatService {
     private final AiUsageLogService usageLogService;
     private final AiRateLimitService rateLimitService;
     private final AiCostTrackingService costTrackingService;
+    private final AiInsightCacheService insightCacheService;
 
     public AiChatService(AiPromptPolicyService promptPolicyService,
                          AiChatOrchestratorService orchestratorService,
@@ -40,7 +42,8 @@ public class AiChatService {
                          AiMessageRepository messageRepository,
                          AiUsageLogService usageLogService,
                          AiRateLimitService rateLimitService,
-                         AiCostTrackingService costTrackingService) {
+                         AiCostTrackingService costTrackingService,
+                         AiInsightCacheService insightCacheService) {
         this.promptPolicyService = promptPolicyService;
         this.orchestratorService = orchestratorService;
         this.securityContextResolver = securityContextResolver;
@@ -50,6 +53,7 @@ public class AiChatService {
         this.usageLogService = usageLogService;
         this.rateLimitService = rateLimitService;
         this.costTrackingService = costTrackingService;
+        this.insightCacheService = insightCacheService;
     }
 
     public AiChatResponse chat(AiChatRequest request, Principal principal) {
@@ -59,6 +63,13 @@ public class AiChatService {
         AiSecurityContext securityContext = securityContextResolver.resolve(principal);
         Long requestedBranchId = request.branchId();
         AiMode mode = AiMode.from(request.mode());
+        log.debug("AI chat received companyId={} userId={} branchId={} requestedMode={} realAiOnly={} messageLength={}",
+                securityContext.companyId(),
+                securityContext.userId(),
+                requestedBranchId,
+                mode.name(),
+                request.useRealAiOnly(),
+                request.message() == null ? 0 : request.message().length());
         permissionService.validateBranchRequired(mode, requestedBranchId);
         permissionService.validateBranchAccess(securityContext, requestedBranchId);
         permissionService.validateModeAccess(securityContext, mode);
@@ -69,6 +80,10 @@ public class AiChatService {
         AiConversationRecord conversation = resolveConversation(request, securityContext, normalizedMode, requestedBranchId);
         List<AiMessageRecord> recentMessages = messageRepository.findByConversation(conversation.id(), 12);
         String conversationContext = buildConversationContext(recentMessages);
+        log.debug("AI chat context conversationId={} recentMessages={} contextLength={}",
+                conversation.id(),
+                recentMessages.size(),
+                conversationContext.length());
 
         messageRepository.create(
                 conversation.id(),
@@ -80,13 +95,45 @@ public class AiChatService {
                 0
         );
 
-        AiChatOrchestratorService.OrchestratedChatResult result = orchestratorService.answer(
-                request,
-                normalizedMode,
-                securityContext,
-                conversation.id(),
-                conversationContext
-        );
+        AiChatOrchestratorService.OrchestratedChatResult result;
+        boolean navigationRequest = isNavigationRequest(request.message());
+        boolean cacheEligible = !navigationRequest
+                && !request.useRealAiOnly()
+                && !"HELP".equals(normalizedMode)
+                && promptPolicyService.requiresBusinessData(request.message());
+        if (cacheEligible) {
+            log.debug("AI chat cache eligible conversationId={} mode={} branchId={}", conversation.id(), normalizedMode, requestedBranchId);
+            result = insightCacheService.get(securityContext, requestedBranchId, normalizedMode, request.message())
+                    .map(cachedAnswer -> new AiChatOrchestratorService.OrchestratedChatResult(
+                            cachedAnswer,
+                            List.of("What are today's sales?", "Show low stock products", "Give me 5 insights for my shop"),
+                            List.of(),
+                            List.of(),
+                            List.of()
+                    ))
+                    .orElseGet(() -> {
+                        log.debug("AI chat cache miss path conversationId={} mode={} branchId={}", conversation.id(), normalizedMode, requestedBranchId);
+                        AiChatOrchestratorService.OrchestratedChatResult fresh = orchestratorService.answer(
+                                request,
+                                normalizedMode,
+                                securityContext,
+                                conversation.id(),
+                                conversationContext
+                        );
+                        insightCacheService.put(securityContext, requestedBranchId, normalizedMode, request.message(), fresh.answer());
+                        return fresh;
+                    });
+        } else {
+            log.debug("AI chat cache bypass conversationId={} mode={} navigationRequest={} realAiOnly={}",
+                    conversation.id(), normalizedMode, navigationRequest, request.useRealAiOnly());
+            result = orchestratorService.answer(
+                    request,
+                    normalizedMode,
+                    securityContext,
+                    conversation.id(),
+                    conversationContext
+            );
+        }
         messageRepository.create(
                 conversation.id(),
                 securityContext.companyId(),
@@ -109,6 +156,13 @@ public class AiChatService {
                 conversation.id(),
                 normalizedMode,
                 result.toolCalls().size());
+        log.debug("AI chat result conversationId={} answerLength={} suggestions={} actions={} sources={} toolCalls={}",
+                conversation.id(),
+                result.answer() == null ? 0 : result.answer().length(),
+                result.suggestedQuestions().size(),
+                result.actions().size(),
+                result.sources().size(),
+                result.toolCalls().stream().map(call -> call.toolName() + ":" + call.status()).toList());
 
         return new AiChatResponse(
                 conversation.id().toString(),
@@ -247,6 +301,20 @@ public class AiChatService {
                 .replaceAll("(?i)(api[_ -]?key|token|secret|password)\\s*[:=]\\s*\\S+", "$1=[REDACTED]")
                 .replaceAll("\\s+", " ")
                 .trim();
+    }
+
+    private boolean isNavigationRequest(String message) {
+        String normalized = message == null ? "" : message.toLowerCase().trim();
+        return normalized.startsWith("open ")
+                || normalized.startsWith("go to ")
+                || normalized.startsWith("navigate to ")
+                || normalized.startsWith("take me to ")
+                || normalized.startsWith("move me to ")
+                || normalized.startsWith("bring me to ")
+                || normalized.startsWith("send me to ")
+                || normalized.startsWith("switch to ")
+                || normalized.contains(" open screen ")
+                || normalized.contains(" navigate me to ");
     }
 
     private long elapsedMs(long startedAt) {

@@ -159,8 +159,7 @@ public class AiSqlValidator {
                 || table.endsWith(".supplierreciepts")
                 || table.endsWith(".supplierbproduct")
                 || table.endsWith(".damagedlist")
-                || table.endsWith(".expenses")
-                || table.endsWith(".companyanalysis");
+                || table.endsWith(".expenses");
     }
 
     private boolean requiresCompanyFilter(String table) {
