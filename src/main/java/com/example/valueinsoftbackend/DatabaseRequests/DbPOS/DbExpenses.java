@@ -202,6 +202,32 @@ public class DbExpenses {
         }
     }
 
+    public int addOperationalExpenseAndReturnId(int branchId, int companyId, Expenses expenses) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        self.provisionExpenseTables(companyId);
+
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.expensesTable(companyId, false) +
+                " (type, amount, \"time\", \"branchId\", \"user\", name, period, expense_account_id, payment_account_id) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING \"eId\"";
+        Integer eId = jdbcTemplate.queryForObject(
+                sql,
+                Integer.class,
+                expenses.getType(),
+                expenses.getAmount(),
+                expenses.getTime() != null ? expenses.getTime() : new Timestamp(System.currentTimeMillis()),
+                branchId,
+                expenses.getUser(),
+                expenses.getName(),
+                expenses.getPeriod(),
+                expenses.getExpenseAccountId(),
+                expenses.getPaymentAccountId()
+        );
+        if (eId == null) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "EXPENSE_INSERT_FAILED", "Expense record was not created");
+        }
+        return eId;
+    }
+
     public String updateExpenses(int branchId, int companyId, Expenses expenses, boolean isStatic) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         log.debug("Updating expense eId: {}, expenseAccountId: {}, paymentAccountId: {}, isStatic: {}", 

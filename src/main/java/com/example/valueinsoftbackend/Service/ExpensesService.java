@@ -95,11 +95,8 @@ public class ExpensesService {
                 null  // nextDueDate (instance is not recurring)
         );
         
-        // We use the same addExpenses method but with isStatic = false
-        dbExpenses.addExpenses(branchId, companyId, instance, false);
-        
-        // Find the created instance to get its eId (optional, but good for history)
-        // For simplicity, we'll assume it worked and move on to posting
+        int expenseId = dbExpenses.addOperationalExpenseAndReturnId(branchId, companyId, instance);
+        instance.setEId(expenseId);
         
         // 2. Enqueue for Finance Posting
         financeOperationalPostingService.enqueueExpense(companyId, branchId, instance, actorName);
@@ -118,7 +115,7 @@ public class ExpensesService {
                 lastPostedDate,
                 template.getAmount(),
                 "posted",
-                null, // Could link to instance eId if we had it easily
+                expenseId,
                 null, // Journal entry ID will be set by the posting adapter later
                 new java.sql.Timestamp(System.currentTimeMillis()),
                 financeAuditService.resolveActorUserId(actorName)
