@@ -6,6 +6,8 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Request.DashboardSummaryRequest;
 import com.example.valueinsoftbackend.Model.Response.DashboardSummaryResponse;
+import com.example.valueinsoftbackend.Config.CacheConfig;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -52,6 +54,10 @@ public class DashboardSummaryService {
         this.profitProvider = profitProvider;
     }
 
+    @Cacheable(
+            cacheNames = CacheConfig.DASHBOARD_BRANCH_SUMMARY,
+            key = "#companyId + ':' + #request.branchId + ':' + #request.date + ':' + (#request.period == null ? 'TODAY' : #request.period)"
+    )
     public DashboardSummaryResponse getBranchSummary(Integer companyId, DashboardSummaryRequest request) {
         
         // Validate Branch belongs to Company

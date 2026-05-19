@@ -8,6 +8,9 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Request.CreateCompanyRequest;
 import com.example.valueinsoftbackend.Model.User;
+import com.example.valueinsoftbackend.Config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +34,7 @@ public class CompanyService {
         this.businessPackageCatalogService = businessPackageCatalogService;
     }
 
+    @Cacheable(cacheNames = CacheConfig.COMPANY_BY_OWNER, key = "#userName")
     public Company getCompanyForOwnerUserName(String userName) {
         User user = dbUsers.getUser(normalize(userName));
         if (user == null) {
@@ -39,6 +43,7 @@ public class CompanyService {
         return dbCompany.getCompanyByOwnerId(user.getUserId());
     }
 
+    @Cacheable(cacheNames = CacheConfig.COMPANY_BRANCHES_BY_USER, key = "#userName")
     public Company getCompanyAndBranchesByUserName(String userName) {
         Company company = dbCompany.getCompanyAndBranchesByUserName(normalize(userName));
         if (company == null) {
@@ -47,6 +52,7 @@ public class CompanyService {
         return company;
     }
 
+    @Cacheable(cacheNames = CacheConfig.COMPANY_BY_ID, key = "#companyId")
     public Company getCompanyById(int companyId) {
         Company company = dbCompany.getCompanyById(companyId);
         if (company == null) {
@@ -60,6 +66,16 @@ public class CompanyService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {
+            CacheConfig.COMPANY_BY_OWNER,
+            CacheConfig.COMPANY_BRANCHES_BY_USER,
+            CacheConfig.COMPANY_BY_ID,
+            CacheConfig.BRANCHES_BY_COMPANY,
+            CacheConfig.BRANCH_BY_ID,
+            CacheConfig.CATEGORY_JSON_FLAT,
+            CacheConfig.CATEGORY_PAIRS,
+            CacheConfig.MAIN_MAJORS
+    }, allEntries = true)
     public Company createCompany(CreateCompanyRequest request) {
         User owner = dbUsers.getUser(normalize(request.getOwnerName()));
         if (owner == null) {
@@ -114,6 +130,11 @@ public class CompanyService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = {
+            CacheConfig.COMPANY_BY_OWNER,
+            CacheConfig.COMPANY_BRANCHES_BY_USER,
+            CacheConfig.COMPANY_BY_ID
+    }, allEntries = true)
     public void updateCompanyImage(int companyId, String imgFile) {
         int rows = dbCompany.updateCompanyImage(companyId, imgFile);
         if (rows != 1) {

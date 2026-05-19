@@ -7,8 +7,11 @@ import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingDefiniti
 import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleResponse;
 import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingValueInput;
 import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingsBatchUpdateRequest;
+import com.example.valueinsoftbackend.Config.CacheConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -37,6 +40,7 @@ public class BranchSettingsService {
         this.objectMapper = objectMapper;
     }
 
+    @Cacheable(cacheNames = CacheConfig.BRANCH_SETTINGS_BUNDLE, key = "#tenantId + ':' + #branchId + ':' + #authenticatedName")
     public BranchSettingsBundleResponse getEffectiveSettingsForAuthenticatedUser(String authenticatedName,
                                                                                  Integer tenantId,
                                                                                  Integer branchId) {
@@ -52,6 +56,7 @@ public class BranchSettingsService {
         return buildBundle(safeTenantId, safeBranchId, "server");
     }
 
+    @Cacheable(cacheNames = CacheConfig.BRANCH_SETTINGS_BUNDLE, key = "#tenantId + ':' + #branchId + ':' + #authenticatedName")
     public BranchSettingsBundleResponse getBranchSettingsForAuthenticatedUser(String authenticatedName,
                                                                               int tenantId,
                                                                               int branchId) {
@@ -65,6 +70,7 @@ public class BranchSettingsService {
         return buildBundle(tenantId, branchId, "server");
     }
 
+    @CacheEvict(cacheNames = CacheConfig.BRANCH_SETTINGS_BUNDLE, allEntries = true)
     public BranchSettingsBundleResponse saveBranchSettingsForAuthenticatedUser(String authenticatedName,
                                                                                int tenantId,
                                                                                int branchId,

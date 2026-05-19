@@ -6,11 +6,14 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosCategory;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.MainMajor;
 import com.example.valueinsoftbackend.Model.Request.SaveCategoryRequest;
+import com.example.valueinsoftbackend.Config.CacheConfig;
 import com.example.valueinsoftbackend.util.CustomPair;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -34,6 +37,10 @@ public class CategoryService {
         this.businessPackageCatalogService = businessPackageCatalogService;
     }
 
+    @CacheEvict(cacheNames = {
+            CacheConfig.CATEGORY_JSON_FLAT,
+            CacheConfig.CATEGORY_PAIRS
+    }, key = "#companyId + ':' + #branchId")
     public ResponseEntity<String> saveCategory(int companyId, int branchId, SaveCategoryRequest request) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
@@ -51,6 +58,7 @@ public class CategoryService {
         return ResponseEntity.status(HttpStatus.CREATED).body("the Category added ");
     }
 
+    @Cacheable(cacheNames = CacheConfig.CATEGORY_PAIRS, key = "#companyId + ':' + #branchId")
     public ArrayList<CustomPair> getCategoriesJson(int companyId, int branchId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
@@ -58,6 +66,7 @@ public class CategoryService {
         return parseCategoryPairs(dbPosCategory.getCategoryJson(branchId, companyId));
     }
 
+    @Cacheable(cacheNames = CacheConfig.CATEGORY_JSON_FLAT, key = "#companyId + ':' + #branchId")
     public String getCategoriesJsonFlat(int companyId, int branchId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
@@ -66,6 +75,7 @@ public class CategoryService {
         return payload == null ? "" : payload;
     }
 
+    @Cacheable(cacheNames = CacheConfig.MAIN_MAJORS, key = "#companyId")
     public ArrayList<MainMajor> getMainCategories(int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         return dbPosCategory.getMainMajors(companyId);
