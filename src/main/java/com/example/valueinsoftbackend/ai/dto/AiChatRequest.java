@@ -13,6 +13,6 @@ public record AiChatRequest(
         Boolean realAiOnly
 ) {
     public boolean useRealAiOnly() {
-        return Boolean.TRUE.equals(realAiOnly);
+        return true;
     }
 }

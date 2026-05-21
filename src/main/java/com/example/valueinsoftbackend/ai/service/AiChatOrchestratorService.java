@@ -54,6 +54,7 @@ public class AiChatOrchestratorService {
     private final ShiftAiTools shiftAiTools;
     private final SupplierAiTools supplierAiTools;
     private final CustomerAiTools customerAiTools;
+    private final AiFunctionCallingService functionCallingService;
 
     public AiChatOrchestratorService(AiModelClient aiModelClient,
                                      AiPromptPolicyService promptPolicyService,
@@ -65,7 +66,8 @@ public class AiChatOrchestratorService {
                                      SalesAiTools salesAiTools,
                                      ShiftAiTools shiftAiTools,
                                      SupplierAiTools supplierAiTools,
-                                     CustomerAiTools customerAiTools) {
+                                     CustomerAiTools customerAiTools,
+                                     AiFunctionCallingService functionCallingService) {
         this.aiModelClient = aiModelClient;
         this.promptPolicyService = promptPolicyService;
         this.sanitizerService = sanitizerService;
@@ -77,6 +79,7 @@ public class AiChatOrchestratorService {
         this.shiftAiTools = shiftAiTools;
         this.supplierAiTools = supplierAiTools;
         this.customerAiTools = customerAiTools;
+        this.functionCallingService = functionCallingService;
     }
 
     public OrchestratedChatResult answer(AiChatRequest request,
@@ -84,15 +87,15 @@ public class AiChatOrchestratorService {
                                          AiSecurityContext securityContext,
                                          UUID conversationId,
                                          String conversationContext) {
-        log.debug("AI orchestrator start conversationId={} companyId={} userId={} branchId={} mode={} realAiOnly={} messageLength={} contextLength={}",
+        log.debug("AI orchestrator start conversationId={} companyId={} userId={} branchId={} mode={} messageLength={} contextLength={}",
                 conversationId,
                 securityContext.companyId(),
                 securityContext.userId(),
                 request.branchId(),
                 normalizedMode,
-                request.useRealAiOnly(),
                 request.message() == null ? 0 : request.message().length(),
                 conversationContext == null ? 0 : conversationContext.length());
+
         if (promptPolicyService.isUnsafeRequest(request.message())) {
             log.debug("AI orchestrator blocked unsafe request conversationId={} mode={}", conversationId, normalizedMode);
             return new OrchestratedChatResult(
@@ -104,122 +107,23 @@ public class AiChatOrchestratorService {
             );
         }
 
+        // Fast-path navigation routing (saves LLM tokens and provides zero latency UI responses)
         Optional<OrchestratedChatResult> navigationResult = answerNavigation(request.message(), request.branchId());
         if (navigationResult.isPresent()) {
-            log.debug("AI orchestrator selected navigator conversationId={} actionCount={}",
-                    conversationId, navigationResult.get().actions().size());
+            log.debug("AI orchestrator selected fast-path navigator conversationId={}", conversationId);
             return navigationResult.get();
         }
 
-        if (request.useRealAiOnly()) {
-            log.debug("AI orchestrator selected realAiOnly conversationId={} mode={}", conversationId, normalizedMode);
-            return answerRealAiOnly(request, normalizedMode, securityContext, conversationId, conversationContext);
-        }
-
-        if (!"HELP".equals(normalizedMode)) {
-            if (("INVENTORY".equals(normalizedMode) || "BUSINESS".equals(normalizedMode))
-                    && isInventoryIntent(request.message())) {
-                log.debug("AI orchestrator selected inventory tools conversationId={} mode={}", conversationId, normalizedMode);
-                return answerInventory(request, securityContext, conversationId);
-            }
-            if (("SALES".equals(normalizedMode) || "BUSINESS".equals(normalizedMode))
-                    && isSalesIntent(request.message())
-                    && !isCrossBranchSalesIntent(request.message())) {
-                log.debug("AI orchestrator selected sales tools conversationId={} mode={}", conversationId, normalizedMode);
-                return answerSales(request, securityContext, conversationId);
-            }
-            if (("SHIFT".equals(normalizedMode) || "BUSINESS".equals(normalizedMode))
-                    && isShiftIntent(request.message())) {
-                log.debug("AI orchestrator selected shift tools conversationId={} mode={}", conversationId, normalizedMode);
-                return answerShift(request, securityContext, conversationId);
-            }
-            if (("SUPPLIERS".equals(normalizedMode) || "BUSINESS".equals(normalizedMode))
-                    && isSupplierIntent(request.message())
-                    && !isOpenSupplierInsightIntent(request.message())) {
-                log.debug("AI orchestrator selected supplier tools conversationId={} mode={}", conversationId, normalizedMode);
-                return answerSupplier(request, securityContext, conversationId);
-            }
-            if (("CUSTOMERS".equals(normalizedMode) || "BUSINESS".equals(normalizedMode))
-                    && isCustomerIntent(request.message())) {
-                log.debug("AI orchestrator selected customer tools conversationId={} mode={}", conversationId, normalizedMode);
-                return answerCustomer(request, securityContext, conversationId);
-            }
-            if (!promptPolicyService.requiresBusinessData(request.message())) {
-                log.debug("AI orchestrator selected general model conversationId={} mode={}", conversationId, normalizedMode);
-                return answerWithModel(request, normalizedMode, conversationContext);
-            }
-            if (shouldUseSqlAgent(normalizedMode, request.message())) {
-                log.debug("AI orchestrator selected sql agent conversationId={} mode={}", conversationId, normalizedMode);
-                Optional<OrchestratedChatResult> sqlAnswer = answerWithSqlAgent(request, securityContext, conversationId, conversationContext);
-                if (sqlAnswer.isPresent()) {
-                    return sqlAnswer.get();
-                }
-            }
-            log.debug("AI orchestrator no safe business route conversationId={} mode={}", conversationId, normalizedMode);
-            return new OrchestratedChatResult(
-                    "I could not safely answer that from the available business data. Try asking for sales, inventory, suppliers, customers, shifts, or a specific date range.",
-                    List.of("What are today's sales?", "Top selling products this month", "Show low stock products"),
-                    List.of(),
-                    List.of(),
-                    List.of()
-            );
-        }
-
-        if (promptPolicyService.requiresBusinessData(request.message())) {
-            log.debug("AI orchestrator rejected business data in HELP mode conversationId={}", conversationId);
-            return new OrchestratedChatResult(
-                    "Business data tools are not enabled in HELP mode. Switch to Inventory mode for read-only inventory questions.",
-                    List.of("How do I add a product?", "How do I use POS?", "How do I open or close a shift?"),
-                    List.of(),
-                    List.of(),
-                    List.of()
-            );
-        }
-
-        if (!aiProperties.isRagEnabled()) {
-            log.debug("AI orchestrator selected help model without RAG conversationId={}", conversationId);
-            AiModelResponse modelResponse = generateWithTiming(new AiModelRequest(
-                  promptPolicyService.systemPrompt(),
-                  request.message(),
-                  normalizedMode,
-                  "",
-                  conversationContext
-          ));
-            return new OrchestratedChatResult(
-                    sanitizerService.sanitize(modelResponse.answer()),
-                    List.of("How do I add a product?", "How do I import products?", "How do I print a receipt?"),
-                    List.of(),
-                    List.of(),
-                    List.of()
-            );
-        }
-
-        long retrievalStartedAt = System.nanoTime();
-        List<AiKnowledgeSearchResult> knowledgeResults = knowledgeSearchService.search(securityContext.companyId(), request.message(), 3);
-        log.debug("AI retrieval durationMs={} resultCount={}", elapsedMs(retrievalStartedAt), knowledgeResults.size());
-        if (knowledgeResults.isEmpty()) {
-            log.debug("AI orchestrator selected help model after empty RAG conversationId={}", conversationId);
-            return answerWithModel(request, normalizedMode, conversationContext);
-        }
-        log.debug("AI orchestrator selected RAG answer conversationId={} knowledgeResults={}", conversationId, knowledgeResults.size());
-
-        String knowledgeContext = buildKnowledgeContext(knowledgeResults);
-        AiModelResponse modelResponse = generateWithTiming(new AiModelRequest(
-              promptPolicyService.systemPrompt(),
-              request.message(),
-              normalizedMode,
-              knowledgeContext,
-              conversationContext
-      ));
-
-        return new OrchestratedChatResult(
-                sanitizerService.sanitize(modelResponse.answer()),
-                List.of("How do I add a product?", "How do I import products?", "How do I print a receipt?"),
-                List.of(),
-                sourcesFrom(knowledgeResults),
-                List.of()
+        // Delegate everything else to the Gemini function calling engine
+        return functionCallingService.execute(
+                request.message(),
+                request.branchId(),
+                securityContext,
+                conversationId,
+                conversationContext
         );
     }
+
 
     private OrchestratedChatResult answerSales(AiChatRequest request,
                                                AiSecurityContext securityContext,
@@ -1019,7 +923,7 @@ public class AiChatOrchestratorService {
         return toolResult(toolName, answer, count, suggestions, List.of());
     }
 
-    private Optional<OrchestratedChatResult> answerNavigation(String message, Long branchId) {
+    public Optional<OrchestratedChatResult> answerNavigation(String message, Long branchId) {
         String normalized = normalize(message);
         if (!isNavigationIntent(normalized)) {
             return Optional.empty();

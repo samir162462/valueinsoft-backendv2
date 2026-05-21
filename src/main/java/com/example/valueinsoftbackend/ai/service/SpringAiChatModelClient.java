@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import org.springframework.ai.tool.ToolCallback;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -137,5 +138,97 @@ public class SpringAiChatModelClient implements AiModelClient {
         }
         builder.append("User question:\n").append(request.userMessage());
         return builder.toString();
+    }
+
+    @Override
+    public AiModelResponse generateWithFunctions(AiModelRequest request, List<ToolCallback> functions) {
+        if (chatModel == null) {
+            log.debug("AI model skipped because no ChatModel bean is loaded mode={} configuredModel={}", request.mode(), aiProperties.getModel());
+            return new AiModelResponse("AI engine not loaded correctly.", aiProperties.getModel(), true);
+        }
+        if (functions == null || functions.isEmpty() || !aiProperties.isFunctionCallingEnabled()) {
+            return generate(request);
+        }
+
+        try {
+            log.debug("AI model call with functions queued provider={} configuredModel={} functionsCount={}",
+                    normalizeProvider(aiProperties.getProvider()),
+                    aiProperties.getModel(),
+                    functions.size());
+            return CompletableFuture.supplyAsync(() -> callModelWithFunctions(request, functions))
+                    .orTimeout(Math.max(1, aiProperties.getTimeoutSeconds()), TimeUnit.SECONDS)
+                    .exceptionally(exception -> {
+                        log.error("AI model call with functions failed: {}", exception.getMessage(), exception);
+                        return new AiModelResponse(
+                            "AI response timed out or is temporarily unavailable. Try again shortly.",
+                            aiProperties.getModel(),
+                            true
+                        );
+                    })
+                    .join();
+        } catch (RuntimeException exception) {
+            log.error("AI model call with functions runtime exception: {}", exception.getMessage(), exception);
+            return new AiModelResponse(
+                    "AI response timed out or is temporarily unavailable. Try again shortly.",
+                    aiProperties.getModel(),
+                    true
+            );
+        }
+    }
+
+    private AiModelResponse callModelWithFunctions(AiModelRequest request, List<ToolCallback> functions) {
+        String userMessageContent = buildUserMessageContent(request);
+        long startedAt = System.nanoTime();
+        log.debug("AI model call with functions start bean={} mode={} functionsCount={}",
+                chatModel.getClass().getSimpleName(),
+                request.mode(),
+                functions.size());
+
+        SystemMessage systemMessage = new SystemMessage(request.systemPrompt());
+        UserMessage userMessage = new UserMessage(userMessageContent);
+
+        org.springframework.ai.chat.prompt.ChatOptions options = org.springframework.ai.google.genai.GoogleGenAiChatOptions.builder()
+                .toolCallbacks(functions)
+                .build();
+
+        String content = chatModel.call(new Prompt(List.of(systemMessage, userMessage), options))
+                .getResult()
+                .getOutput()
+                .getText();
+
+        log.debug("AI model call with functions completed bean={} durationMs={} responseLength={}",
+                chatModel.getClass().getSimpleName(),
+                Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L),
+                content == null ? 0 : content.length());
+        return new AiModelResponse(content, aiProperties.getModel(), false);
+    }
+
+    @Override
+    public reactor.core.publisher.Flux<org.springframework.ai.chat.model.ChatResponse> streamWithFunctions(
+            AiModelRequest request,
+            List<ToolCallback> functions) {
+        if (chatModel == null) {
+            log.debug("AI model skipped streaming because no ChatModel bean is loaded");
+            return reactor.core.publisher.Flux.empty();
+        }
+
+        String userMessageContent = buildUserMessageContent(request);
+        log.debug("AI model stream with functions start bean={} mode={} functionsCount={}",
+                chatModel.getClass().getSimpleName(),
+                request.mode(),
+                functions != null ? functions.size() : 0);
+
+        SystemMessage systemMessage = new SystemMessage(request.systemPrompt());
+        UserMessage userMessage = new UserMessage(userMessageContent);
+
+        org.springframework.ai.google.genai.GoogleGenAiChatOptions.Builder optionsBuilder = org.springframework.ai.google.genai.GoogleGenAiChatOptions.builder();
+        if (functions != null && !functions.isEmpty() && aiProperties.isFunctionCallingEnabled()) {
+            optionsBuilder.toolCallbacks(functions);
+        }
+        
+        org.springframework.ai.chat.prompt.ChatOptions options = optionsBuilder.build();
+        Prompt prompt = new Prompt(List.of(systemMessage, userMessage), options);
+
+        return chatModel.stream(prompt);
     }
 }

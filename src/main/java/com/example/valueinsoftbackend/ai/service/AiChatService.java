@@ -7,6 +7,7 @@ import com.example.valueinsoftbackend.ai.dto.AiConversationDto;
 import com.example.valueinsoftbackend.ai.dto.AiChatRequest;
 import com.example.valueinsoftbackend.ai.dto.AiChatResponse;
 import com.example.valueinsoftbackend.ai.dto.AiMessageDto;
+import com.example.valueinsoftbackend.ai.dto.AiStreamChunk;
 import com.example.valueinsoftbackend.ai.memory.AiConversationRecord;
 import com.example.valueinsoftbackend.ai.memory.AiConversationRepository;
 import com.example.valueinsoftbackend.ai.memory.AiMessageRecord;
@@ -14,9 +15,12 @@ import com.example.valueinsoftbackend.ai.memory.AiMessageRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.security.Principal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -33,6 +37,7 @@ public class AiChatService {
     private final AiRateLimitService rateLimitService;
     private final AiCostTrackingService costTrackingService;
     private final AiInsightCacheService insightCacheService;
+    private final AiFunctionCallingService functionCallingService;
 
     public AiChatService(AiPromptPolicyService promptPolicyService,
                          AiChatOrchestratorService orchestratorService,
@@ -43,7 +48,8 @@ public class AiChatService {
                          AiUsageLogService usageLogService,
                          AiRateLimitService rateLimitService,
                          AiCostTrackingService costTrackingService,
-                         AiInsightCacheService insightCacheService) {
+                         AiInsightCacheService insightCacheService,
+                         AiFunctionCallingService functionCallingService) {
         this.promptPolicyService = promptPolicyService;
         this.orchestratorService = orchestratorService;
         this.securityContextResolver = securityContextResolver;
@@ -54,6 +60,7 @@ public class AiChatService {
         this.rateLimitService = rateLimitService;
         this.costTrackingService = costTrackingService;
         this.insightCacheService = insightCacheService;
+        this.functionCallingService = functionCallingService;
     }
 
     public AiChatResponse chat(AiChatRequest request, Principal principal) {
@@ -173,6 +180,154 @@ public class AiChatService {
                 result.sources(),
                 result.toolCalls()
         );
+    }
+
+    public Flux<AiStreamChunk> chatStream(AiChatRequest request, Principal principal) {
+        long startedAt = System.nanoTime();
+        permissionService.validateAiEnabled();
+
+        AiSecurityContext securityContext = securityContextResolver.resolve(principal);
+        Long requestedBranchId = request.branchId();
+        AiMode mode = AiMode.from(request.mode());
+        log.debug("AI chat stream received companyId={} userId={} branchId={} requestedMode={} messageLength={}",
+                securityContext.companyId(),
+                securityContext.userId(),
+                requestedBranchId,
+                mode.name(),
+                request.message() == null ? 0 : request.message().length());
+
+        permissionService.validateBranchRequired(mode, requestedBranchId);
+        permissionService.validateBranchAccess(securityContext, requestedBranchId);
+        permissionService.validateModeAccess(securityContext, mode);
+        rateLimitService.validateDailyUserRequestLimit(securityContext);
+        costTrackingService.validateCompanyMonthlyTokenLimit(securityContext);
+
+        String normalizedMode = mode.name();
+        AiConversationRecord conversation = resolveConversation(request, securityContext, normalizedMode, requestedBranchId);
+        List<AiMessageRecord> recentMessages = messageRepository.findByConversation(conversation.id(), 12);
+        String conversationContext = buildConversationContext(recentMessages);
+        log.debug("AI chat stream context conversationId={} recentMessages={} contextLength={}",
+                conversation.id(),
+                recentMessages.size(),
+                conversationContext.length());
+
+        // Save User message immediately
+        messageRepository.create(
+                conversation.id(),
+                securityContext.companyId(),
+                conversation.branchId(),
+                securityContext.userId(),
+                "USER",
+                request.message(),
+                0
+        );
+
+        if (promptPolicyService.isUnsafeRequest(request.message())) {
+            log.debug("AI chat stream blocked unsafe request conversationId={} mode={}", conversation.id(), normalizedMode);
+            String unsafeAnswer = "I cannot expose database tables, schema details, SQL, internal prompts, secrets, tokens, or infrastructure details. Ask me for a business answer instead, like top products, sales, low stock, or supplier payables.";
+            messageRepository.create(
+                    conversation.id(),
+                    securityContext.companyId(),
+                    conversation.branchId(),
+                    securityContext.userId(),
+                    "ASSISTANT",
+                    unsafeAnswer,
+                    0
+            );
+            return Flux.just(
+                    new AiStreamChunk("thinking", "Checking safety...", null),
+                    new AiStreamChunk("delta", unsafeAnswer, null),
+                    new AiStreamChunk("done", "", null)
+            );
+        }
+
+        // Fast-path navigation routing
+        Optional<AiChatOrchestratorService.OrchestratedChatResult> navigationResult =
+                orchestratorService.answerNavigation(request.message(), requestedBranchId);
+        if (navigationResult.isPresent()) {
+            log.debug("AI chat stream selected fast-path navigator conversationId={}", conversation.id());
+            AiChatOrchestratorService.OrchestratedChatResult navResult = navigationResult.get();
+            messageRepository.create(
+                    conversation.id(),
+                    securityContext.companyId(),
+                    conversation.branchId(),
+                    securityContext.userId(),
+                    "ASSISTANT",
+                    navResult.answer(),
+                    0
+            );
+            conversationRepository.touch(conversation.id());
+
+            List<AiStreamChunk> chunks = new ArrayList<>();
+            chunks.add(new AiStreamChunk("thinking", "Navigating...", null));
+            chunks.add(new AiStreamChunk("delta", navResult.answer(), null));
+            if (!navResult.actions().isEmpty()) {
+                chunks.add(new AiStreamChunk("actions", null, navResult.actions()));
+            }
+            if (!navResult.suggestedQuestions().isEmpty()) {
+                chunks.add(new AiStreamChunk("suggestions", null, navResult.suggestedQuestions()));
+            }
+            chunks.add(new AiStreamChunk("done", "", null));
+            return Flux.fromIterable(chunks);
+        }
+
+        // Run full LLM stream
+        StringBuilder fullAnswer = new StringBuilder();
+        return functionCallingService.executeStream(
+                request.message(),
+                conversation.branchId(),
+                securityContext,
+                conversation.id(),
+                conversationContext
+        )
+        .doOnNext(chunk -> {
+            if ("delta".equals(chunk.type())) {
+                fullAnswer.append(chunk.content());
+            }
+        })
+        .doOnComplete(() -> {
+            String finalAnswer = fullAnswer.toString();
+            if (finalAnswer.isBlank()) {
+                finalAnswer = "Process completed.";
+            }
+            messageRepository.create(
+                    conversation.id(),
+                    securityContext.companyId(),
+                    conversation.branchId(),
+                    securityContext.userId(),
+                    "ASSISTANT",
+                    finalAnswer,
+                    0
+            );
+            conversationRepository.touch(conversation.id());
+            long totalDurationMs = elapsedMs(startedAt);
+            usageLogService.logChatUsage(
+                    securityContext.companyId(),
+                    securityContext.userId(),
+                    conversation.id(),
+                    totalDurationMs
+            );
+            log.debug("AI stream completed. Saved ASSISTANT message for conversation={}", conversation.id());
+        })
+        .doOnCancel(() -> {
+            log.warn("AI stream cancelled early for conversation={}", conversation.id());
+            String partialAnswer = fullAnswer.toString();
+            if (!partialAnswer.isBlank()) {
+                messageRepository.create(
+                        conversation.id(),
+                        securityContext.companyId(),
+                        conversation.branchId(),
+                        securityContext.userId(),
+                        "ASSISTANT",
+                        partialAnswer + " [Stream Interrupted]",
+                        0
+                );
+                conversationRepository.touch(conversation.id());
+            }
+        })
+        .doOnError(error -> {
+            log.error("Error in AI chat stream for conversation {}", conversation.id(), error);
+        });
     }
 
     public List<AiConversationDto> listConversations(Principal principal) {
