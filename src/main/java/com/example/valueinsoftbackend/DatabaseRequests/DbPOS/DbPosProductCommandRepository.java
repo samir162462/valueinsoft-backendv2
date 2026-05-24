@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,16 +37,16 @@ public class DbPosProductCommandRepository {
         ProductMetadata metadata = resolveMetadata(product);
         String sql = """
                 INSERT INTO %s (
-                    product_name, buying_day, activation_period, retail_price, lowest_price, buying_price,
+                    company_id, product_name, buying_day, activation_period, retail_price, lowest_price, buying_price,
                     company_name, product_type, owner_name, serial, description, battery_life, owner_phone,
                     owner_ni, product_state, supplier_id, major, img_file, business_line_key, template_key, base_uom_code,
-                    pricing_policy_code, show_online, online_description, online_image_url, online_offer_price,
+                    pricing_policy_code, tracking_type, sku, barcode, show_online, online_description, online_image_url, online_offer_price,
                     online_sort_order, online_active, created_at, updated_at
                 ) VALUES (
-                    :productName, :buyingDay, :activationPeriod, :rPrice, :lPrice, :bPrice,
+                    :companyId, :productName, :buyingDay, :activationPeriod, :rPrice, :lPrice, :bPrice,
                     :companyName, :type, :ownerName, :serial, :description, :batteryLife, :ownerPhone,
                     :ownerNI, :productState, :supplierId, :major, :image, :businessLineKey, :templateKey, :baseUomCode,
-                    :pricingPolicyCode, :showOnline, :onlineDescription, :onlineImageUrl, :onlineOfferPrice,
+                    :pricingPolicyCode, :trackingType, :sku, :barcode, :showOnline, :onlineDescription, :onlineImageUrl, :onlineOfferPrice,
                     :onlineSortOrder, :onlineActive, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
                 """.formatted(TenantSqlIdentifiers.inventoryProductTable(companyId));
@@ -60,9 +61,13 @@ public class DbPosProductCommandRepository {
         }
 
         long productId = keyHolder.getKey().longValue();
-        upsertBranchQuantity(companyId, numericBranchId, productId, product.getQuantity());
+        boolean serializedTracking = isSerializedTracking(product);
+        int stockQuantity = serializedTracking ? 0 : product.getQuantity();
+        upsertBranchQuantity(companyId, numericBranchId, productId, stockQuantity);
         saveAttributeValues(companyId, productId, metadata.templateKey(), parseAttributes(product.getAttributes()));
-        insertLedgerEntry(companyId, numericBranchId, productId, product.getQuantity(), "OPENING_BALANCE", "PRODUCT_CREATE", String.valueOf(productId));
+        if (!serializedTracking && stockQuantity != 0) {
+            insertLedgerEntry(companyId, numericBranchId, productId, stockQuantity, "OPENING_BALANCE", "PRODUCT_CREATE", String.valueOf(productId));
+        }
         log.debug("Created company-scoped product {} for company {} branch {}", productId, companyId, branchId);
         return productId;
     }
@@ -70,6 +75,7 @@ public class DbPosProductCommandRepository {
     public void updateProduct(Product product, String branchId, int companyId) {
         int numericBranchId = Integer.parseInt(branchId);
         int previousQuantity = getCurrentQuantity(companyId, numericBranchId, product.getProductId());
+        boolean serializedTracking = isSerializedTracking(product);
         ProductMetadata metadata = resolveMetadata(product);
 
         String sql = """
@@ -96,6 +102,7 @@ public class DbPosProductCommandRepository {
                     template_key = :templateKey,
                     base_uom_code = :baseUomCode,
                     pricing_policy_code = :pricingPolicyCode,
+                    barcode = :serial,
                     show_online = :showOnline,
                     online_description = :onlineDescription,
                     online_image_url = :onlineImageUrl,
@@ -115,11 +122,12 @@ public class DbPosProductCommandRepository {
             throw new IllegalStateException("Updating product failed");
         }
 
-        upsertBranchQuantity(companyId, numericBranchId, product.getProductId(), product.getQuantity());
+        int stockQuantity = serializedTracking ? previousQuantity : product.getQuantity();
+        upsertBranchQuantity(companyId, numericBranchId, product.getProductId(), stockQuantity);
         saveAttributeValues(companyId, product.getProductId(), metadata.templateKey(), parseAttributes(product.getAttributes()));
 
-        int delta = product.getQuantity() - previousQuantity;
-        if (delta != 0) {
+        int delta = stockQuantity - previousQuantity;
+        if (!serializedTracking && delta != 0) {
             insertLedgerEntry(
                     companyId,
                     numericBranchId,
@@ -130,6 +138,11 @@ public class DbPosProductCommandRepository {
                     String.valueOf(product.getProductId())
             );
         }
+    }
+
+    private boolean isSerializedTracking(Product product) {
+        TrackingType trackingType = TrackingType.defaultIfNull(product.getTrackingType());
+        return trackingType == TrackingType.IMEI || trackingType == TrackingType.SERIAL;
     }
 
     private void upsertBranchQuantity(int companyId, int branchId, long productId, int quantity) {
@@ -203,6 +216,7 @@ public class DbPosProductCommandRepository {
 
     private MapSqlParameterSource createProductParams(Product product, int companyId, ProductMetadata metadata) {
         return new MapSqlParameterSource()
+                .addValue("companyId", companyId)
                 .addValue("productName", product.getProductName())
                 .addValue("activationPeriod", parseActivationPeriod(product.getActivationPeriod()))
                 .addValue("rPrice", product.getRPrice())
@@ -225,12 +239,27 @@ public class DbPosProductCommandRepository {
                 .addValue("templateKey", metadata.templateKey())
                 .addValue("baseUomCode", metadata.baseUomCode())
                 .addValue("pricingPolicyCode", metadata.pricingPolicyCode())
+                .addValue("trackingType", TrackingType.defaultIfNull(product.getTrackingType()).name())
+                .addValue("sku", blankToNull(product.getSku()))
+                .addValue("barcode", firstNonBlank(product.getBarcode(), product.getSerial()))
                 .addValue("showOnline", product.isShowOnline())
                 .addValue("onlineDescription", product.getOnlineDescription())
                 .addValue("onlineImageUrl", product.getOnlineImageUrl())
                 .addValue("onlineOfferPrice", product.getOnlineOfferPrice())
                 .addValue("onlineSortOrder", product.getOnlineSortOrder())
                 .addValue("onlineActive", product.isOnlineActive());
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        String normalizedPrimary = blankToNull(primary);
+        return normalizedPrimary != null ? normalizedPrimary : blankToNull(fallback);
+    }
+
+    private String blankToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private int parseActivationPeriod(String activationPeriod) {

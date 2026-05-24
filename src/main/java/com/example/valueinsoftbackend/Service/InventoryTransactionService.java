@@ -3,12 +3,17 @@ package com.example.valueinsoftbackend.Service;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosInventoryTransaction;
+import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductTrackingRepository;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
+import com.example.valueinsoftbackend.Model.Inventory.ProductTrackingMetadata;
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.Request.CreateInventoryTransactionRequest;
+import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitStockInRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryTransactionQueryRequest;
 import com.example.valueinsoftbackend.util.RequestTimestampParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,11 +30,23 @@ public class InventoryTransactionService {
 
     private final DbPosInventoryTransaction dbPosInventoryTransaction;
     private final FinanceOperationalPostingService financeOperationalPostingService;
+    private final DbInventoryProductTrackingRepository productTrackingRepository;
+    private final SerializedInventoryService serializedInventoryService;
 
     public InventoryTransactionService(DbPosInventoryTransaction dbPosInventoryTransaction,
                                        FinanceOperationalPostingService financeOperationalPostingService) {
+        this(dbPosInventoryTransaction, financeOperationalPostingService, null, null);
+    }
+
+    @Autowired
+    public InventoryTransactionService(DbPosInventoryTransaction dbPosInventoryTransaction,
+                                       FinanceOperationalPostingService financeOperationalPostingService,
+                                       DbInventoryProductTrackingRepository productTrackingRepository,
+                                       SerializedInventoryService serializedInventoryService) {
         this.dbPosInventoryTransaction = dbPosInventoryTransaction;
         this.financeOperationalPostingService = financeOperationalPostingService;
+        this.productTrackingRepository = productTrackingRepository;
+        this.serializedInventoryService = serializedInventoryService;
     }
 
     @Transactional
@@ -38,6 +55,8 @@ public class InventoryTransactionService {
         TenantSqlIdentifiers.requirePositive(request.getBranchId(), "branchId");
         TenantSqlIdentifiers.requirePositive(request.getProductId(), "productId");
         TenantSqlIdentifiers.requirePositive(request.getSupplierId(), "supplierId");
+        TrackingType trackingType = resolveProductTrackingType(request.getCompanyId(), request.getProductId());
+        validateSerializedInventoryTransactionRequest(request, trackingType);
 
         Timestamp time = RequestTimestampParser.parse(request.getTime(), "time");
         InventoryTransaction inventoryTransaction = new InventoryTransaction(
@@ -88,6 +107,23 @@ public class InventoryTransactionService {
             );
         }
 
+        if (trackingType.isSerialized() && request.getNumItems() > 0) {
+            SerializedUnitStockInRequest stockInRequest = new SerializedUnitStockInRequest(
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    request.getProductId(),
+                    trackingType,
+                    (long) request.getSupplierId(),
+                    "INVENTORY_TRANSACTION",
+                    String.valueOf(insertedTransaction.transactionId()),
+                    null,
+                    request.getUserName(),
+                    request.getIdempotencyKey(),
+                    request.getSerializedUnits()
+            );
+            serializedInventoryService.stockInSerializedUnits(stockInRequest);
+        }
+
         if (request.getNumItems() > 0) {
             enqueueFinancePurchaseAfterCommit(
                     request.getCompanyId(),
@@ -123,6 +159,44 @@ public class InventoryTransactionService {
                 request.getProductId(),
                 request.getSupplierId()
         );
+    }
+
+    public List<Long> addSerializedStockIn(SerializedUnitStockInRequest request) {
+        return serializedInventoryService.stockInSerializedUnits(request);
+    }
+
+    private TrackingType resolveProductTrackingType(int companyId, int productId) {
+        if (productTrackingRepository == null) {
+            return TrackingType.QUANTITY;
+        }
+        return productTrackingRepository.findTrackingMetadata(companyId, productId)
+                .map(ProductTrackingMetadata::getTrackingType)
+                .map(TrackingType::defaultIfNull)
+                .orElse(TrackingType.QUANTITY);
+    }
+
+    private void validateSerializedInventoryTransactionRequest(CreateInventoryTransactionRequest request, TrackingType trackingType) {
+        if (!trackingType.isSerialized()) {
+            return;
+        }
+        if (serializedInventoryService == null) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SERIALIZED_INVENTORY_SERVICE_UNAVAILABLE", "Serialized inventory service is unavailable");
+        }
+        if (request.getNumItems() <= 0) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "SERIALIZED_INVENTORY_TRANSACTION_UNSUPPORTED",
+                    "Serialized stock changes must receive positive stock-in units in this flow"
+            );
+        }
+        int unitCount = request.getSerializedUnits() == null ? 0 : request.getSerializedUnits().size();
+        if (unitCount != request.getNumItems()) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "SERIALIZED_STOCK_IN_UNIT_COUNT_MISMATCH",
+                    "Serialized stock-in unit count must equal numItems"
+            );
+        }
     }
 
     private void enqueueFinancePurchaseAfterCommit(int companyId,

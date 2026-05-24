@@ -2,6 +2,11 @@ package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.example.valueinsoftbackend.Model.Inventory.InventoryMovementType;
+import com.example.valueinsoftbackend.Model.Inventory.InventoryStockMovement;
+import com.example.valueinsoftbackend.Model.Inventory.ProductTrackingMetadata;
+import com.example.valueinsoftbackend.Model.Inventory.ProductUnit;
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
@@ -14,6 +19,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.lang.reflect.Type;
@@ -21,7 +27,9 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Repository
 @Slf4j
@@ -31,15 +39,26 @@ public class DbPosOrder {
 
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
+    private final DbInventoryProductTrackingRepository productTrackingRepository;
+    private final DbInventoryProductUnitRepository productUnitRepository;
+    private final DbInventoryStockMovementRepository stockMovementRepository;
     private final Gson gson = new Gson();
 
-    public DbPosOrder(JdbcTemplate jdbcTemplate) {
+    public DbPosOrder(JdbcTemplate jdbcTemplate,
+                      DbInventoryProductTrackingRepository productTrackingRepository,
+                      DbInventoryProductUnitRepository productUnitRepository,
+                      DbInventoryStockMovementRepository stockMovementRepository) {
         this.jdbcTemplate = jdbcTemplate;
         this.namedParameterJdbcTemplate = new NamedParameterJdbcTemplate(jdbcTemplate);
+        this.productTrackingRepository = productTrackingRepository;
+        this.productUnitRepository = productUnitRepository;
+        this.stockMovementRepository = stockMovementRepository;
     }
 
+    @Transactional
     public AddOrderResult addOrder(Order order, int companyId) {
         validateOrder(order, companyId);
+        validateAndResolveSerializedSaleLines(order, companyId);
 
         int branchId = order.getBranchId();
         Timestamp orderTime = new Timestamp(System.currentTimeMillis());
@@ -87,6 +106,7 @@ public class DbPosOrder {
         }
 
         insertOrderDetails(orderId, order, companyId);
+        markSerializedUnitsSold(orderId, order, companyId, orderTime);
         updateProductQuantities(order, companyId);
         insertSoldInventoryTransactions(order, companyId, orderTime);
         insertSoldLedgerEntries(orderId, order, companyId, orderTime);
@@ -173,9 +193,18 @@ public class DbPosOrder {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         TenantSqlIdentifiers.requirePositive(orderId, "orderId");
 
-        String sql = "SELECT \"orderDetailsId\", \"itemId\", \"itemName\", quantity, price, total, \"productId\", \"bouncedBack\" " +
-                "FROM " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) +
-                " WHERE \"orderId\" = ? ORDER BY \"orderDetailsId\" ASC";
+        String sql = "SELECT detail.\"orderDetailsId\", detail.\"itemId\", detail.\"itemName\", detail.quantity, detail.price, detail.total, " +
+                "detail.\"productId\", detail.\"bouncedBack\", " +
+                "COALESCE(serialized.product_unit_ids, ARRAY[]::bigint[]) AS product_unit_ids, " +
+                "COALESCE(serialized.unit_identifiers, ARRAY[]::text[]) AS unit_identifiers " +
+                "FROM " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) + " detail " +
+                "LEFT JOIN LATERAL (" +
+                " SELECT array_agg(unit.product_unit_id ORDER BY unit.product_unit_id) AS product_unit_ids, " +
+                "        array_agg(unit.unit_identifier ORDER BY unit.product_unit_id) AS unit_identifiers " +
+                " FROM " + TenantSqlIdentifiers.inventoryProductUnitTable(companyId) + " unit " +
+                " WHERE unit.branch_id = ? AND unit.sale_order_detail_id = detail.\"orderDetailsId\"" +
+                ") serialized ON true " +
+                "WHERE detail.\"orderId\" = ? ORDER BY detail.\"orderDetailsId\" ASC";
 
         return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> new OrderDetails(
                 rs.getInt("orderDetailsId"),
@@ -185,8 +214,10 @@ public class DbPosOrder {
                 rs.getInt("price"),
                 rs.getInt("total"),
                 rs.getInt("productId"),
-                rs.getInt("bouncedBack")
-        ), orderId));
+                rs.getInt("bouncedBack"),
+                toLongList(rs.getArray("product_unit_ids")),
+                toStringList(rs.getArray("unit_identifiers"))
+        ), branchId, orderId));
     }
 
     public OrderBounceBackContext getBounceBackContext(int odId, int branchId, int companyId) {
@@ -295,26 +326,25 @@ public class DbPosOrder {
         ArrayList<OrderDetails> details = order.getOrderDetails();
         String sql = "INSERT INTO " + TenantSqlIdentifiers.orderDetailTable(companyId, order.getBranchId()) +
                 " (\"itemId\", \"itemName\", quantity, price, total, \"orderId\", \"productId\", \"bouncedBack\") " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0)";
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 0) RETURNING \"orderDetailsId\"";
 
-        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
-            @Override
-            public void setValues(PreparedStatement ps, int i) throws SQLException {
-                OrderDetails detail = details.get(i);
-                ps.setInt(1, detail.getItemId());
-                ps.setString(2, detail.getItemName());
-                ps.setInt(3, detail.getQuantity());
-                ps.setInt(4, detail.getPrice());
-                ps.setInt(5, detail.getTotal());
-                ps.setInt(6, orderId);
-                ps.setInt(7, detail.getProductId());
+        for (OrderDetails detail : details) {
+            Integer orderDetailsId = jdbcTemplate.queryForObject(
+                    sql,
+                    Integer.class,
+                    detail.getItemId(),
+                    detail.getItemName(),
+                    detail.getQuantity(),
+                    detail.getPrice(),
+                    detail.getTotal(),
+                    orderId,
+                    detail.getProductId()
+            );
+            if (orderDetailsId == null) {
+                throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ORDER_DETAIL_INSERT_FAILED", "Order detail was not saved");
             }
-
-            @Override
-            public int getBatchSize() {
-                return details.size();
-            }
-        });
+            detail.setOdId(orderDetailsId);
+        }
     }
 
     private void updateProductQuantities(Order order, int companyId) {
@@ -325,6 +355,9 @@ public class DbPosOrder {
         for (OrderDetails detail : order.getOrderDetails()) {
             if (detail.getProductId() <= 0) {
                 continue; // Skip inventory updates for non-inventory items (like Repair Fees)
+            }
+            if (isSerializedProduct(companyId, detail.getProductId())) {
+                continue;
             }
             int updatedRows = jdbcTemplate.update(
                     sql,
@@ -376,7 +409,7 @@ public class DbPosOrder {
     private void insertSoldLedgerEntries(int orderId, Order order, int companyId, Timestamp orderTime) {
         ArrayList<OrderDetails> details = new ArrayList<>();
         for (OrderDetails d : order.getOrderDetails()) {
-            if (d.getProductId() > 0) details.add(d);
+            if (d.getProductId() > 0 && !isSerializedProduct(companyId, d.getProductId())) details.add(d);
         }
         if (details.isEmpty()) return;
 
@@ -415,6 +448,200 @@ public class DbPosOrder {
         });
     }
 
+    private void validateAndResolveSerializedSaleLines(Order order, int companyId) {
+        Set<Long> unitsInOrder = new HashSet<>();
+        for (OrderDetails detail : order.getOrderDetails()) {
+            if (detail.getProductId() <= 0 || !isSerializedProduct(companyId, detail.getProductId())) {
+                continue;
+            }
+
+            ArrayList<Long> resolvedUnitIds = new ArrayList<>();
+            if (detail.getProductUnitIds() != null) {
+                for (Long productUnitId : detail.getProductUnitIds()) {
+                    if (productUnitId != null && productUnitId > 0) {
+                        resolvedUnitIds.add(productUnitId);
+                    }
+                }
+            }
+            if (detail.getUnitIdentifiers() != null) {
+                for (String unitIdentifier : detail.getUnitIdentifiers()) {
+                    if (unitIdentifier == null || unitIdentifier.trim().isEmpty()) {
+                        continue;
+                    }
+                    ProductUnit unit = productUnitRepository.findByScanCode(companyId, order.getBranchId(), unitIdentifier.trim())
+                            .orElseThrow(() -> new ApiException(
+                                    HttpStatus.NOT_FOUND,
+                                    "SERIALIZED_UNIT_NOT_FOUND",
+                                    "Serialized unit was not found in this branch"
+                            ));
+                    resolvedUnitIds.add(unit.getProductUnitId());
+                }
+            }
+
+            Set<Long> uniqueLineUnitSet = new HashSet<>(resolvedUnitIds);
+            ArrayList<Long> uniqueLineUnits = new ArrayList<>(uniqueLineUnitSet);
+            for (Long productUnitId : uniqueLineUnits) {
+                if (!unitsInOrder.add(productUnitId)) {
+                    throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_DUPLICATE_IN_ORDER", "The same serialized unit appears more than once in the order");
+                }
+            }
+            if (uniqueLineUnits.size() != detail.getQuantity()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "SERIALIZED_UNIT_QUANTITY_MISMATCH", "Serialized sale quantity must match selected IMEI/serial unit count");
+            }
+            detail.setProductUnitIds(uniqueLineUnits);
+        }
+    }
+
+    private void markSerializedUnitsSold(int orderId, Order order, int companyId, Timestamp orderTime) {
+        for (OrderDetails detail : order.getOrderDetails()) {
+            if (detail.getProductId() <= 0 || !isSerializedProduct(companyId, detail.getProductId())) {
+                continue;
+            }
+            for (Long productUnitId : detail.getProductUnitIds()) {
+                ProductUnit unit = productUnitRepository.findAvailableForSaleForUpdate(
+                                companyId,
+                                order.getBranchId(),
+                                detail.getProductId(),
+                                productUnitId
+                        )
+                        .orElseThrow(() -> new ApiException(
+                                HttpStatus.CONFLICT,
+                                "SERIALIZED_UNIT_NOT_AVAILABLE",
+                                "Serialized unit is not available for sale in this branch"
+                        ));
+
+                int updated = productUnitRepository.markSold(
+                        companyId,
+                        order.getBranchId(),
+                        detail.getProductId(),
+                        productUnitId,
+                        orderId,
+                        (long) detail.getOdId(),
+                        order.getClientId() > 0 ? (long) order.getClientId() : null
+                );
+                if (updated != 1) {
+                    throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_SALE_CONFLICT", "Serialized unit was already sold or moved");
+                }
+
+                InventoryStockMovement movement = new InventoryStockMovement();
+                movement.setCompanyId(companyId);
+                movement.setBranchId((long) order.getBranchId());
+                movement.setProductId(detail.getProductId());
+                movement.setProductUnitId(unit.getProductUnitId());
+                movement.setMovementType(InventoryMovementType.SALE);
+                movement.setQuantityDelta(BigDecimal.ONE.negate());
+                movement.setReferenceType("ORDER");
+                movement.setReferenceId(String.valueOf(orderId));
+                movement.setReferenceLineId((long) detail.getOdId());
+                movement.setCustomerId(order.getClientId() > 0 ? (long) order.getClientId() : null);
+                movement.setActorName(order.getSalesUser());
+                stockMovementRepository.insertMovement(movement);
+                insertSerializedSaleLedgerEntry(orderId, detail, unit, order, companyId, orderTime);
+            }
+        }
+    }
+
+    private Long insertSerializedSaleLedgerEntry(int orderId,
+                                                 OrderDetails detail,
+                                                 ProductUnit unit,
+                                                 Order order,
+                                                 int companyId,
+                                                 Timestamp orderTime) {
+        String sql = """
+                INSERT INTO %s (
+                    company_id, branch_id, product_id, product_unit_id, quantity_delta, movement_type,
+                    reference_type, reference_id, actor_name, note, supplier_id, trans_total,
+                    pay_type, remaining_amount, idempotency_key, created_at
+                ) VALUES (
+                    :companyId, :branchId, :productId, :productUnitId, :quantityDelta, :movementType,
+                    :referenceType, :referenceId, :actorName, :note, :supplierId, :transTotal,
+                    :payType, :remainingAmount, :idempotencyKey, :createdAt
+                )
+                ON CONFLICT DO NOTHING
+                RETURNING stock_ledger_id
+                """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
+
+        List<Long> inserted = namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("branchId", order.getBranchId())
+                        .addValue("productId", detail.getProductId())
+                        .addValue("productUnitId", unit.getProductUnitId())
+                        .addValue("quantityDelta", -1)
+                        .addValue("movementType", "SALE")
+                        .addValue("referenceType", "ORDER")
+                        .addValue("referenceId", String.valueOf(orderId))
+                        .addValue("actorName", order.getSalesUser())
+                        .addValue("note", "Serialized unit sold from POS order detail " + detail.getOdId())
+                        .addValue("supplierId", 0)
+                        .addValue("transTotal", detail.getPrice())
+                        .addValue("payType", "Sale")
+                        .addValue("remainingAmount", 0)
+                        .addValue("idempotencyKey", "ORDER:" + orderId + ":DETAIL:" + detail.getOdId() + ":UNIT:" + unit.getProductUnitId() + ":SALE")
+                        .addValue("createdAt", orderTime),
+                (rs, rowNum) -> rs.getLong("stock_ledger_id")
+        );
+
+        return inserted.isEmpty() ? null : inserted.getFirst();
+    }
+
+    public void returnSerializedUnitsForOrderDetail(OrderBounceBackContext context, int branchId, int companyId) {
+        List<ProductUnit> units = productUnitRepository.findBySaleOrderDetail(
+                companyId,
+                branchId,
+                context.getProductId(),
+                context.getOrderDetailId()
+        );
+        if (units.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "SERIALIZED_RETURN_UNITS_NOT_FOUND",
+                    "No serialized units are linked to this order detail"
+            );
+        }
+
+        for (ProductUnit unit : units) {
+            int updated = productUnitRepository.updateStatus(
+                    companyId,
+                    branchId,
+                    unit.getProductUnitId(),
+                    com.example.valueinsoftbackend.Model.Inventory.ProductUnitStatus.SOLD,
+                    com.example.valueinsoftbackend.Model.Inventory.ProductUnitStatus.AVAILABLE,
+                    null
+            );
+            if (updated != 1) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "SERIALIZED_RETURN_CONFLICT",
+                        "Serialized unit could not be returned because its status changed"
+                );
+            }
+
+            InventoryStockMovement movement = new InventoryStockMovement();
+            movement.setCompanyId(companyId);
+            movement.setBranchId((long) branchId);
+            movement.setProductId(context.getProductId());
+            movement.setProductUnitId(unit.getProductUnitId());
+            movement.setMovementType(InventoryMovementType.RETURN);
+            movement.setQuantityDelta(BigDecimal.ONE);
+            movement.setReferenceType("ORDER_BOUNCE_BACK");
+            movement.setReferenceId(String.valueOf(context.getOrderDetailId()));
+            movement.setReferenceLineId((long) context.getOrderDetailId());
+            movement.setCustomerId(context.getClientId() == null || context.getClientId() <= 0 ? null : context.getClientId().longValue());
+            movement.setActorName(context.getSalesUser());
+            movement.setNote("Returned serialized unit from order bounce back");
+            stockMovementRepository.insertMovement(movement);
+        }
+    }
+
+    public boolean isSerializedProduct(int companyId, int productId) {
+        return productTrackingRepository.findTrackingMetadata(companyId, productId)
+                .map(ProductTrackingMetadata::getTrackingType)
+                .map(TrackingType::isSerialized)
+                .orElse(false);
+    }
+
     private String buildOrdersWithDetailsSelect(int companyId, int branchId) {
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String detailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
@@ -430,9 +657,18 @@ public class DbPosOrder {
                 "   'price', detail.price, " +
                 "   'total', detail.total, " +
                 "   'productId', detail.\"productId\", " +
-                "   'bouncedBack', detail.\"bouncedBack\"" +
+                "   'bouncedBack', detail.\"bouncedBack\", " +
+                "   'productUnitIds', COALESCE(serialized.product_unit_ids, ARRAY[]::bigint[]), " +
+                "   'unitIdentifiers', COALESCE(serialized.unit_identifiers, ARRAY[]::text[])" +
                 " ))) AS orderDetails, detail.\"orderId\" AS order_id " +
-                " FROM " + detailTable + " detail GROUP BY detail.\"orderId\"" +
+                " FROM " + detailTable + " detail " +
+                " LEFT JOIN LATERAL (" +
+                "   SELECT array_agg(unit.product_unit_id ORDER BY unit.product_unit_id) AS product_unit_ids, " +
+                "          array_agg(unit.unit_identifier ORDER BY unit.product_unit_id) AS unit_identifiers " +
+                "   FROM " + TenantSqlIdentifiers.inventoryProductUnitTable(companyId) + " unit " +
+                "   WHERE unit.branch_id = " + branchId + " AND unit.sale_order_detail_id = detail.\"orderDetailsId\"" +
+                " ) serialized ON true " +
+                " GROUP BY detail.\"orderId\"" +
                 ") details ON details.order_id = ord.\"orderId\"";
     }
 
@@ -459,6 +695,34 @@ public class DbPosOrder {
         }
         ArrayList<OrderDetails> details = gson.fromJson(detailsJson, ORDER_DETAILS_LIST_TYPE);
         return details == null ? new ArrayList<>() : details;
+    }
+
+    private List<Long> toLongList(java.sql.Array sqlArray) throws SQLException {
+        if (sqlArray == null) {
+            return new ArrayList<>();
+        }
+        Object[] values = (Object[]) sqlArray.getArray();
+        ArrayList<Long> result = new ArrayList<>();
+        for (Object value : values) {
+            if (value instanceof Number number) {
+                result.add(number.longValue());
+            }
+        }
+        return result;
+    }
+
+    private List<String> toStringList(java.sql.Array sqlArray) throws SQLException {
+        if (sqlArray == null) {
+            return new ArrayList<>();
+        }
+        Object[] values = (Object[]) sqlArray.getArray();
+        ArrayList<String> result = new ArrayList<>();
+        for (Object value : values) {
+            if (value != null && !value.toString().isBlank()) {
+                result.add(value.toString());
+            }
+        }
+        return result;
     }
 
     private void validateOrder(Order order, int companyId) {

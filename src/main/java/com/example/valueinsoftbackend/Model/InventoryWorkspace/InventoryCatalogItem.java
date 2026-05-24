@@ -12,6 +12,11 @@ public class InventoryCatalogItem {
     private String productName;
     private String barcode;
     private String serial;
+    private String trackingType;
+    private java.util.List<Long> productUnitIds;
+    private java.util.List<String> unitIdentifiers;
+    private java.util.List<Long> unitSupplierIds;
+    private java.util.List<String> unitSupplierNames;
     private String businessLineKey;
     private String templateKey;
     private Integer supplierId;

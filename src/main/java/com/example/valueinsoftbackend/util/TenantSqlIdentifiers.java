@@ -76,6 +76,18 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".inventory_stock_ledger";
     }
 
+    public static String inventoryStockLedgerTable(long companyId) {
+        return companySchema(companyId) + ".inventory_stock_ledger";
+    }
+
+    public static String inventoryProductUnitTable(long companyId) {
+        return companySchema(companyId) + ".inventory_product_unit";
+    }
+
+    public static String inventoryStockMovementTable(long companyId) {
+        return companySchema(companyId) + ".inventory_stock_movement";
+    }
+
     public static String inventoryImportBatchTable(int companyId) {
         return companySchema(companyId) + ".inventory_import_batch";
     }

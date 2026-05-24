@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Model;
 
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,6 +14,8 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -106,6 +109,17 @@ public class Product {
     java.math.BigDecimal onlineOfferPrice;
     int onlineSortOrder;
     boolean onlineActive;
+
+    TrackingType trackingType = TrackingType.QUANTITY;
+
+    @Size(max = 100, message = "sku must be 100 characters or fewer")
+    String sku;
+
+    @Size(max = 100, message = "barcode must be 100 characters or fewer")
+    String barcode;
+
+    List<Long> productUnitIds = new ArrayList<>();
+    List<String> unitIdentifiers = new ArrayList<>();
 
     @AssertTrue(message = "rPrice must be greater than or equal to lPrice, and lPrice must be greater than or equal to bPrice")
     public boolean isPriceOrderValid() {

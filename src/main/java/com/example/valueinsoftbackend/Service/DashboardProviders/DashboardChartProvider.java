@@ -103,16 +103,24 @@ public class DashboardChartProvider {
         
         // Count new clients per month for current year
         String sql = "SELECT " +
-                "  TO_CHAR(\"registeredTime\", 'MON') as month_label, " +
-                "  COUNT(*)::integer as new_clients, " +
-                "  EXTRACT(MONTH FROM \"registeredTime\") as month_num " +
+                "  EXTRACT(MONTH FROM \"registeredTime\")::integer as month_num, " +
+                "  COUNT(*)::integer as new_clients " +
                 "FROM " + clientTable + " " +
                 "WHERE EXTRACT(YEAR FROM \"registeredTime\") = EXTRACT(YEAR FROM CURRENT_DATE) " +
-                "GROUP BY month_label, month_num " +
+                "GROUP BY month_num " +
                 "ORDER BY month_num";
 
         try {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+            Map<Integer, Integer> newClientsByMonth = new HashMap<>();
+            for (Map<String, Object> row : rows) {
+                Number monthNum = (Number) row.get("month_num");
+                Number newClients = (Number) row.get("new_clients");
+                if (monthNum != null && newClients != null) {
+                    newClientsByMonth.put(monthNum.intValue(), newClients.intValue());
+                }
+            }
+
             List<Object> trend = new ArrayList<>();
             
             // We want to show a cumulative growth trend
@@ -124,12 +132,16 @@ public class DashboardChartProvider {
                 runningTotal = jdbcTemplate.queryForObject(baselineSql, Integer.class);
             } catch (Exception e) {}
 
-            for (Map<String, Object> row : rows) {
-                int newInMonth = (int) row.get("new_clients");
+            String[] months = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
+            int currentMonth = LocalDate.now().getMonthValue();
+            
+            // Generate cumulative data for each month of the current year up to the current month
+            for (int m = 1; m <= currentMonth; m++) {
+                int newInMonth = newClientsByMonth.getOrDefault(m, 0);
                 runningTotal += newInMonth;
                 
                 Map<String, Object> point = new HashMap<>();
-                point.put("month", row.get("month_label").toString().toUpperCase());
+                point.put("month", months[m - 1]);
                 point.put("value", runningTotal);
                 trend.add(point);
             }

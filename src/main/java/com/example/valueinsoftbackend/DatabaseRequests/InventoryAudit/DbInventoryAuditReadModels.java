@@ -28,6 +28,9 @@ public class DbInventoryAuditReadModels {
         public InventoryAuditRow mapRow(ResultSet rs, int rowNum) throws SQLException {
             return new InventoryAuditRow(
                     rs.getLong("product_id"),
+                    getLongOrNull(rs, "product_unit_id"),
+                    rs.getString("tracking_type"),
+                    rs.getString("serial_identifier"),
                     rs.getString("product_name"),
                     rs.getString("category"),
                     rs.getString("branch"),
@@ -78,7 +81,7 @@ public class DbInventoryAuditReadModels {
         ArrayList<InventoryAuditRow> rows = new ArrayList<>(
                 namedParameterJdbcTemplate.query(
                         baseSql + """
-                                 SELECT product_id, product_name, category, branch, opening_qty, in_qty, out_qty, closing_qty,
+                                 SELECT product_id, product_unit_id, tracking_type, serial_identifier, product_name, category, branch, opening_qty, in_qty, out_qty, closing_qty,
                                         unit_price, total_value, last_movement_date
                                  FROM audit_base
                                  """ + whereClause + buildOrderBy(request) + " LIMIT :limit OFFSET :offset",
@@ -172,7 +175,7 @@ public class DbInventoryAuditReadModels {
         String baseSql = buildBaseAuditSql(request.getCompanyId());
         String whereClause = buildWhereClause(request, params);
         String sql = baseSql + """
-                               SELECT product_id, product_name, category, branch, opening_qty, in_qty, out_qty, closing_qty,
+                               SELECT product_id, product_unit_id, tracking_type, serial_identifier, product_name, category, branch, opening_qty, in_qty, out_qty, closing_qty,
                                       unit_price, total_value, last_movement_date
                                FROM audit_base
                                """ + whereClause + buildOrderBy(request);
@@ -209,20 +212,68 @@ public class DbInventoryAuditReadModels {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         String balanceTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
         String ledgerTable = TenantSqlIdentifiers.inventoryStockLedgerTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
 
         return """
-               WITH branch_products AS (
-                   SELECT DISTINCT balance.product_id
-                   FROM %s balance
-                   WHERE balance.branch_id = :branchId
-                   UNION
-                   SELECT DISTINCT ledger.product_id
+               WITH ledger_source AS (
+                   SELECT
+                       ledger.stock_ledger_id,
+                       ledger.branch_id,
+                       ledger.product_id,
+                       ledger.product_unit_id,
+                       ledger.quantity_delta,
+                       ledger.movement_type,
+                       ledger.created_at
                    FROM %s ledger
+
+                   UNION ALL
+
+                   SELECT
+                       -unit.product_unit_id AS stock_ledger_id,
+                       unit.branch_id,
+                       unit.product_id,
+                       unit.product_unit_id,
+                       1 AS quantity_delta,
+                       'STOCK_IN' AS movement_type,
+                       COALESCE(unit.received_at, unit.created_at) AS created_at
+                   FROM %s unit
+                   JOIN %s unit_product ON unit_product.product_id = unit.product_id
+                   WHERE unit.branch_id = :branchId
+                     AND COALESCE(unit_product.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                     AND NOT EXISTS (
+                         SELECT 1
+                         FROM %s existing_ledger
+                         WHERE existing_ledger.product_unit_id = unit.product_unit_id
+                           AND existing_ledger.quantity_delta > 0
+                           AND existing_ledger.movement_type IN ('STOCK_IN', 'OPENING_BALANCE', 'MANUAL_STOCK_IN')
+                     )
+               ),
+               branch_products AS (
+                   SELECT DISTINCT balance.product_id, NULL::bigint AS product_unit_id
+                   FROM %s balance
+                   JOIN %s balance_product ON balance_product.product_id = balance.product_id
+                   WHERE balance.branch_id = :branchId
+                     AND COALESCE(balance_product.tracking_type, 'QUANTITY') NOT IN ('IMEI', 'SERIAL')
+                   UNION
+                   SELECT DISTINCT
+                       ledger.product_id,
+                       CASE
+                           WHEN COALESCE(ledger_product.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                           THEN ledger.product_unit_id
+                           ELSE NULL::bigint
+                       END AS product_unit_id
+                   FROM ledger_source ledger
+                   JOIN %s ledger_product ON ledger_product.product_id = ledger.product_id
                    WHERE ledger.branch_id = :branchId
                ),
                ledger_rollup AS (
                    SELECT
                        ledger.product_id,
+                       CASE
+                           WHEN COALESCE(product.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                           THEN ledger.product_unit_id
+                           ELSE NULL::bigint
+                       END AS product_unit_id,
                        COALESCE(SUM(CASE WHEN ledger.created_at < :fromTs THEN ledger.quantity_delta ELSE 0 END), 0) AS opening_qty,
                        COALESCE(SUM(CASE
                            WHEN ledger.created_at >= :fromTs AND ledger.created_at < :toTs AND ledger.quantity_delta > 0
@@ -236,13 +287,23 @@ public class DbInventoryAuditReadModels {
                        END), 0) AS out_qty,
                        COALESCE(SUM(CASE WHEN ledger.created_at < :toTs THEN ledger.quantity_delta ELSE 0 END), 0) AS closing_qty,
                        MAX(CASE WHEN ledger.created_at < :toTs THEN ledger.created_at ELSE NULL END) AS last_movement_date
-                   FROM %s ledger
+                   FROM ledger_source ledger
+                   JOIN %s product ON product.product_id = ledger.product_id
                    WHERE ledger.branch_id = :branchId
-                   GROUP BY ledger.product_id
+                   GROUP BY
+                       ledger.product_id,
+                       CASE
+                           WHEN COALESCE(product.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                           THEN ledger.product_unit_id
+                           ELSE NULL::bigint
+                       END
                ),
                audit_base AS (
                    SELECT
                        product.product_id,
+                       branch_products.product_unit_id,
+                       COALESCE(product.tracking_type, 'QUANTITY') AS tracking_type,
+                       COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, ''), '') AS serial_identifier,
                        product.product_name,
                        COALESCE(NULLIF(product.major, ''), NULLIF(product.business_line_key, ''), NULLIF(product.template_key, ''), '') AS category,
                        branch."branchName" AS branch,
@@ -260,9 +321,24 @@ public class DbInventoryAuditReadModels {
                    FROM branch_products branch_products
                    JOIN %s product ON product.product_id = branch_products.product_id
                    JOIN public."Branch" branch ON branch."branchId" = :branchId
+                   LEFT JOIN %s unit ON unit.product_unit_id = branch_products.product_unit_id
                    LEFT JOIN ledger_rollup ON ledger_rollup.product_id = product.product_id
+                       AND (
+                           ledger_rollup.product_unit_id IS NOT DISTINCT FROM branch_products.product_unit_id
+                       )
                )
-               """.formatted(balanceTable, ledgerTable, ledgerTable, productTable);
+               """.formatted(
+                ledgerTable,
+                unitTable,
+                productTable,
+                ledgerTable,
+                balanceTable,
+                productTable,
+                productTable,
+                productTable,
+                productTable,
+                unitTable
+        );
     }
 
     private String buildWhereClause(InventoryAuditSearchRequest request, MapSqlParameterSource params) {
@@ -276,6 +352,9 @@ public class DbInventoryAuditReadModels {
             where.append("""
                          AND (
                              CAST(product_id AS TEXT) LIKE :queryLike
+                             OR CAST(product_unit_id AS TEXT) LIKE :queryLike
+                             OR LOWER(serial_identifier) LIKE :queryLike
+                             OR LOWER(tracking_type) LIKE :queryLike
                              OR LOWER(product_name) LIKE :queryLike
                              OR LOWER(category) LIKE :queryLike
                              OR LOWER(branch) LIKE :queryLike
@@ -323,6 +402,9 @@ public class DbInventoryAuditReadModels {
 
         return switch (sortField.trim().toLowerCase(Locale.ROOT)) {
             case "productid", "product_id" -> "product_id";
+            case "productunitid", "product_unit_id" -> "product_unit_id";
+            case "serial", "serialidentifier", "serial_identifier", "imei" -> "serial_identifier";
+            case "trackingtype", "tracking_type" -> "tracking_type";
             case "productname", "product_name" -> "product_name";
             case "category" -> "category";
             case "openingqty", "opening_qty" -> "opening_qty";
@@ -367,5 +449,10 @@ public class DbInventoryAuditReadModels {
 
     private String buildLikeValue(String value) {
         return hasText(value) ? "%" + value.trim().toLowerCase(Locale.ROOT) + "%" : null;
+    }
+
+    private static Long getLongOrNull(ResultSet rs, String columnName) throws SQLException {
+        long value = rs.getLong(columnName);
+        return rs.wasNull() ? null : value;
     }
 }

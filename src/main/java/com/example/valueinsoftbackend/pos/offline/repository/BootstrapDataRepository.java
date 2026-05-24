@@ -30,6 +30,7 @@ public class BootstrapDataRepository {
                                                                    Long afterProductId, int pageSize) {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId.intValue());
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId.intValue());
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String sql = """
                 SELECT
                     p.product_id          AS product_id,
@@ -37,18 +38,39 @@ public class BootstrapDataRepository {
                     p.product_name        AS product_name,
                     p.retail_price        AS retail_price,
                     p.lowest_price        AS lowest_price,
-                    COALESCE(s.quantity, 0) AS current_stock,
+                    CASE WHEN COALESCE(p.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                        THEN COALESCE(serialized.available_quantity, 0)
+                        ELSE COALESCE(s.quantity, 0)
+                    END AS current_stock,
                     p.major               AS category,
                     p.product_state       AS product_state,
                     p.base_uom_code       AS base_uom_code,
                     p.pricing_policy_code AS pricing_policy_code,
+                    COALESCE(p.tracking_type, 'QUANTITY') AS tracking_type,
+                    COALESCE(serialized.serialized_units, '[]'::json) AS serialized_units,
                     COALESCE(p.updated_at, p.created_at, p.buying_day) AS updated_at
                 FROM %s p
                 LEFT JOIN %s s ON s.product_id = p.product_id AND s.branch_id = ?
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS available_quantity,
+                           json_agg(json_build_object(
+                        'productUnitId', unit.product_unit_id,
+                        'productId', unit.product_id,
+                        'trackingType', unit.tracking_type,
+                        'unitIdentifier', unit.unit_identifier,
+                        'imei', unit.imei,
+                        'serialNumber', unit.serial_number,
+                        'status', unit.status
+                    ) ORDER BY unit.product_unit_id) AS serialized_units
+                    FROM %s unit
+                    WHERE unit.branch_id = ?
+                      AND unit.product_id = p.product_id
+                      AND unit.status = 'AVAILABLE'
+                ) serialized ON true
                 WHERE p.product_id > ?
                 ORDER BY p.product_id ASC
                 LIMIT ?
-                """.formatted(productTable, stockTable);
+                """.formatted(productTable, stockTable, unitTable);
 
         List<OfflineBootstrapProductItem> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineBootstrapProductItem(
                 rs.getLong("product_id"),
@@ -61,8 +83,10 @@ public class BootstrapDataRepository {
                 isActiveProductState(rs.getString("product_state")),
                 rs.getString("base_uom_code"),
                 rs.getString("pricing_policy_code"),
+                rs.getString("tracking_type"),
+                readSerializedUnits(rs.getString("serialized_units")),
                 toInstant(rs.getTimestamp("updated_at"))
-        ), branchId, afterProductId, pageSize + 1);
+        ), branchId, branchId, afterProductId, pageSize + 1);
 
         return toPage(rows, pageSize, OfflineBootstrapProductItem::productId, this::productUpdatedAt);
     }
@@ -214,6 +238,21 @@ public class BootstrapDataRepository {
         } catch (JsonProcessingException ex) {
             log.warn("Unable to parse branch setting JSON value for offline bootstrap");
             return valueJson;
+        }
+    }
+
+    private List<OfflineBootstrapSerializedUnitItem> readSerializedUnits(String valueJson) {
+        if (valueJson == null || valueJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(
+                    valueJson,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, OfflineBootstrapSerializedUnitItem.class)
+            );
+        } catch (JsonProcessingException ex) {
+            log.warn("Unable to parse serialized unit JSON for offline product bootstrap");
+            return List.of();
         }
     }
 

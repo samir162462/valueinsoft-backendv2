@@ -207,7 +207,7 @@ public class DbCompany {
                 SQLExpensesStatic(schemaName, databaseOwner),
                 SQLClient(schemaName, databaseOwner)
         ));
-        statements.addAll(SQLModernInventoryFoundation(schemaName, databaseOwner));
+        statements.addAll(SQLModernInventoryFoundation(schemaName, companyId, databaseOwner));
         return statements;
     }
 
@@ -598,7 +598,7 @@ public class DbCompany {
         return query;
     }
 
-    static List<String> SQLModernInventoryFoundation(String schemaName, String dbOwner) {
+    static List<String> SQLModernInventoryFoundation(String schemaName, int companyId, String dbOwner) {
         ArrayList<String> statements = new ArrayList<>();
         statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_product (" +
                 " product_id BIGSERIAL PRIMARY KEY," +
@@ -666,6 +666,7 @@ public class DbCompany {
                 " CONSTRAINT inventory_stock_ledger_product_fk FOREIGN KEY (product_id) REFERENCES " + schemaName + ".inventory_product (product_id) ON DELETE CASCADE" +
                 ")");
         statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_stock_ledger_branch_product_time ON " + schemaName + ".inventory_stock_ledger (branch_id, product_id, created_at DESC)");
+        statements.add("SELECT public.create_serialized_inventory_tables_for_tenant('" + schemaName + "', " + companyId + ")");
 
         statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_legacy_product_mapping (" +
                 " branch_id INTEGER NOT NULL," +

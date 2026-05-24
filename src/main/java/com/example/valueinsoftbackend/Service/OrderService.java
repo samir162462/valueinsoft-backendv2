@@ -158,21 +158,25 @@ public class OrderService {
 
         // Only restore inventory and record ledger if returning to stock
         if (request.getToWho() == 1 && context.getProductId() > 0) {
-            int restoredRows = dbPosOrder.restoreInventoryQuantity(
-                    context.getProductId(),
-                    context.getQuantity(),
-                    request.getBranchId(),
-                    companyId);
-            if (restoredRows != 1) {
-                throw new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found for bounce back");
-            }
-            dbPosOrder.insertBounceBackInventoryTransaction(context, request.getBranchId(), companyId);
-            inventoryMovementId = dbPosOrder.insertBounceBackLedgerEntry(context, request.getBranchId(), companyId);
-            if (inventoryMovementId == null) {
-                throw new ApiException(
-                        HttpStatus.INTERNAL_SERVER_ERROR,
-                        "BOUNCE_BACK_LEDGER_WRITE_FAILED",
-                        "Modern inventory ledger entry was not written for bounce back");
+            if (dbPosOrder.isSerializedProduct(companyId, context.getProductId())) {
+                dbPosOrder.returnSerializedUnitsForOrderDetail(context, request.getBranchId(), companyId);
+            } else {
+                int restoredRows = dbPosOrder.restoreInventoryQuantity(
+                        context.getProductId(),
+                        context.getQuantity(),
+                        request.getBranchId(),
+                        companyId);
+                if (restoredRows != 1) {
+                    throw new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found for bounce back");
+                }
+                dbPosOrder.insertBounceBackInventoryTransaction(context, request.getBranchId(), companyId);
+                inventoryMovementId = dbPosOrder.insertBounceBackLedgerEntry(context, request.getBranchId(), companyId);
+                if (inventoryMovementId == null) {
+                    throw new ApiException(
+                            HttpStatus.INTERNAL_SERVER_ERROR,
+                            "BOUNCE_BACK_LEDGER_WRITE_FAILED",
+                            "Modern inventory ledger entry was not written for bounce back");
+                }
             }
         }
 
@@ -272,6 +276,10 @@ public class OrderService {
         ArrayList<OrderDetails> details = new ArrayList<>();
         List<OrderItemRequest> requestDetails = request.orderDetails();
         for (OrderItemRequest itemRequest : requestDetails) {
+            List<String> unitIdentifiers = new ArrayList<>(itemRequest.unitIdentifiers());
+            if (unitIdentifiers.isEmpty() && itemRequest.serial() != null && !itemRequest.serial().trim().isEmpty()) {
+                unitIdentifiers.add(itemRequest.serial().trim());
+            }
             details.add(new OrderDetails(
                     0,
                     itemRequest.itemId(),
@@ -280,7 +288,9 @@ public class OrderService {
                     itemRequest.price(),
                     itemRequest.total(),
                     itemRequest.productId(),
-                    0));
+                    0,
+                    itemRequest.productUnitIds(),
+                    unitIdentifiers));
         }
 
         return new Order(

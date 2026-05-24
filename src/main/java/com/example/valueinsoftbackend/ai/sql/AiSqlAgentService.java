@@ -157,8 +157,9 @@ public class AiSqlAgentService {
                     : "";
             return new AiSqlPlan(sql);
         } catch (RuntimeException exception) {
-            log.warn("AI SQL plan parse failed. Raw response length={}",
-                    response.answer() == null ? 0 : response.answer().length());
+            log.warn("AI SQL plan parse failed. Raw response length={} snippet={}",
+                    response.answer() == null ? 0 : response.answer().length(),
+                    snippet(response.answer()));
             throw new AiSqlValidationException("The model did not return a valid SQL plan.");
         }
     }
@@ -195,7 +196,20 @@ public class AiSqlAgentService {
             text = text.replaceFirst("(?s)^```(?:json)?\\s*", "");
             text = text.replaceFirst("(?s)\\s*```$", "");
         }
+        int objectStart = text.indexOf('{');
+        int objectEnd = text.lastIndexOf('}');
+        if (objectStart >= 0 && objectEnd > objectStart) {
+            return text.substring(objectStart, objectEnd + 1).trim();
+        }
         return text.trim();
+    }
+
+    private String snippet(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        return normalized.length() <= 240 ? normalized : normalized.substring(0, 240) + "...";
     }
 
     private long elapsedMs(long startedAt) {

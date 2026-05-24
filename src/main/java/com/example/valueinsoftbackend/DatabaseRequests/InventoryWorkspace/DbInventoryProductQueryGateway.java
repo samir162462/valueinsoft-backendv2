@@ -10,7 +10,10 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Array;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 
@@ -28,8 +31,13 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         InventoryCatalogItem item = new InventoryCatalogItem();
         item.setProductId(rs.getLong("productId"));
         item.setProductName(rs.getString("productName"));
-        item.setBarcode(rs.getString("serial"));
+        item.setBarcode(rs.getString("barcode"));
         item.setSerial(rs.getString("serial"));
+        item.setTrackingType(rs.getString("trackingType"));
+        item.setProductUnitIds(toLongList(rs.getArray("productUnitIds")));
+        item.setUnitIdentifiers(toStringList(rs.getArray("unitIdentifiers")));
+        item.setUnitSupplierIds(toLongList(rs.getArray("unitSupplierIds")));
+        item.setUnitSupplierNames(toStringList(rs.getArray("unitSupplierNames")));
         item.setBusinessLineKey(rs.getString("businessLineKey"));
         item.setTemplateKey(rs.getString("templateKey"));
         item.setSupplierId(rs.getInt("supplierId"));
@@ -47,6 +55,55 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         item.setUpdatedAt(rs.getTimestamp("updated_at").toString());
         return item;
     };
+
+    private static List<Long> toLongList(Array sqlArray) throws SQLException {
+        if (sqlArray == null) {
+            return new ArrayList<>();
+        }
+        Object value = sqlArray.getArray();
+        if (value instanceof Long[] ids) {
+            return new ArrayList<>(Arrays.asList(ids));
+        }
+        if (value instanceof Number[] ids) {
+            List<Long> result = new ArrayList<>(ids.length);
+            for (Number id : ids) {
+                if (id != null) {
+                    result.add(id.longValue());
+                }
+            }
+            return result;
+        }
+        if (value instanceof Object[] ids) {
+            List<Long> result = new ArrayList<>(ids.length);
+            for (Object id : ids) {
+                if (id instanceof Number number) {
+                    result.add(number.longValue());
+                }
+            }
+            return result;
+        }
+        return new ArrayList<>();
+    }
+
+    private static List<String> toStringList(Array sqlArray) throws SQLException {
+        if (sqlArray == null) {
+            return new ArrayList<>();
+        }
+        Object value = sqlArray.getArray();
+        if (value instanceof String[] identifiers) {
+            return new ArrayList<>(Arrays.asList(identifiers));
+        }
+        if (value instanceof Object[] identifiers) {
+            List<String> result = new ArrayList<>(identifiers.length);
+            for (Object identifier : identifiers) {
+                if (identifier != null && !identifier.toString().isBlank()) {
+                    result.add(identifier.toString());
+                }
+            }
+            return result;
+        }
+        return new ArrayList<>();
+    }
 
     @Override
     public InventoryQuickFindResponse quickFind(String actorName, InventoryQuickFindRequest request) {
@@ -101,24 +158,33 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String supplierTable = TenantSqlIdentifiers.supplierTable(companyId, branchId);
+        String effectiveQuantitySql = effectiveQuantitySql("p", "st", "serialized_stock");
 
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ")
            .append("p.product_id AS \"productId\", ")
            .append("p.product_name AS \"productName\", ")
            .append("p.serial AS serial, ")
+           .append("p.barcode AS barcode, ")
+           .append("COALESCE(p.tracking_type, 'QUANTITY') AS \"trackingType\", ")
+           .append("COALESCE(serialized_stock.product_unit_ids, ARRAY[]::bigint[]) AS \"productUnitIds\", ")
+           .append("COALESCE(serialized_stock.unit_identifiers, ARRAY[]::text[]) AS \"unitIdentifiers\", ")
+           .append("COALESCE(serialized_stock.unit_supplier_ids, ARRAY[]::bigint[]) AS \"unitSupplierIds\", ")
+           .append("COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", ")
            .append("p.business_line_key AS \"businessLineKey\", ")
            .append("p.template_key AS \"templateKey\", ")
            .append("p.supplier_id AS \"supplierId\", ")
            .append("s.\"SupplierName\" AS \"supplierName\", ")
-           .append("COALESCE(st.quantity, 0) AS quantity, ")
+           .append(effectiveQuantitySql).append(" AS quantity, ")
            .append("p.product_state AS \"pState\", ")
            .append("p.retail_price AS \"sellPrice\", ")
            .append("p.buying_price AS \"buyPrice\", ")
            .append("p.updated_at ")
            .append("FROM ").append(productTable).append(" p ")
            .append("LEFT JOIN ").append(stockTable).append(" st ON st.product_id = p.product_id AND st.branch_id = :branchId ")
+           .append(serializedStockJoin(unitTable, supplierTable))
            .append("LEFT JOIN ").append(supplierTable).append(" s ON s.\"supplierId\" = p.supplier_id ");
 
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -127,7 +193,10 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         List<String> conditions = new ArrayList<>();
         
         if (request.getQuery() != null && !request.getQuery().isBlank()) {
-            conditions.add("(p.product_name ILIKE :query OR p.serial ILIKE :query)");
+            conditions.add("(p.product_name ILIKE :query OR p.serial ILIKE :query OR p.barcode ILIKE :query OR EXISTS (" +
+                    "SELECT 1 FROM " + unitTable + " unit_search " +
+                    "WHERE unit_search.product_id = p.product_id AND unit_search.branch_id = :branchId " +
+                    "AND (unit_search.imei ILIKE :query OR unit_search.serial_number ILIKE :query)))");
             params.addValue("query", "%" + request.getQuery().trim() + "%");
         }
 
@@ -148,13 +217,13 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
             for (String chip : chips) {
                 switch (chip) {
                     case "IN_STOCK":
-                        conditions.add("st.quantity > 0");
+                        conditions.add(effectiveQuantitySql + " > 0");
                         break;
                     case "OUT_OF_STOCK":
-                        conditions.add("COALESCE(st.quantity, 0) <= 0");
+                        conditions.add(effectiveQuantitySql + " <= 0");
                         break;
                     case "LOW_STOCK":
-                        conditions.add("st.quantity > 0 AND st.quantity <= 5");
+                        conditions.add(effectiveQuantitySql + " > 0 AND " + effectiveQuantitySql + " <= 5");
                         break;
                     case "USED":
                         conditions.add("p.product_state = 'Used'");
@@ -179,7 +248,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         String sortDir = "DESC";
         if (request.getSort() != null) {
             if ("productName".equals(request.getSort().getField())) sortField = "p.product_name";
-            else if ("quantityOnHand".equals(request.getSort().getField())) sortField = "st.quantity";
+            else if ("quantityOnHand".equals(request.getSort().getField())) sortField = effectiveQuantitySql;
             
             if ("asc".equalsIgnoreCase(request.getSort().getDirection())) sortDir = "ASC";
         }
@@ -196,6 +265,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         // Total count for pagination
         StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM ").append(productTable).append(" p ");
         countSql.append("LEFT JOIN ").append(stockTable).append(" st ON st.product_id = p.product_id AND st.branch_id = :branchId ");
+        countSql.append(serializedStockJoin(unitTable, supplierTable));
         if (!conditions.isEmpty()) {
             countSql.append(" WHERE ").append(String.join(" AND ", conditions));
         }
@@ -230,7 +300,11 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
     }
 
     private InventoryCatalogItem findBySerial(int companyId, int branchId, String serial) {
-        String sql = getBaseSelect(companyId, branchId) + " WHERE p.serial = :serial";
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
+        String sql = getBaseSelect(companyId, branchId) + " WHERE p.serial = :serial OR p.barcode = :serial OR EXISTS (" +
+                "SELECT 1 FROM " + unitTable + " unit_search " +
+                "WHERE unit_search.product_id = p.product_id AND unit_search.branch_id = :branchId " +
+                "AND (unit_search.imei = :serial OR unit_search.serial_number = :serial))";
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("branchId", branchId)
                 .addValue("serial", serial);
@@ -250,15 +324,45 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
     private String getBaseSelect(int companyId, int branchId) {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String supplierTable = TenantSqlIdentifiers.supplierTable(companyId, branchId);
+        String effectiveQuantitySql = effectiveQuantitySql("p", "st", "serialized_stock");
         
         return "SELECT p.product_id AS \"productId\", p.product_name AS \"productName\", p.serial AS serial, " +
+               "p.barcode AS barcode, COALESCE(p.tracking_type, 'QUANTITY') AS \"trackingType\", " +
+               "COALESCE(serialized_stock.product_unit_ids, ARRAY[]::bigint[]) AS \"productUnitIds\", " +
+               "COALESCE(serialized_stock.unit_identifiers, ARRAY[]::text[]) AS \"unitIdentifiers\", " +
+               "COALESCE(serialized_stock.unit_supplier_ids, ARRAY[]::bigint[]) AS \"unitSupplierIds\", " +
+               "COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", " +
                "p.business_line_key AS \"businessLineKey\", p.template_key AS \"templateKey\", " +
                "p.supplier_id AS \"supplierId\", s.\"SupplierName\" AS \"supplierName\", " +
-               "COALESCE(st.quantity, 0) AS quantity, p.product_state AS \"pState\", " +
+               effectiveQuantitySql + " AS quantity, p.product_state AS \"pState\", " +
                "p.retail_price AS \"sellPrice\", p.buying_price AS \"buyPrice\", p.updated_at " +
                "FROM " + productTable + " p " +
                "LEFT JOIN " + stockTable + " st ON st.product_id = p.product_id AND st.branch_id = :branchId " +
+               serializedStockJoin(unitTable, supplierTable) +
                "LEFT JOIN " + supplierTable + " s ON s.\"supplierId\" = p.supplier_id";
+    }
+
+    private static String effectiveQuantitySql(String productAlias, String stockAlias, String serializedAlias) {
+        return "CASE WHEN COALESCE(" + productAlias + ".tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL') " +
+                "THEN COALESCE(" + serializedAlias + ".available_quantity, 0) " +
+                "ELSE COALESCE(" + stockAlias + ".quantity, 0) END";
+    }
+
+    private static String serializedStockJoin(String unitTable, String supplierTable) {
+        return "LEFT JOIN ( " +
+                "SELECT product_id, " +
+                "COUNT(*) FILTER (WHERE status = 'AVAILABLE') AS available_quantity, " +
+                "ARRAY_AGG(product_unit_id ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE') AS product_unit_ids, " +
+                "ARRAY_AGG(COALESCE(NULLIF(imei, ''), NULLIF(serial_number, '')) ORDER BY product_unit_id) " +
+                "FILTER (WHERE status = 'AVAILABLE' AND COALESCE(NULLIF(imei, ''), NULLIF(serial_number, '')) IS NOT NULL) AS unit_identifiers, " +
+                "ARRAY_AGG(unit.supplier_id::bigint ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE' AND unit.supplier_id IS NOT NULL) AS unit_supplier_ids, " +
+                "ARRAY_AGG(unit_supplier.\"SupplierName\" ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE' AND unit_supplier.\"SupplierName\" IS NOT NULL) AS unit_supplier_names " +
+                "FROM " + unitTable + " unit " +
+                "LEFT JOIN " + supplierTable + " unit_supplier ON unit_supplier.\"supplierId\" = unit.supplier_id " +
+                "WHERE unit.branch_id = :branchId " +
+                "GROUP BY unit.product_id " +
+                ") serialized_stock ON serialized_stock.product_id = p.product_id ";
     }
 }

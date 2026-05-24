@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.Service;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProductCommandRepository;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
@@ -83,7 +84,9 @@ public class ProductService {
 
     @Transactional
     public ProductOperationResponse addProduct(Product product, String branchId, int companyId) {
-        if (product.getQuantity() <= 0) {
+        TrackingType trackingType = TrackingType.defaultIfNull(product.getTrackingType());
+
+        if (trackingType == TrackingType.QUANTITY && product.getQuantity() <= 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_QUANTITY_REQUIRED", "quantity must be greater than zero when creating a product");
         }
 

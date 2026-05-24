@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Model;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class OrderDetails {
 
@@ -12,8 +13,15 @@ public class OrderDetails {
     int total;
     int productId;
     int bouncedBack;
+    List<Long> productUnitIds;
+    List<String> unitIdentifiers;
 
     public OrderDetails(int odId, int itemId, String itemName, int quantity, int price, int total, int productId, int bouncedBack) {
+        this(odId, itemId, itemName, quantity, price, total, productId, bouncedBack, new ArrayList<>(), new ArrayList<>());
+    }
+
+    public OrderDetails(int odId, int itemId, String itemName, int quantity, int price, int total, int productId, int bouncedBack,
+                        List<Long> productUnitIds, List<String> unitIdentifiers) {
         this.odId = odId;
         this.itemId = itemId;
         this.itemName = itemName;
@@ -22,6 +30,8 @@ public class OrderDetails {
         this.total = total;
         this.productId = productId;
         this.bouncedBack = bouncedBack;
+        this.productUnitIds = productUnitIds == null ? new ArrayList<>() : new ArrayList<>(productUnitIds);
+        this.unitIdentifiers = unitIdentifiers == null ? new ArrayList<>() : new ArrayList<>(unitIdentifiers);
     }
 
     public int getOdId() {
@@ -86,5 +96,21 @@ public class OrderDetails {
 
     public void setBouncedBack(int bouncedBack) {
         this.bouncedBack = bouncedBack;
+    }
+
+    public List<Long> getProductUnitIds() {
+        return productUnitIds;
+    }
+
+    public void setProductUnitIds(List<Long> productUnitIds) {
+        this.productUnitIds = productUnitIds == null ? new ArrayList<>() : new ArrayList<>(productUnitIds);
+    }
+
+    public List<String> getUnitIdentifiers() {
+        return unitIdentifiers;
+    }
+
+    public void setUnitIdentifiers(List<String> unitIdentifiers) {
+        this.unitIdentifiers = unitIdentifiers == null ? new ArrayList<>() : new ArrayList<>(unitIdentifiers);
     }
 }

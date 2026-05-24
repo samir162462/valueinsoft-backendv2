@@ -1,9 +1,12 @@
 package com.example.valueinsoftbackend.Model.Request;
 
+import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitInput;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+
+import java.util.List;
 
 public class CreateInventoryTransactionRequest {
 
@@ -40,6 +43,12 @@ public class CreateInventoryTransactionRequest {
 
     @Positive(message = "companyId must be positive")
     private int companyId;
+
+    @Size(max = 100, message = "serializedUnits must contain 100 units or fewer")
+    private List<SerializedUnitInput> serializedUnits;
+
+    @Size(max = 160, message = "idempotencyKey must be 160 characters or fewer")
+    private String idempotencyKey;
 
     public CreateInventoryTransactionRequest() {
     }
@@ -130,5 +139,21 @@ public class CreateInventoryTransactionRequest {
 
     public void setCompanyId(int companyId) {
         this.companyId = companyId;
+    }
+
+    public List<SerializedUnitInput> getSerializedUnits() {
+        return serializedUnits;
+    }
+
+    public void setSerializedUnits(List<SerializedUnitInput> serializedUnits) {
+        this.serializedUnits = serializedUnits;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
     }
 }

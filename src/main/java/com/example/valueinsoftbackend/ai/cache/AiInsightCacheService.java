@@ -29,6 +29,10 @@ public class AiInsightCacheService {
 
     public Optional<String> get(AiSecurityContext context, Long branchId, String mode, String question) {
         String key = cacheKey(context.companyId(), branchId, mode, question);
+        return getByKey(context, branchId, key, mode);
+    }
+
+    public Optional<String> getByKey(AiSecurityContext context, Long branchId, String cacheKey, String mode) {
         try {
             String answer = jdbcTemplate.queryForObject(
                     """
@@ -41,15 +45,15 @@ public class AiInsightCacheService {
                             ORDER BY updated_at DESC
                             LIMIT 1
                             """,
-                    params(context, branchId, mode, question, key),
+                    params(context, branchId, cacheKey),
                     String.class
             );
             log.debug("AI insight cache hit companyId={} branchId={} mode={} key={} answerLength={}",
-                    context.companyId(), branchId, mode, shortKey(key), answer == null ? 0 : answer.length());
+                    context.companyId(), branchId, mode, shortKey(cacheKey), answer == null ? 0 : answer.length());
             return Optional.ofNullable(answer);
         } catch (EmptyResultDataAccessException exception) {
             log.debug("AI insight cache miss companyId={} branchId={} mode={} key={}",
-                    context.companyId(), branchId, mode, shortKey(key));
+                    context.companyId(), branchId, mode, shortKey(cacheKey));
             return Optional.empty();
         }
     }
@@ -59,7 +63,7 @@ public class AiInsightCacheService {
             return;
         }
         String key = cacheKey(context.companyId(), branchId, mode, question);
-        MapSqlParameterSource params = params(context, branchId, mode, question, key)
+        MapSqlParameterSource params = params(context, branchId, key)
                 .addValue("question", normalizeQuestion(question))
                 .addValue("answer", answer)
                 .addValue("metadataJson", "{\"mode\":\"" + safeJson(mode) + "\"}")
@@ -83,7 +87,49 @@ public class AiInsightCacheService {
                 context.companyId(), branchId, mode, shortKey(key), properties.getCacheTtlMinutes(), answer.length());
     }
 
-    private MapSqlParameterSource params(AiSecurityContext context, Long branchId, String mode, String question, String key) {
+    public void putUntil(AiSecurityContext context,
+                         Long branchId,
+                         String cacheKey,
+                         String question,
+                         String answer,
+                         String metadataJson,
+                         OffsetDateTime expiresAt) {
+        if (answer == null || answer.isBlank()) {
+            return;
+        }
+        MapSqlParameterSource params = params(context, branchId, cacheKey)
+                .addValue("question", normalizeQuestion(question))
+                .addValue("answer", answer)
+                .addValue("metadataJson", metadataJson == null || metadataJson.isBlank() ? "{}" : metadataJson)
+                .addValue("expiresAt", expiresAt);
+        jdbcTemplate.update(
+                """
+                        INSERT INTO public.ai_insight_cache
+                            (company_id, branch_id, cache_key, question, answer, metadata_json, expires_at)
+                        VALUES
+                            (:companyId, :branchId, :cacheKey, :question, :answer, :metadataJson, :expiresAt)
+                        ON CONFLICT (company_id, branch_id, cache_key) DO UPDATE
+                        SET answer = EXCLUDED.answer,
+                            question = EXCLUDED.question,
+                            metadata_json = EXCLUDED.metadata_json,
+                            expires_at = EXCLUDED.expires_at,
+                            updated_at = now()
+                """,
+                params
+        );
+        log.debug("AI insight cache stored companyId={} branchId={} key={} expiresAt={} answerLength={}",
+                context.companyId(), branchId, shortKey(cacheKey), expiresAt, answer.length());
+    }
+
+    public String dailyCacheKey(long companyId, Long branchId, String date, String locale) {
+        return cacheKey(companyId, branchId, "DAILY_INSIGHTS", (date == null ? "" : date) + "|" + (locale == null ? "" : locale));
+    }
+
+    public String weeklyCacheKey(long companyId, Long branchId, String weekStartDate, String locale) {
+        return cacheKey(companyId, branchId, "WEEKLY_INSIGHTS_V2", (weekStartDate == null ? "" : weekStartDate) + "|" + (locale == null ? "" : locale));
+    }
+
+    private MapSqlParameterSource params(AiSecurityContext context, Long branchId, String key) {
         return new MapSqlParameterSource()
                 .addValue("companyId", context.companyId())
                 .addValue("branchId", branchId)

@@ -87,7 +87,7 @@ public class InventoryAuditService {
             AtomicInteger dataRowIndex = new AtomicInteger(rowIndex);
             dbInventoryAuditReadModels.streamRows(request, row -> writeAuditDataRow(sheet, dataRowIndex.getAndIncrement(), row, numericStyle));
 
-            for (int columnIndex = 0; columnIndex < 11; columnIndex++) {
+            for (int columnIndex = 0; columnIndex < 14; columnIndex++) {
                 sheet.trackColumnForAutoSizing(columnIndex);
                 sheet.autoSizeColumn(columnIndex);
             }
@@ -203,6 +203,9 @@ public class InventoryAuditService {
         Row headerRow = sheet.createRow(rowIndex);
         String[] headers = {
                 "Product Id",
+                "Product Unit Id",
+                "Tracking Type",
+                "Serial / IMEI",
                 "Product Name",
                 "Category",
                 "Branch",
@@ -227,17 +230,20 @@ public class InventoryAuditService {
     private void writeAuditDataRow(SXSSFSheet sheet, int rowIndex, InventoryAuditRow row, CellStyle numericStyle) {
         Row excelRow = sheet.createRow(rowIndex);
         excelRow.createCell(0).setCellValue(row.getProductId());
-        excelRow.createCell(1).setCellValue(row.getProductName() == null ? "" : row.getProductName());
-        excelRow.createCell(2).setCellValue(row.getCategory() == null ? "" : row.getCategory());
-        excelRow.createCell(3).setCellValue(row.getBranch() == null ? "" : row.getBranch());
+        excelRow.createCell(1).setCellValue(row.getProductUnitId() == null ? "" : String.valueOf(row.getProductUnitId()));
+        excelRow.createCell(2).setCellValue(row.getTrackingType() == null ? "" : row.getTrackingType());
+        excelRow.createCell(3).setCellValue(row.getSerialIdentifier() == null ? "" : row.getSerialIdentifier());
+        excelRow.createCell(4).setCellValue(row.getProductName() == null ? "" : row.getProductName());
+        excelRow.createCell(5).setCellValue(row.getCategory() == null ? "" : row.getCategory());
+        excelRow.createCell(6).setCellValue(row.getBranch() == null ? "" : row.getBranch());
 
-        writeNumericCell(excelRow, 4, row.getOpeningQty(), numericStyle);
-        writeNumericCell(excelRow, 5, row.getInQty(), numericStyle);
-        writeNumericCell(excelRow, 6, row.getOutQty(), numericStyle);
-        writeNumericCell(excelRow, 7, row.getClosingQty(), numericStyle);
-        writeNumericCell(excelRow, 8, row.getUnitPrice(), numericStyle);
-        writeNumericCell(excelRow, 9, row.getTotalValue(), numericStyle);
-        excelRow.createCell(10).setCellValue(formatTimestamp(row.getLastMovementDate()));
+        writeNumericCell(excelRow, 7, row.getOpeningQty(), numericStyle);
+        writeNumericCell(excelRow, 8, row.getInQty(), numericStyle);
+        writeNumericCell(excelRow, 9, row.getOutQty(), numericStyle);
+        writeNumericCell(excelRow, 10, row.getClosingQty(), numericStyle);
+        writeNumericCell(excelRow, 11, row.getUnitPrice(), numericStyle);
+        writeNumericCell(excelRow, 12, row.getTotalValue(), numericStyle);
+        excelRow.createCell(13).setCellValue(formatTimestamp(row.getLastMovementDate()));
     }
 
     private void writeNumericCell(Row row, int columnIndex, Number value, CellStyle numericStyle) {
@@ -309,6 +315,9 @@ public class InventoryAuditService {
                   <thead>
                     <tr>
                       <th>Product Id</th>
+                      <th>Product Unit Id</th>
+                      <th>Tracking Type</th>
+                      <th>Serial / IMEI</th>
                       <th>Product Name</th>
                       <th>Category</th>
                       <th>Branch</th>
@@ -327,6 +336,9 @@ public class InventoryAuditService {
         for (InventoryAuditRow row : response.getRows()) {
             html.append("<tr>")
                     .append("<td>").append(row.getProductId()).append("</td>")
+                    .append("<td>").append(row.getProductUnitId() == null ? "" : row.getProductUnitId()).append("</td>")
+                    .append("<td>").append(escapeHtml(row.getTrackingType())).append("</td>")
+                    .append("<td>").append(escapeHtml(row.getSerialIdentifier())).append("</td>")
                     .append("<td>").append(escapeHtml(row.getProductName())).append("</td>")
                     .append("<td>").append(escapeHtml(row.getCategory())).append("</td>")
                     .append("<td>").append(escapeHtml(row.getBranch())).append("</td>")

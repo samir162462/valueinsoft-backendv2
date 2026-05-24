@@ -53,44 +53,181 @@ public class DbPosInventoryTransaction {
 
     public List<InventoryTransaction> getInventoryTrans(int companyId, int branchId, String startDate, String endDate) {
         String sql = """
+                WITH ledger_source AS (
+                    SELECT
+                        ledger.stock_ledger_id,
+                        ledger.branch_id,
+                        ledger.product_id,
+                        ledger.product_unit_id,
+                        ledger.movement_type,
+                        ledger.quantity_delta,
+                        ledger.reference_type,
+                        ledger.reference_id,
+                        ledger.actor_name,
+                        ledger.supplier_id,
+                        ledger.trans_total,
+                        ledger.pay_type,
+                        ledger.remaining_amount,
+                        ledger.created_at
+                    FROM %s ledger
+
+                    UNION ALL
+
+                    SELECT
+                        -unit.product_unit_id AS stock_ledger_id,
+                        unit.branch_id,
+                        unit.product_id,
+                        unit.product_unit_id,
+                        'STOCK_IN' AS movement_type,
+                        1 AS quantity_delta,
+                        COALESCE(NULLIF(unit.purchase_reference_type, ''), 'SERIALIZED_UNIT') AS reference_type,
+                        COALESCE(NULLIF(unit.purchase_reference_id, ''), unit.product_unit_id::text) AS reference_id,
+                        NULL::varchar AS actor_name,
+                        COALESCE(unit.supplier_id, 0)::integer AS supplier_id,
+                        0 AS trans_total,
+                        '' AS pay_type,
+                        0 AS remaining_amount,
+                        COALESCE(unit.received_at, unit.created_at) AS created_at
+                    FROM %s unit
+                    JOIN %s unit_product ON unit_product.product_id = unit.product_id
+                    WHERE unit.branch_id = ?
+                      AND COALESCE(unit_product.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM %s existing_ledger
+                          WHERE existing_ledger.product_unit_id = unit.product_unit_id
+                            AND existing_ledger.quantity_delta > 0
+                            AND existing_ledger.movement_type IN ('STOCK_IN', 'OPENING_BALANCE', 'MANUAL_STOCK_IN')
+                      )
+                ),
+                grouped_ledger AS (
+                    SELECT
+                        MIN(ledger.stock_ledger_id) AS stock_ledger_id,
+                        ledger.product_id,
+                        prod.product_name,
+                        COALESCE(
+                            string_agg(DISTINCT COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')), ', ')
+                                FILTER (WHERE COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')) IS NOT NULL),
+                            NULLIF(prod.serial, ''),
+                            NULLIF(prod.barcode, ''),
+                            ''
+                        ) AS serial,
+                        COALESCE(MAX(ledger.actor_name), MAX(tx."userName"), 'system') AS actor_name,
+                        COALESCE(ledger.supplier_id, unit.supplier_id, tx."supplierId", prod.supplier_id, 0) AS supplier_id,
+                        ledger.movement_type,
+                        SUM(ledger.quantity_delta)::integer AS quantity_delta,
+                        CASE
+                            WHEN COALESCE(prod.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                                AND ledger.product_unit_id IS NOT NULL
+                                AND SUM(ledger.quantity_delta) <> 0
+                            THEN COALESCE(
+                                MAX(tx."transTotal") / NULLIF(ABS(MAX(tx."NumItems")), 0),
+                                SUM(COALESCE(ledger.trans_total, 0))
+                            )
+                            ELSE COALESCE(MAX(tx."transTotal"), SUM(COALESCE(ledger.trans_total, 0)))
+                        END::integer AS trans_total,
+                        COALESCE(MAX(tx."payType"), MAX(ledger.pay_type), '') AS pay_type,
+                        MIN(ledger.created_at) AS created_at,
+                        COALESCE(MAX(tx."RemainingAmount"), SUM(COALESCE(ledger.remaining_amount, 0)))::integer AS remaining_amount,
+                        COALESCE(prod.business_line_key, '') AS business_line_key,
+                        COALESCE(prod.template_key, '') AS template_key
+                    FROM ledger_source ledger
+                    JOIN %s prod ON prod.product_id = ledger.product_id
+                    LEFT JOIN %s unit ON unit.product_unit_id = ledger.product_unit_id
+                    LEFT JOIN %s tx ON ledger.reference_type = 'INVENTORY_TRANSACTION'
+                        AND ledger.reference_id = tx."transId"::text
+                    WHERE ledger.branch_id = ?
+                      AND NOT (
+                          COALESCE(prod.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                          AND ledger.reference_type = 'PRODUCT_CREATE'
+                          AND ledger.movement_type = 'OPENING_BALANCE'
+                      )
+                    GROUP BY
+                        CASE
+                            WHEN COALESCE(prod.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                                AND ledger.movement_type IN ('SALE', 'RETURN')
+                                AND ledger.product_unit_id IS NOT NULL
+                            THEN concat_ws('|',
+                                ledger.product_id::text,
+                                ledger.movement_type,
+                                COALESCE(ledger.reference_type, ''),
+                                COALESCE(ledger.reference_id, ''),
+                                ledger.product_unit_id::text
+                            )
+                            WHEN COALESCE(prod.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                                AND ledger.product_unit_id IS NOT NULL
+                            THEN concat_ws('|',
+                                ledger.product_id::text,
+                                ledger.movement_type,
+                                COALESCE(ledger.reference_type, ''),
+                                COALESCE(ledger.reference_id, ''),
+                                ledger.product_unit_id::text
+                            )
+                            ELSE ledger.stock_ledger_id::text
+                        END,
+                        ledger.product_id,
+                        prod.product_name,
+                        prod.serial,
+                        prod.barcode,
+                        prod.tracking_type,
+                        prod.business_line_key,
+                        prod.template_key,
+                        prod.supplier_id,
+                        ledger.product_unit_id,
+                        ledger.movement_type,
+                        COALESCE(ledger.supplier_id, unit.supplier_id, tx."supplierId", prod.supplier_id, 0)
+                ),
+                ledger_with_balance AS (
+                    SELECT
+                        *,
+                        SUM(quantity_delta) OVER (
+                            PARTITION BY product_id
+                            ORDER BY created_at ASC, stock_ledger_id ASC
+                        ) AS running_balance
+                    FROM grouped_ledger
+                )
                 SELECT
-                    ledger.stock_ledger_id AS "transId",
-                    ledger.product_id AS "productId",
-                    prod.product_name AS "productName",
-                    prod.serial AS "serial",
-                    COALESCE(ledger.actor_name, 'system') AS "userName",
-                    COALESCE(ledger.supplier_id, prod.supplier_id, 0) AS "supplierId",
-                    CASE ledger.movement_type
+                    stock_ledger_id AS "transId",
+                    product_id AS "productId",
+                    product_name AS "productName",
+                    serial AS "serial",
+                    actor_name AS "userName",
+                    supplier_id AS "supplierId",
+                    CASE movement_type
                         WHEN 'SALE_OUT' THEN 'Sold'
+                        WHEN 'SALE' THEN 'Sold'
                         WHEN 'BOUNCE_BACK_IN' THEN 'BounceBackInv'
+                        WHEN 'RETURN' THEN 'BounceBackInv'
                         WHEN 'OPENING_BALANCE' THEN 'Add'
                         WHEN 'MANUAL_STOCK_IN' THEN 'Add'
+                        WHEN 'STOCK_IN' THEN 'Add'
                         WHEN 'MANUAL_STOCK_OUT' THEN 'Update'
                         WHEN 'DAMAGED_OUT' THEN 'Damaged'
-                        ELSE ledger.movement_type
+                        WHEN 'DAMAGE' THEN 'Damaged'
+                        ELSE movement_type
                     END AS "transactionType",
-                    ledger.quantity_delta AS "NumItems",
-                    COALESCE(ledger.trans_total, 0) AS "transTotal",
-                    COALESCE(ledger.pay_type, '') AS "payType",
-                    ledger.created_at AS "time",
-                    COALESCE(ledger.remaining_amount, 0) AS "RemainingAmount",
-                    COALESCE(prod.business_line_key, '') AS "businessLineKey",
-                    COALESCE(prod.template_key, '') AS "templateKey",
-                    SUM(ledger.quantity_delta) OVER (
-                        PARTITION BY ledger.branch_id, ledger.product_id
-                        ORDER BY ledger.created_at ASC, ledger.stock_ledger_id ASC
-                    ) AS "runningBalance"
-                FROM %s ledger
-                JOIN %s prod ON prod.product_id = ledger.product_id
-                WHERE ledger.branch_id = ?
-                  AND ledger.created_at >= date_trunc('month', ?::timestamp)
-                  AND ledger.created_at < date_trunc('month', ?::timestamp) + interval '1 month'
-                ORDER BY ledger.created_at DESC, ledger.stock_ledger_id DESC
+                    quantity_delta AS "NumItems",
+                    trans_total AS "transTotal",
+                    pay_type AS "payType",
+                    created_at AS "time",
+                    remaining_amount AS "RemainingAmount",
+                    business_line_key AS "businessLineKey",
+                    template_key AS "templateKey",
+                    running_balance AS "runningBalance"
+                FROM ledger_with_balance
+                WHERE created_at >= date_trunc('month', ?::timestamp)
+                  AND created_at < date_trunc('month', ?::timestamp) + interval '1 month'
+                ORDER BY created_at DESC, stock_ledger_id DESC
                 """.formatted(
                 TenantSqlIdentifiers.inventoryStockLedgerTable(companyId),
-                TenantSqlIdentifiers.inventoryProductTable(companyId)
+                TenantSqlIdentifiers.inventoryProductUnitTable(companyId),
+                TenantSqlIdentifiers.inventoryProductTable(companyId),
+                TenantSqlIdentifiers.inventoryStockLedgerTable(companyId),
+                TenantSqlIdentifiers.inventoryProductTable(companyId),
+                TenantSqlIdentifiers.inventoryProductUnitTable(companyId),
+                TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId)
         );
-        return jdbcTemplate.query(sql, new InventoryTransactionMapper(), branchId, startDate, endDate);
+        return jdbcTemplate.query(sql, new InventoryTransactionMapper(), branchId, branchId, startDate, endDate);
     }
 
     public AddInventoryTransactionResult insertInventoryTransaction(InventoryTransaction inventoryTransaction, int branchId, int companyId) {

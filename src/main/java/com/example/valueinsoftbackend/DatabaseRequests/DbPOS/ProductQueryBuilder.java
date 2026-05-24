@@ -18,6 +18,10 @@ final class ProductQueryBuilder {
 
     private static final Pattern DATE_RANGE_PATTERN = Pattern.compile("'([^']+)'\\s+And\\s+'([^']+)'", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter FRONTEND_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE MMM dd yyyy", Locale.ENGLISH);
+    private static final String EFFECTIVE_QUANTITY_SQL =
+            "CASE WHEN COALESCE(prod.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL') " +
+                    "THEN COALESCE(serialized_stock.available_quantity, 0) " +
+                    "ELSE COALESCE(stock.quantity, 0) END";
     private static final String PRODUCT_SELECT_COLUMNS =
             "prod.product_id AS \"productId\", " +
                     "prod.product_name AS \"productName\", " +
@@ -34,7 +38,7 @@ final class ProductQueryBuilder {
                     "prod.battery_life AS \"batteryLife\", " +
                     "prod.owner_phone AS \"ownerPhone\", " +
                     "prod.owner_ni AS \"ownerNI\", " +
-                    "COALESCE(stock.quantity, 0) AS quantity, " +
+                    EFFECTIVE_QUANTITY_SQL + " AS quantity, " +
                     "prod.product_state AS \"pState\", " +
                     "prod.supplier_id AS \"supplierId\", " +
                     "prod.major AS major, " +
@@ -43,6 +47,11 @@ final class ProductQueryBuilder {
                     "prod.template_key AS \"templateKey\", " +
                     "prod.base_uom_code AS \"baseUomCode\", " +
                     "prod.pricing_policy_code AS \"pricingPolicyCode\", " +
+                    "COALESCE(prod.tracking_type, 'QUANTITY') AS \"trackingType\", " +
+                    "prod.sku AS sku, " +
+                    "prod.barcode AS barcode, " +
+                    "COALESCE(serialized_stock.product_unit_ids, ARRAY[]::bigint[]) AS \"productUnitIds\", " +
+                    "COALESCE(serialized_stock.unit_identifiers, ARRAY[]::text[]) AS \"unitIdentifiers\", " +
                     "prod.show_online AS \"showOnline\", " +
                     "prod.online_description AS \"onlineDescription\", " +
                     "prod.online_image_url AS \"onlineImageUrl\", " +
@@ -114,7 +123,17 @@ final class ProductQueryBuilder {
         return " FROM " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " prod " +
                 "LEFT JOIN " + TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId) + " stock " +
                 "ON stock.product_id = prod.product_id " +
-                "AND stock.branch_id = :branchId ";
+                "AND stock.branch_id = :branchId " +
+                "LEFT JOIN ( " +
+                "    SELECT product_id, " +
+                "           COUNT(*) FILTER (WHERE status = 'AVAILABLE') AS available_quantity, " +
+                "           ARRAY_AGG(product_unit_id ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE') AS product_unit_ids, " +
+                "           ARRAY_AGG(COALESCE(NULLIF(imei, ''), NULLIF(serial_number, '')) ORDER BY product_unit_id) " +
+                "           FILTER (WHERE status = 'AVAILABLE' AND COALESCE(NULLIF(imei, ''), NULLIF(serial_number, '')) IS NOT NULL) AS unit_identifiers " +
+                "    FROM " + TenantSqlIdentifiers.inventoryProductUnitTable(companyId) + " " +
+                "    WHERE branch_id = :branchId " +
+                "    GROUP BY product_id " +
+                ") serialized_stock ON serialized_stock.product_id = prod.product_id ";
     }
 
     static MapSqlParameterSource baseParams(String branchId, int companyId) {
@@ -164,17 +183,17 @@ final class ProductQueryBuilder {
                                             ProductFilter productFilter, boolean useDefaultInStockFilter) {
         if (productFilter == null) {
             if (useDefaultInStockFilter) {
-                conditions.add("COALESCE(stock.quantity, 0) <> 0");
+                conditions.add(EFFECTIVE_QUANTITY_SQL + " <> 0");
             }
             return;
         }
 
         if (productFilter.isOutOfStock() && productFilter.isToSell()) {
-            conditions.add("COALESCE(stock.quantity, 0) >= 0");
+            conditions.add(EFFECTIVE_QUANTITY_SQL + " >= 0");
         } else if (!productFilter.isOutOfStock() && productFilter.isToSell()) {
-            conditions.add("COALESCE(stock.quantity, 0) > 0");
+            conditions.add(EFFECTIVE_QUANTITY_SQL + " > 0");
         } else if (productFilter.isOutOfStock()) {
-            conditions.add("COALESCE(stock.quantity, 0) = 0");
+            conditions.add(EFFECTIVE_QUANTITY_SQL + " = 0");
         }
 
         if (productFilter.getRangeMin() > 0 || productFilter.getRangeMax() < 100000) {

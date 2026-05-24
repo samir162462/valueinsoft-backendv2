@@ -11,6 +11,9 @@ import java.sql.Timestamp;
 @AllArgsConstructor
 public class InventoryAuditRow {
     private Long productId;
+    private Long productUnitId;
+    private String trackingType;
+    private String serialIdentifier;
     private String productName;
     private String category;
     private String branch;

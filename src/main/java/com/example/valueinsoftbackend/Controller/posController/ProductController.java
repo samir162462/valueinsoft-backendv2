@@ -3,11 +3,13 @@ package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
+import com.example.valueinsoftbackend.Model.Request.Inventory.ProductTrackingTypeChangeRequest;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.Service.InventoryTemplateMetadataService;
 import com.example.valueinsoftbackend.Service.ProductService;
+import com.example.valueinsoftbackend.Service.SerializedInventoryService;
 import com.example.valueinsoftbackend.util.PageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,14 +32,17 @@ public class ProductController {
 
     private final ProductService productService;
     private final InventoryTemplateMetadataService inventoryTemplateMetadataService;
+    private final SerializedInventoryService serializedInventoryService;
     private final AuthorizationService authorizationService;
 
     @Autowired
     public ProductController(ProductService productService,
                              InventoryTemplateMetadataService inventoryTemplateMetadataService,
+                             SerializedInventoryService serializedInventoryService,
                              AuthorizationService authorizationService) {
         this.productService = productService;
         this.inventoryTemplateMetadataService = inventoryTemplateMetadataService;
+        this.serializedInventoryService = serializedInventoryService;
         this.authorizationService = authorizationService;
     }
 
@@ -149,6 +154,38 @@ public class ProductController {
         );
         ProductOperationResponse response = productService.editProduct(editProduct, branchId, companyId);
         return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("{companyId}/{branchId}/{productId}/tracking")
+    public ResponseEntity<Object> updateProductTracking(@Valid @RequestBody ProductTrackingTypeChangeRequest body,
+                                                        @PathVariable @Positive int companyId,
+                                                        @PathVariable @Positive int branchId,
+                                                        @PathVariable @Positive int productId,
+                                                        Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.item.edit"
+        );
+        body.setCompanyId(companyId);
+        body.setBranchId(branchId);
+        body.setProductId(productId);
+        return ResponseEntity.ok(serializedInventoryService.updateProductTrackingType(body));
+    }
+
+    @GetMapping("{companyId}/{branchId}/{productId}/tracking")
+    public ResponseEntity<Object> getProductTracking(@PathVariable @Positive int companyId,
+                                                     @PathVariable @Positive int branchId,
+                                                     @PathVariable @Positive int productId,
+                                                     Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.item.read"
+        );
+        return ResponseEntity.ok(serializedInventoryService.getProductTrackingMetadata(companyId, productId));
     }
 
     @GetMapping("/PN/{companyId}/{branchId}/{text}")

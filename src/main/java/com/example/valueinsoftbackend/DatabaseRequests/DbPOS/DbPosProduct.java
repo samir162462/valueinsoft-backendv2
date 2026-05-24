@@ -6,6 +6,7 @@ package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ResponsePagination;
@@ -19,46 +20,108 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Array;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Repository
 @Slf4j
 public class DbPosProduct {
 
-    private static final RowMapper<Product> PRODUCT_ROW_MAPPER = (rs, rowNum) -> new Product(
-            rs.getInt("productId"),
-            rs.getString("productName"),
-            rs.getTimestamp("buyingDay"),
-            rs.getString("activationPeriod"),
-            rs.getInt("rPrice"),
-            rs.getInt("lPrice"),
-            rs.getInt("bPrice"),
-            rs.getString("companyName"),
-            rs.getString("type"),
-            rs.getString("ownerName"),
-            rs.getString("serial"),
-            rs.getString("desc"),
-            rs.getInt("batteryLife"),
-            rs.getString("ownerPhone"),
-            rs.getString("ownerNI"),
-            rs.getInt("quantity"),
-            rs.getString("pState"),
-            rs.getInt("supplierId"),
-            rs.getString("major"),
-            rs.getString("imgFile"),
-            rs.getString("businessLineKey"),
-            rs.getString("templateKey"),
-            rs.getString("baseUomCode"),
-            rs.getString("pricingPolicyCode"),
-            null,
-            rs.getBoolean("showOnline"),
-            rs.getString("onlineDescription"),
-            rs.getString("onlineImageUrl"),
-            rs.getBigDecimal("onlineOfferPrice"),
-            rs.getInt("onlineSortOrder"),
-            rs.getBoolean("onlineActive")
-    );
+    private static final RowMapper<Product> PRODUCT_ROW_MAPPER = (rs, rowNum) -> {
+        Product product = new Product(
+                rs.getInt("productId"),
+                rs.getString("productName"),
+                rs.getTimestamp("buyingDay"),
+                rs.getString("activationPeriod"),
+                rs.getInt("rPrice"),
+                rs.getInt("lPrice"),
+                rs.getInt("bPrice"),
+                rs.getString("companyName"),
+                rs.getString("type"),
+                rs.getString("ownerName"),
+                rs.getString("serial"),
+                rs.getString("desc"),
+                rs.getInt("batteryLife"),
+                rs.getString("ownerPhone"),
+                rs.getString("ownerNI"),
+                rs.getInt("quantity"),
+                rs.getString("pState"),
+                rs.getInt("supplierId"),
+                rs.getString("major"),
+                rs.getString("imgFile"),
+                rs.getString("businessLineKey"),
+                rs.getString("templateKey"),
+                rs.getString("baseUomCode"),
+                rs.getString("pricingPolicyCode"),
+                null,
+                rs.getBoolean("showOnline"),
+                rs.getString("onlineDescription"),
+                rs.getString("onlineImageUrl"),
+                rs.getBigDecimal("onlineOfferPrice"),
+                rs.getInt("onlineSortOrder"),
+                rs.getBoolean("onlineActive"),
+                TrackingType.defaultIfNull(TrackingType.valueOf(rs.getString("trackingType"))),
+                rs.getString("sku"),
+                rs.getString("barcode"),
+                new ArrayList<>(),
+                new ArrayList<>()
+        );
+        product.setProductUnitIds(toLongList(rs.getArray("productUnitIds")));
+        product.setUnitIdentifiers(toStringList(rs.getArray("unitIdentifiers")));
+        return product;
+    };
+
+    private static List<Long> toLongList(Array sqlArray) throws SQLException {
+        if (sqlArray == null) {
+            return new ArrayList<>();
+        }
+        Object value = sqlArray.getArray();
+        if (value instanceof Long[] ids) {
+            return new ArrayList<>(Arrays.asList(ids));
+        }
+        if (value instanceof Number[] ids) {
+            List<Long> result = new ArrayList<>(ids.length);
+            for (Number id : ids) {
+                if (id != null) {
+                    result.add(id.longValue());
+                }
+            }
+            return result;
+        }
+        if (value instanceof Object[] ids) {
+            List<Long> result = new ArrayList<>(ids.length);
+            for (Object id : ids) {
+                if (id instanceof Number number) {
+                    result.add(number.longValue());
+                }
+            }
+            return result;
+        }
+        return new ArrayList<>();
+    }
+
+    private static List<String> toStringList(Array sqlArray) throws SQLException {
+        if (sqlArray == null) {
+            return new ArrayList<>();
+        }
+        Object value = sqlArray.getArray();
+        if (value instanceof String[] identifiers) {
+            return new ArrayList<>(Arrays.asList(identifiers));
+        }
+        if (value instanceof Object[] identifiers) {
+            List<String> result = new ArrayList<>(identifiers.length);
+            for (Object identifier : identifiers) {
+                if (identifier != null && !identifier.toString().isBlank()) {
+                    result.add(identifier.toString());
+                }
+            }
+            return result;
+        }
+        return new ArrayList<>();
+    }
 
     private static final RowMapper<ProductUtilNames> PRODUCT_NAME_ROW_MAPPER = (rs, rowNum) ->
             new ProductUtilNames(
@@ -149,7 +212,7 @@ public class DbPosProduct {
 
         String sql = "SELECT " + ProductQueryBuilder.productSelectColumns() +
                 ProductQueryBuilder.productFromClause(companyId) +
-                " WHERE prod.serial = :serial";
+                " WHERE prod.serial = :serial OR prod.barcode = :serial";
         MapSqlParameterSource params = ProductQueryBuilder.baseParams(branchId, companyId)
                 .addValue("serial", barcode == null ? "" : barcode.trim());
         return jdbcTemplate.query(sql, params, PRODUCT_ROW_MAPPER);

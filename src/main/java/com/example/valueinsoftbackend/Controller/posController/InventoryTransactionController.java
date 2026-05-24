@@ -5,9 +5,13 @@
 package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Model.Inventory.ProductUnitStatus;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Request.CreateInventoryTransactionRequest;
+import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitStockInRequest;
+import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitTransferRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryTransactionQueryRequest;
+import com.example.valueinsoftbackend.Service.SerializedInventoryService;
 import com.example.valueinsoftbackend.Service.InventoryTransactionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,11 +28,14 @@ import java.util.List;
 public class InventoryTransactionController {
 
     private final InventoryTransactionService inventoryTransactionService;
+    private final SerializedInventoryService serializedInventoryService;
     private final AuthorizationService authorizationService;
 
     public InventoryTransactionController(InventoryTransactionService inventoryTransactionService,
+                                          SerializedInventoryService serializedInventoryService,
                                           AuthorizationService authorizationService) {
         this.inventoryTransactionService = inventoryTransactionService;
+        this.serializedInventoryService = serializedInventoryService;
         this.authorizationService = authorizationService;
     }
 
@@ -43,6 +50,104 @@ public class InventoryTransactionController {
         );
         inventoryTransactionService.addTransaction(body);
         return ResponseEntity.status(HttpStatus.CREATED).body(successMessage(body.getBranchId()));
+    }
+
+    @PostMapping("/AddSerializedStockIn")
+    public ResponseEntity<Object> newSerializedStockIn(@Valid @RequestBody SerializedUnitStockInRequest body,
+                                                       Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) body.getCompanyId(),
+                (int) body.getBranchId(),
+                "inventory.adjustment.create"
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(inventoryTransactionService.addSerializedStockIn(body));
+    }
+
+    @PostMapping("/TransferSerializedUnits")
+    public ResponseEntity<Object> transferSerializedUnits(@Valid @RequestBody SerializedUnitTransferRequest body,
+                                                         Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) body.getCompanyId(),
+                (int) body.getFromBranchId(),
+                "inventory.adjustment.create"
+        );
+        serializedInventoryService.transferSerializedUnits(body);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body("{\"title\" : \"serialized units transferred\"}");
+    }
+
+    @GetMapping("/SerializedScan/{companyId}/{branchId}/{scanCode}")
+    public ResponseEntity<Object> scanSerializedUnit(@PathVariable("companyId") long companyId,
+                                                     @PathVariable("branchId") long branchId,
+                                                     @PathVariable("scanCode") String scanCode,
+                                                     Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.item.read"
+        );
+        return ResponseEntity.ok(serializedInventoryService.scanUnit(companyId, branchId, scanCode));
+    }
+
+    @GetMapping("/SerializedUnits/{companyId}/{branchId}/{productId}")
+    public ResponseEntity<Object> listSerializedUnits(@PathVariable("companyId") long companyId,
+                                                      @PathVariable("branchId") long branchId,
+                                                      @PathVariable("productId") long productId,
+                                                      @RequestParam(value = "status", required = false) ProductUnitStatus status,
+                                                      Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.item.read"
+        );
+        return ResponseEntity.ok(serializedInventoryService.listProductUnits(companyId, branchId, productId, status));
+    }
+
+    @GetMapping("/SerializedAvailability/{companyId}/{branchId}/{productId}")
+    public ResponseEntity<Object> serializedAvailability(@PathVariable("companyId") long companyId,
+                                                        @PathVariable("branchId") long branchId,
+                                                        @PathVariable("productId") long productId,
+                                                        Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.item.read"
+        );
+        return ResponseEntity.ok(serializedInventoryService.countAvailableSerializedUnits(companyId, branchId, productId));
+    }
+
+    @GetMapping("/StockMovements/{companyId}/{branchId}/{productId}")
+    public ResponseEntity<Object> productStockMovements(@PathVariable("companyId") long companyId,
+                                                        @PathVariable("branchId") long branchId,
+                                                        @PathVariable("productId") long productId,
+                                                        @RequestParam(value = "limit", defaultValue = "50") int limit,
+                                                        Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.item.read"
+        );
+        return ResponseEntity.ok(serializedInventoryService.listProductMovementHistory(companyId, branchId, productId, limit));
+    }
+
+    @GetMapping("/SerializedUnitMovements/{companyId}/{branchId}/{productUnitId}")
+    public ResponseEntity<Object> serializedUnitStockMovements(@PathVariable("companyId") long companyId,
+                                                               @PathVariable("branchId") long branchId,
+                                                               @PathVariable("productUnitId") long productUnitId,
+                                                               @RequestParam(value = "limit", defaultValue = "50") int limit,
+                                                               Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.item.read"
+        );
+        return ResponseEntity.ok(serializedInventoryService.listProductUnitMovementHistory(companyId, branchId, productUnitId, limit));
     }
 
     @PostMapping("/transactions")
