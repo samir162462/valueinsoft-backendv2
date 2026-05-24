@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditPageResponse;
+import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditAiAnalysisResponse;
 import com.example.valueinsoftbackend.Model.Request.InventoryAudit.InventoryAuditSearchRequest;
 import com.example.valueinsoftbackend.Service.InventoryAuditService;
 import org.springframework.http.ContentDisposition;
@@ -33,6 +34,12 @@ public class InventoryAuditController {
     public InventoryAuditPageResponse search(Principal principal,
                                              @Valid @RequestBody InventoryAuditSearchRequest request) {
         return inventoryAuditService.search(principal.getName(), request);
+    }
+
+    @PostMapping("/analysis/ai")
+    public InventoryAuditAiAnalysisResponse analyzeWithAi(Principal principal,
+                                                          @Valid @RequestBody InventoryAuditSearchRequest request) {
+        return inventoryAuditService.analyzeWithAi(principal.getName(), request);
     }
 
     @PostMapping("/export/excel")

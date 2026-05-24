@@ -256,7 +256,7 @@ public class AiDailyInsightsService {
                       "title": "short title",
                       "text": "specific insight and recommendation based on the evidence",
                       "action": "short button label",
-                      "target": "viewInventory|SalesReports|expensesView|PointSale",
+                      "target": "viewInventory|FinanceReports|expensesView|PointSale",
                       "params": "optional query string",
                       "confidence": 0.0
                     }
@@ -317,7 +317,7 @@ public class AiDailyInsightsService {
                         "Weekly DB analysis",
                         item.answer,
                         "Open reports",
-                        "SalesReports",
+                        "FinanceReports",
                         "",
                         null,
                         "ai"
@@ -332,7 +332,7 @@ public class AiDailyInsightsService {
                 "Weekly review ready",
                 "The database analysis completed, but no concise AI summary was available. Review the dashboard reports for this week's sales, inventory, and finance priorities.",
                 "Open reports",
-                "SalesReports",
+                "FinanceReports",
                 "",
                 null,
                 "backend-summary"
@@ -353,7 +353,7 @@ public class AiDailyInsightsService {
                     "Weekly sales focus",
                     "Sales are at " + formatNumber(kpis.getTodaySales()) + " with " + safeInt(kpis.getOrdersCount()) + " orders. Review top items and keep fast movers available this week.",
                     "Open reports",
-                    "SalesReports",
+                    "FinanceReports",
                     "",
                     null,
                     "backend-summary"
@@ -368,7 +368,7 @@ public class AiDailyInsightsService {
                     "Profit control",
                     "Weekly net profit is " + formatNumber(weekProfit.getNetProfit()) + " with margin " + formatNumber(weekProfit.getMargin()) + "%. Watch expenses and discounting before the week closes.",
                     "Open reports",
-                    "SalesReports",
+                    "FinanceReports",
                     "",
                     null,
                     "backend-summary"
@@ -431,7 +431,7 @@ public class AiDailyInsightsService {
                     "Weekly review ready",
                     "The backend dashboard summary is available. Review sales, inventory, and finance sections to choose this week's operating priorities.",
                     "Open reports",
-                    "SalesReports",
+                    "FinanceReports",
                     "",
                     null,
                     "backend-summary"
@@ -492,10 +492,13 @@ public class AiDailyInsightsService {
 
     private String normalizeTarget(String target) {
         String normalized = target == null ? "" : target.trim();
-        if (List.of("viewInventory", "SalesReports", "expensesView", "PointSale").contains(normalized)) {
+        if ("SalesReports".equals(normalized)) {
+            return "FinanceReports";
+        }
+        if (List.of("viewInventory", "FinanceReports", "expensesView", "PointSale").contains(normalized)) {
             return normalized;
         }
-        return "SalesReports";
+        return "FinanceReports";
     }
 
     private long elapsedMs(long startedAt) {

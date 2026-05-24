@@ -2,10 +2,17 @@ package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.InventoryAudit.DbInventoryAuditReadModels;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditAiAnalysisResponse;
+import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditAiInsight;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditPageResponse;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditRow;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditSummary;
 import com.example.valueinsoftbackend.Model.Request.InventoryAudit.InventoryAuditSearchRequest;
+import com.example.valueinsoftbackend.ai.config.AiProperties;
+import com.example.valueinsoftbackend.ai.service.AiModelClient;
+import com.example.valueinsoftbackend.ai.service.AiModelRequest;
+import com.example.valueinsoftbackend.ai.service.AiModelResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
@@ -26,22 +33,42 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 @Service
 public class InventoryAuditService {
 
     private final DbInventoryAuditReadModels dbInventoryAuditReadModels;
     private final AuthorizationService authorizationService;
+    private final AiModelClient aiModelClient;
+    private final AiProperties aiProperties;
+    private final ObjectMapper objectMapper;
     private final int pdfMaxRows;
+    private final int aiMaxRows;
 
     public InventoryAuditService(DbInventoryAuditReadModels dbInventoryAuditReadModels,
                                  AuthorizationService authorizationService,
-                                 @Value("${inventory.audit.pdf.max-rows:5000}") int pdfMaxRows) {
+                                 AiModelClient aiModelClient,
+                                 AiProperties aiProperties,
+                                 ObjectMapper objectMapper,
+                                 @Value("${inventory.audit.pdf.max-rows:5000}") int pdfMaxRows,
+                                 @Value("${inventory.audit.ai.max-rows:500}") int aiMaxRows) {
         this.dbInventoryAuditReadModels = dbInventoryAuditReadModels;
         this.authorizationService = authorizationService;
+        this.aiModelClient = aiModelClient;
+        this.aiProperties = aiProperties;
+        this.objectMapper = objectMapper;
         this.pdfMaxRows = Math.max(pdfMaxRows, 100);
+        this.aiMaxRows = Math.max(aiMaxRows, 50);
     }
 
     public InventoryAuditPageResponse search(String authenticatedName, InventoryAuditSearchRequest request) {
@@ -116,6 +143,399 @@ public class InventoryAuditService {
         builder.withHtmlContent(html, null);
         builder.toStream(outputStream);
         builder.run();
+    }
+
+    public InventoryAuditAiAnalysisResponse analyzeWithAi(String authenticatedName, InventoryAuditSearchRequest request) {
+        authorize(authenticatedName, request);
+        validateDates(request);
+
+        InventoryAuditSummary summary = dbInventoryAuditReadModels.fetchSummary(request);
+        ArrayList<InventoryAuditRow> rows = collectAnalysisRows(request);
+        InventoryAuditAiAnalysisResponse fallback = buildFallbackAnalysis(request, summary, rows);
+
+        if (!aiProperties.isEnabled() || rows.isEmpty()) {
+            return fallback;
+        }
+
+        try {
+            AiModelResponse modelResponse = aiModelClient.generate(new AiModelRequest(
+                    buildAiSystemPrompt(request),
+                    buildAiUserPrompt(request, summary, rows),
+                    "inventory-audit-analysis",
+                    ""
+            ));
+
+            if (modelResponse.fallback() || modelResponse.answer() == null || modelResponse.answer().isBlank()) {
+                return fallback;
+            }
+
+            InventoryAuditAiAnalysisResponse parsed = parseAiAnalysis(modelResponse.answer());
+            enrichAnalysisMetadata(parsed, modelResponse.modelName(), true, rows.size());
+            ensureAnalysisDefaults(parsed, fallback);
+            return parsed;
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
+    }
+
+    private ArrayList<InventoryAuditRow> collectAnalysisRows(InventoryAuditSearchRequest request) {
+        ArrayList<InventoryAuditRow> rows = new ArrayList<>();
+        dbInventoryAuditReadModels.streamRows(request, row -> {
+            if (rows.size() < aiMaxRows) {
+                rows.add(row);
+            }
+        });
+        return rows;
+    }
+
+    private String buildAiSystemPrompt(InventoryAuditSearchRequest request) {
+        String languageInstruction = isRtlRequest(request)
+                ? "Write every user-facing string in Arabic. Use professional Egyptian-friendly business Arabic. Keep riskLevel and severity enum values in English."
+                : "Write every user-facing string in English. Keep riskLevel and severity enum values in English.";
+        return """
+                You are an inventory audit analyst for ValueInSoft.
+                Analyze only the provided audit export data. Do not invent rows, products, suppliers, or amounts.
+                Return strict JSON only, no markdown and no explanation outside JSON.
+                Use concise operational language suitable for a stock controller.
+                %s
+                Include one short motivational quote in clerkQuote, written as a professional inventory clerk who values accuracy and discipline.
+                JSON schema:
+                {
+                  "headline": "string",
+                  "executiveSummary": "string",
+                  "clerkQuote": "string",
+                  "riskLevel": "LOW|MEDIUM|HIGH",
+                  "score": 0,
+                  "highlights": [{"title":"string","detail":"string","severity":"LOW|MEDIUM|HIGH","metric":"string"}],
+                  "risks": [{"title":"string","detail":"string","severity":"LOW|MEDIUM|HIGH","metric":"string"}],
+                  "recommendations": [{"title":"string","detail":"string","severity":"LOW|MEDIUM|HIGH","metric":"string"}],
+                  "serialFindings": [{"title":"string","detail":"string","severity":"LOW|MEDIUM|HIGH","metric":"string"}]
+                }
+                """.formatted(languageInstruction);
+    }
+
+    private String buildAiUserPrompt(InventoryAuditSearchRequest request,
+                                     InventoryAuditSummary summary,
+                                     List<InventoryAuditRow> rows) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("filters", Map.of(
+                "companyId", request.getCompanyId(),
+                "branchId", request.getBranchId(),
+                "fromDate", request.getFromDate().toString(),
+                "toDate", request.getToDate().toString(),
+                "query", request.getQuery() == null ? "" : request.getQuery(),
+                "lowStockOnly", Boolean.TRUE.equals(request.getLowStockOnly()),
+                "lowStockThreshold", request.getLowStockThreshold() == null ? "" : request.getLowStockThreshold(),
+                "locale", request.getLocale() == null ? "" : request.getLocale(),
+                "direction", request.getDirection() == null ? "" : request.getDirection()
+        ));
+        payload.put("summary", Map.of(
+                "totalRows", summary.getTotalRows(),
+                "openingQty", summary.getTotalOpeningQty(),
+                "inQty", summary.getTotalInQty(),
+                "outQty", summary.getTotalOutQty(),
+                "closingQty", summary.getTotalClosingQty(),
+                "stockValue", summary.getTotalStockValue(),
+                "lowStockCount", summary.getLowStockCount()
+        ));
+        payload.put("computedSignals", buildComputedSignals(summary, rows));
+        payload.put("sampledRows", rows.stream().limit(aiMaxRows).map(this::toAiRow).toList());
+
+        try {
+            return "Analyze this inventory audit export dataset and produce the requested JSON.\n"
+                    + objectMapper.writeValueAsString(payload);
+        } catch (IOException exception) {
+            return "Analyze this inventory audit export dataset and produce the requested JSON.\n"
+                    + payload.toString();
+        }
+    }
+
+    private Map<String, Object> buildComputedSignals(InventoryAuditSummary summary, List<InventoryAuditRow> rows) {
+        long serializedRows = rows.stream().filter(this::isSerializedRow).count();
+        long soldOutRows = rows.stream().filter(row -> safeInt(row.getClosingQty()) <= 0 && safeInt(row.getOutQty()) > 0).count();
+        long negativeClosingRows = rows.stream().filter(row -> safeInt(row.getClosingQty()) < 0).count();
+        List<String> duplicateSerials = rows.stream()
+                .map(InventoryAuditRow::getSerialIdentifier)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.groupingBy(value -> value, LinkedHashMap::new, Collectors.counting()))
+                .entrySet()
+                .stream()
+                .filter(entry -> entry.getValue() > 1)
+                .map(Map.Entry::getKey)
+                .limit(10)
+                .toList();
+        List<Map<String, Object>> topValueRows = rows.stream()
+                .sorted(Comparator.comparingLong((InventoryAuditRow row) -> safeLong(row.getTotalValue())).reversed())
+                .limit(8)
+                .map(this::toAiRow)
+                .toList();
+
+        Map<String, Object> signals = new LinkedHashMap<>();
+        signals.put("rowSampleCount", rows.size());
+        signals.put("totalRowsInExport", summary.getTotalRows());
+        signals.put("serializedRowsInSample", serializedRows);
+        signals.put("soldOutRowsInSample", soldOutRows);
+        signals.put("negativeClosingRowsInSample", negativeClosingRows);
+        signals.put("duplicateSerialsInSample", duplicateSerials);
+        signals.put("topValueRowsInSample", topValueRows);
+        return signals;
+    }
+
+    private Map<String, Object> toAiRow(InventoryAuditRow row) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("productId", row.getProductId());
+        value.put("unitId", row.getProductUnitId());
+        value.put("tracking", row.getTrackingType());
+        value.put("serialOrImei", row.getSerialIdentifier());
+        value.put("product", row.getProductName());
+        value.put("category", row.getCategory());
+        value.put("branch", row.getBranch());
+        value.put("opening", safeInt(row.getOpeningQty()));
+        value.put("in", safeInt(row.getInQty()));
+        value.put("out", safeInt(row.getOutQty()));
+        value.put("closing", safeInt(row.getClosingQty()));
+        value.put("unitPrice", safeInt(row.getUnitPrice()));
+        value.put("totalValue", safeLong(row.getTotalValue()));
+        value.put("lastMovement", formatTimestamp(row.getLastMovementDate()));
+        return value;
+    }
+
+    private InventoryAuditAiAnalysisResponse parseAiAnalysis(String answer) {
+        String json = extractJson(answer);
+        try {
+            return objectMapper.readValue(json, InventoryAuditAiAnalysisResponse.class);
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("AI audit analysis response was not valid JSON", exception);
+        }
+    }
+
+    private String extractJson(String answer) {
+        String value = answer == null ? "" : answer.trim();
+        if (value.startsWith("```")) {
+            int firstBrace = value.indexOf('{');
+            int lastBrace = value.lastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                return value.substring(firstBrace, lastBrace + 1);
+            }
+        }
+        int firstBrace = value.indexOf('{');
+        int lastBrace = value.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return value.substring(firstBrace, lastBrace + 1);
+        }
+        return value;
+    }
+
+    private InventoryAuditAiAnalysisResponse buildFallbackAnalysis(InventoryAuditSearchRequest request,
+                                                                   InventoryAuditSummary summary,
+                                                                   List<InventoryAuditRow> rows) {
+        boolean rtl = isRtlRequest(request);
+        ArrayList<InventoryAuditAiInsight> highlights = new ArrayList<>();
+        ArrayList<InventoryAuditAiInsight> risks = new ArrayList<>();
+        ArrayList<InventoryAuditAiInsight> recommendations = new ArrayList<>();
+        ArrayList<InventoryAuditAiInsight> serialFindings = new ArrayList<>();
+
+        highlights.add(new InventoryAuditAiInsight(
+                rtl ? "تغطية الحركة" : "Movement coverage",
+                rtl
+                        ? "المراجعة تحتوي على " + summary.getTotalRows() + " صف، بإجمالي وارد " + summary.getTotalInQty() + " وصادر " + summary.getTotalOutQty() + "."
+                        : "The audit contains " + summary.getTotalRows() + " rows with " + summary.getTotalInQty() + " units in and " + summary.getTotalOutQty() + " units out.",
+                "LOW",
+                (rtl ? "وارد " : "In ") + summary.getTotalInQty() + (rtl ? " / صادر " : " / Out ") + summary.getTotalOutQty()
+        ));
+        highlights.add(new InventoryAuditAiInsight(
+                rtl ? "قيمة المخزون الختامي" : "Closing stock value",
+                rtl
+                        ? "قيمة المخزون الختامي حسب الفلاتر الحالية هي " + summary.getTotalStockValue() + "."
+                        : "Current closing value for the selected filters is " + summary.getTotalStockValue() + ".",
+                "LOW",
+                String.valueOf(summary.getTotalStockValue())
+        ));
+
+        long negativeClosingRows = rows.stream().filter(row -> safeInt(row.getClosingQty()) < 0).count();
+        long soldOutRows = rows.stream().filter(row -> safeInt(row.getClosingQty()) <= 0 && safeInt(row.getOutQty()) > 0).count();
+        if (negativeClosingRows > 0) {
+            risks.add(new InventoryAuditAiInsight(
+                    rtl ? "يوجد مخزون بالسالب" : "Negative stock detected",
+                    rtl
+                            ? negativeClosingRows + " صف من العينة لديهم كمية ختامية بالسالب ويحتاجون تسوية."
+                            : negativeClosingRows + " sampled rows have negative closing quantity and need reconciliation.",
+                    "HIGH",
+                    String.valueOf(negativeClosingRows)
+            ));
+        }
+        if (summary.getLowStockCount() > 0) {
+            risks.add(new InventoryAuditAiInsight(
+                    rtl ? "صفوف مخزون منخفض" : "Low stock rows",
+                    rtl
+                            ? summary.getLowStockCount() + " صف عند أو أقل من حد المخزون المنخفض المحدد."
+                            : summary.getLowStockCount() + " rows are at or below the selected low-stock threshold.",
+                    "MEDIUM",
+                    String.valueOf(summary.getLowStockCount())
+            ));
+        }
+        if (soldOutRows > 0) {
+            risks.add(new InventoryAuditAiInsight(
+                    rtl ? "وحدات سيريال مباعة بالكامل" : "Sold-out serialized units",
+                    rtl
+                            ? soldOutRows + " صف من العينة تم استهلاكهم بالكامل بعد البيع."
+                            : soldOutRows + " sampled rows are fully consumed after sales.",
+                    "MEDIUM",
+                    String.valueOf(soldOutRows)
+            ));
+        }
+
+        List<String> duplicateSerials = rows.stream()
+                .map(InventoryAuditRow::getSerialIdentifier)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.groupingBy(value -> value, Collectors.counting()))
+                .entrySet()
+                .stream()
+                .filter(entry -> entry.getValue() > 1)
+                .map(Map.Entry::getKey)
+                .limit(5)
+                .toList();
+        if (duplicateSerials.isEmpty()) {
+            serialFindings.add(new InventoryAuditAiInsight(
+                    rtl ? "تتبع السيريال / IMEI" : "Serialized traceability",
+                    rtl
+                            ? "لم يتم العثور على قيم IMEI أو سيريال مكررة داخل العينة."
+                            : "No duplicate IMEI or serial values were found in the sampled rows.",
+                    "LOW",
+                    rows.stream().filter(this::isSerializedRow).count() + (rtl ? " صف سيريال" : " serialized rows")
+            ));
+        } else {
+            serialFindings.add(new InventoryAuditAiInsight(
+                    rtl ? "سيريالات مكررة في العينة" : "Duplicate serials in sample",
+                    rtl
+                            ? "قيم السيريال/IMEI المكررة تحتاج مراجعة: " + String.join(", ", duplicateSerials)
+                            : "Duplicate serial/IMEI values need review: " + String.join(", ", duplicateSerials),
+                    "HIGH",
+                    String.valueOf(duplicateSerials.size())
+            ));
+        }
+
+        recommendations.add(new InventoryAuditAiInsight(
+                rtl ? "ابدأ بتسوية الاستثناءات" : "Reconcile exceptions first",
+                rtl
+                        ? "ابدأ بالكميات الختامية السالبة، والسيريالات المكررة، وصفوف المخزون المنخفض قبل الاعتماد على قيمة المخزون في التصدير."
+                        : "Start with negative closing quantities, duplicate serials, and low-stock rows before relying on the export for stock value.",
+                risks.stream().anyMatch(risk -> "HIGH".equalsIgnoreCase(risk.getSeverity())) ? "HIGH" : "MEDIUM",
+                risks.size() + (rtl ? " مؤشرات خطر" : " risk signals")
+        ));
+        recommendations.add(new InventoryAuditAiInsight(
+                rtl ? "استخدم تصدير Excel للمتابعة التفصيلية" : "Use the Excel export for row-level follow-up",
+                rtl
+                        ? "التحليل يستخدم نفس البيانات المفلترة الخاصة بتصدير Excel. صدّر Excel عند الحاجة لتوزيع المتابعة أو التسويات على مستوى الصف."
+                        : "The analysis uses the same filtered dataset as the Excel export. Export Excel when you need to assign row owners or perform bulk reconciliation.",
+                "LOW",
+                rows.size() + (rtl ? " صف في العينة" : " sampled rows")
+        ));
+
+        String riskLevel = negativeClosingRows > 0 || !duplicateSerials.isEmpty()
+                ? "HIGH"
+                : (summary.getLowStockCount() > 0 || soldOutRows > 0 ? "MEDIUM" : "LOW");
+        int score = switch (riskLevel) {
+            case "HIGH" -> 52;
+            case "MEDIUM" -> 74;
+            default -> 91;
+        };
+
+        InventoryAuditAiAnalysisResponse response = new InventoryAuditAiAnalysisResponse(
+                rtl ? "تحليل مراجعة المخزون" : "Inventory audit analysis",
+                rtl
+                        ? "تم تحليل فترة المراجعة المحددة باستخدام إجماليات الحركة، وتتبع السيريال/IMEI، وقيمة المخزون، ومؤشرات المخزون المنخفض."
+                        : "The selected audit period was analyzed using movement totals, serialized traceability, stock value, and low-stock signals.",
+                rtl
+                        ? "موظف المخزون المحترف لا يطارد الأرقام في النهاية، بل يحافظ عليها صحيحة من البداية."
+                        : "A professional inventory clerk does not chase numbers at the end; they keep them accurate from the start.",
+                riskLevel,
+                score,
+                highlights,
+                risks,
+                recommendations,
+                serialFindings,
+                Instant.now(),
+                aiProperties.getModel(),
+                false,
+                rows.size()
+        );
+        ensureAnalysisDefaults(response, null);
+        return response;
+    }
+
+    private void enrichAnalysisMetadata(InventoryAuditAiAnalysisResponse response,
+                                        String modelName,
+                                        boolean aiGenerated,
+                                        int rowCountAnalyzed) {
+        response.setGeneratedAt(Instant.now());
+        response.setModel(modelName == null || modelName.isBlank() ? aiProperties.getModel() : modelName);
+        response.setAiGenerated(aiGenerated);
+        response.setRowCountAnalyzed(rowCountAnalyzed);
+    }
+
+    private void ensureAnalysisDefaults(InventoryAuditAiAnalysisResponse response, InventoryAuditAiAnalysisResponse fallback) {
+        if (response.getHeadline() == null || response.getHeadline().isBlank()) {
+            response.setHeadline(fallback == null ? "Inventory audit analysis" : fallback.getHeadline());
+        }
+        if (response.getExecutiveSummary() == null || response.getExecutiveSummary().isBlank()) {
+            response.setExecutiveSummary(fallback == null ? "" : fallback.getExecutiveSummary());
+        }
+        if (response.getClerkQuote() == null || response.getClerkQuote().isBlank()) {
+            response.setClerkQuote(fallback == null
+                    ? "A professional inventory clerk does not chase numbers at the end; they keep them accurate from the start."
+                    : fallback.getClerkQuote());
+        }
+        String riskLevel = response.getRiskLevel() == null ? "" : response.getRiskLevel().trim().toUpperCase(Locale.ROOT);
+        if (!List.of("LOW", "MEDIUM", "HIGH").contains(riskLevel)) {
+            riskLevel = fallback == null ? "LOW" : fallback.getRiskLevel();
+        }
+        response.setRiskLevel(riskLevel);
+        if (response.getScore() == null) {
+            response.setScore(fallback == null ? 80 : fallback.getScore());
+        }
+        response.setScore(Math.max(0, Math.min(100, response.getScore())));
+        if (response.getHighlights() == null) {
+            response.setHighlights(new ArrayList<>());
+        }
+        if (response.getRisks() == null) {
+            response.setRisks(new ArrayList<>());
+        }
+        if (response.getRecommendations() == null) {
+            response.setRecommendations(new ArrayList<>());
+        }
+        if (response.getSerialFindings() == null) {
+            response.setSerialFindings(new ArrayList<>());
+        }
+        if (response.getGeneratedAt() == null) {
+            response.setGeneratedAt(Instant.now());
+        }
+        if (response.getModel() == null || response.getModel().isBlank()) {
+            response.setModel(aiProperties.getModel());
+        }
+    }
+
+    private boolean isSerializedRow(InventoryAuditRow row) {
+        return row.getProductUnitId() != null
+                || (row.getTrackingType() != null && !"QUANTITY".equalsIgnoreCase(row.getTrackingType()))
+                || (row.getSerialIdentifier() != null && !row.getSerialIdentifier().isBlank());
+    }
+
+    private boolean isRtlRequest(InventoryAuditSearchRequest request) {
+        if (request == null) {
+            return false;
+        }
+        String direction = request.getDirection() == null ? "" : request.getDirection().trim().toLowerCase(Locale.ROOT);
+        String locale = request.getLocale() == null ? "" : request.getLocale().trim().toLowerCase(Locale.ROOT);
+        return "rtl".equals(direction) || locale.startsWith("ar");
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private long safeLong(Long value) {
+        return value == null ? 0L : value;
     }
 
     private void authorize(String authenticatedName, InventoryAuditSearchRequest request) {
@@ -271,7 +691,9 @@ public class InventoryAuditService {
                 1,
                 pdfMaxRows,
                 request.getSortField(),
-                request.getSortDirection()
+                request.getSortDirection(),
+                request.getLocale(),
+                request.getDirection()
         );
     }
 

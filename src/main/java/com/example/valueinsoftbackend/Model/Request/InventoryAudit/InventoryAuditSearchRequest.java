@@ -37,4 +37,6 @@ public class InventoryAuditSearchRequest {
     private Integer size = 25;
     private String sortField = "lastMovementDate";
     private String sortDirection = "desc";
+    private String locale;
+    private String direction;
 }
