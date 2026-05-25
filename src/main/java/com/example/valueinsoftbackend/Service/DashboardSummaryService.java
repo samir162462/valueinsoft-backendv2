@@ -83,7 +83,7 @@ public class DashboardSummaryService {
                 () -> kpiProvider.getKpis(companyId, request.getBranchId(), request.getDate()),
                 dashboardExecutor
         ).orTimeout(10, TimeUnit.SECONDS).exceptionally(ex -> {
-            System.err.println("KPI fetch failed for Branch " + request.getBranchId() + ": " + ex.getMessage());
+            log.warn("KPI fetch failed for branch {}", request.getBranchId(), ex);
             response.getSectionStatus().put("kpis", "error");
             return null;
         });
@@ -93,7 +93,7 @@ public class DashboardSummaryService {
                 () -> chartProvider.getCharts(companyId, request.getBranchId(), request.getDate()),
                 dashboardExecutor
         ).orTimeout(5, TimeUnit.SECONDS).exceptionally(ex -> {
-            System.err.println("Charts fetch failed: " + ex.getMessage());
+            log.warn("Charts fetch failed", ex);
             response.getSectionStatus().put("charts", "error");
             return null;
         });
@@ -103,7 +103,7 @@ public class DashboardSummaryService {
                 () -> topPerformerProvider.getTopPerformers(companyId, request.getBranchId(), request.getDate()),
                 dashboardExecutor
         ).orTimeout(5, TimeUnit.SECONDS).exceptionally(ex -> {
-            System.err.println("Top performers fetch failed: " + ex.getMessage());
+            log.warn("Top performers fetch failed", ex);
             response.getSectionStatus().put("topPerformers", "error");
             return null;
         });
@@ -113,7 +113,7 @@ public class DashboardSummaryService {
                 () -> inventoryProvider.getInventoryAlerts(companyId, request.getBranchId()),
                 dashboardExecutor
         ).orTimeout(5, TimeUnit.SECONDS).exceptionally(ex -> {
-            System.err.println("Inventory alerts fetch failed: " + ex.getMessage());
+            log.warn("Inventory alerts fetch failed", ex);
             return new ArrayList<>();
         });
 

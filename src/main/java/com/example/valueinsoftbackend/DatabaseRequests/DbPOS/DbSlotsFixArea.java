@@ -8,6 +8,8 @@ import com.example.valueinsoftbackend.Model.Slots.SlotsFixArea;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -19,6 +21,7 @@ import java.util.List;
 @Repository
 public class DbSlotsFixArea {
 
+    private static final Logger log = LoggerFactory.getLogger(DbSlotsFixArea.class);
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final RowMapper<SlotsFixArea> FIX_AREA_ROW_MAPPER = new RowMapper<>() {
@@ -63,7 +66,7 @@ public class DbSlotsFixArea {
                         OBJECT_MAPPER.readValue(partsData, OBJECT_MAPPER.getTypeFactory().constructCollectionType(java.util.List.class, com.example.valueinsoftbackend.Model.Slots.FixAreaPart.class));
                     slot.setUsedParts(partsList);
                 } catch (Exception e) {
-                    System.err.println("Error parsing parts JSON: " + e.getMessage());
+                    log.warn("Error parsing fix-area parts JSON", e);
                 }
             }
 

@@ -4,10 +4,12 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbClient;
 import com.example.valueinsoftbackend.DatabaseRequests.DbDataVisualization.Sales.DbDvSales;
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.DvSales;
 import com.example.valueinsoftbackend.Model.Response.DashboardSummaryResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class DashboardKpiProvider {
 
     private final DbDvSales dbDvSales;
@@ -19,8 +21,8 @@ public class DashboardKpiProvider {
     }
 
     public KpiPackage getKpis(Integer companyId, Integer branchId, String date) {
-        System.out.println("DEBUG: Fetching Dashboard KPIs for Company: " + companyId + " Branch: " + branchId + " Date: " + date);
-        
+        log.debug("Fetching dashboard KPIs for company {} branch {} date {}", companyId, branchId, date);
+
         // Today's Data
         DvSales todayData = dbDvSales.getDailyKpis(companyId, branchId, date);
         int todayClients = dbClient.countNewClientsByDay(companyId, branchId, date);

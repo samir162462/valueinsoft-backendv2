@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.Model.DataVisualizationModels.DVSalesYearl
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.DvSales;
 import com.example.valueinsoftbackend.Model.Sales.SalesProduct;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -17,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
+@Slf4j
 public class DbDvSales {
 
     private final JdbcTemplate jdbcTemplate;
@@ -65,12 +67,13 @@ public class DbDvSales {
 
         try {
             Timestamp lastOrder = jdbcTemplate.queryForObject("SELECT MAX(\"orderTime\") FROM " + TenantSqlIdentifiers.orderTable(companyId, branchId), Timestamp.class);
-            System.out.println("DEBUG: Latest Order in DB for Branch " + branchId + " is: " + lastOrder);
-        } catch (Exception e) {}
+            log.debug("Latest order in DB for branch {} is {}", branchId, lastOrder);
+        } catch (Exception ignored) {
+        }
 
         Timestamp start = Timestamp.valueOf(dayStart);
         Timestamp end = Timestamp.valueOf(dayEnd);
-        System.out.println("DEBUG: SQL Range -> Start: " + start + " End: " + end);
+        log.debug("Daily KPI SQL range start={} end={}", start, end);
 
         return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> new DvSales(
                 rs.getInt("total"),
