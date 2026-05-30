@@ -178,7 +178,9 @@ public class AiChatService {
                 result.suggestedQuestions(),
                 result.actions(),
                 result.sources(),
-                result.toolCalls()
+                result.toolCalls(),
+                result.providerName(),
+                result.providerCode()
         );
     }
 
@@ -278,8 +280,10 @@ public class AiChatService {
                 conversation.branchId(),
                 securityContext,
                 conversation.id(),
-                conversationContext
+                conversationContext,
+                request.provider()
         )
+        .map(chunk -> enrichDoneChunk(chunk, conversation.id()))
         .doOnNext(chunk -> {
             if ("delta".equals(chunk.type())) {
                 fullAnswer.append(chunk.content());
@@ -424,6 +428,22 @@ public class AiChatService {
                 message.content(),
                 message.createdAt()
         );
+    }
+
+    private AiStreamChunk enrichDoneChunk(AiStreamChunk chunk, UUID conversationId) {
+        if (!"done".equals(chunk.type())) {
+            return chunk;
+        }
+        java.util.LinkedHashMap<String, Object> data = new java.util.LinkedHashMap<>();
+        if (chunk.data() instanceof java.util.Map<?, ?> map) {
+            map.forEach((key, value) -> {
+                if (key != null) {
+                    data.put(String.valueOf(key), value);
+                }
+            });
+        }
+        data.put("conversationId", conversationId.toString());
+        return new AiStreamChunk(chunk.type(), chunk.content(), data);
     }
 
     private String buildConversationContext(List<AiMessageRecord> messages) {

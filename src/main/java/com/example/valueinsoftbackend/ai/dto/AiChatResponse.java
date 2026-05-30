@@ -9,6 +9,17 @@ public record AiChatResponse(
         List<String> suggestedQuestions,
         List<AiActionDto> actions,
         List<AiSourceDto> sources,
-        List<AiToolCallDto> toolCalls
+        List<AiToolCallDto> toolCalls,
+        String providerName,
+        String providerCode
 ) {
+    public AiChatResponse(String conversationId,
+                          String answer,
+                          String mode,
+                          List<String> suggestedQuestions,
+                          List<AiActionDto> actions,
+                          List<AiSourceDto> sources,
+                          List<AiToolCallDto> toolCalls) {
+        this(conversationId, answer, mode, suggestedQuestions, actions, sources, toolCalls, null, null);
+    }
 }

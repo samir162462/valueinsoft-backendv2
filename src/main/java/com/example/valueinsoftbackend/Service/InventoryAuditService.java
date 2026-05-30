@@ -170,7 +170,7 @@ public class InventoryAuditService {
             }
 
             InventoryAuditAiAnalysisResponse parsed = parseAiAnalysis(modelResponse.answer());
-            enrichAnalysisMetadata(parsed, modelResponse.modelName(), true, rows.size());
+            enrichAnalysisMetadata(parsed, modelResponse.modelName(), modelResponse.providerName(), modelResponse.providerCode(), true, rows.size());
             ensureAnalysisDefaults(parsed, fallback);
             return parsed;
         } catch (RuntimeException exception) {
@@ -457,6 +457,8 @@ public class InventoryAuditService {
                 serialFindings,
                 Instant.now(),
                 aiProperties.getModel(),
+                "",
+                "",
                 false,
                 rows.size()
         );
@@ -466,10 +468,14 @@ public class InventoryAuditService {
 
     private void enrichAnalysisMetadata(InventoryAuditAiAnalysisResponse response,
                                         String modelName,
+                                        String providerName,
+                                        String providerCode,
                                         boolean aiGenerated,
                                         int rowCountAnalyzed) {
         response.setGeneratedAt(Instant.now());
         response.setModel(modelName == null || modelName.isBlank() ? aiProperties.getModel() : modelName);
+        response.setProviderName(providerName == null ? "" : providerName);
+        response.setProviderCode(providerCode == null ? "" : providerCode);
         response.setAiGenerated(aiGenerated);
         response.setRowCountAnalyzed(rowCountAnalyzed);
     }
@@ -512,6 +518,12 @@ public class InventoryAuditService {
         }
         if (response.getModel() == null || response.getModel().isBlank()) {
             response.setModel(aiProperties.getModel());
+        }
+        if (response.getProviderCode() == null) {
+            response.setProviderCode("");
+        }
+        if (response.getProviderName() == null) {
+            response.setProviderName("");
         }
     }
 

@@ -6,7 +6,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AiProperties {
 
     private boolean enabled = false;
-    private String provider = "google";
+    private String provider = "deepseek";
+    private String fallbackProvider = "gemini";
+    private boolean fallbackEnabled = true;
+    private int requestTimeoutMs = 60_000;
     private String model = "gemini-2.5-flash";
     private double temperature = 0.2;
     private int maxOutputTokens = 800;
@@ -25,6 +28,8 @@ public class AiProperties {
     private int cacheTtlMinutes = 30;
     private boolean streamingEnabled = true;
     private boolean functionCallingEnabled = true;
+    private GeminiProperties gemini = new GeminiProperties();
+    private DeepSeekProperties deepseek = new DeepSeekProperties();
 
     public boolean isEnabled() {
         return enabled;
@@ -40,6 +45,30 @@ public class AiProperties {
 
     public void setProvider(String provider) {
         this.provider = provider;
+    }
+
+    public String getFallbackProvider() {
+        return fallbackProvider;
+    }
+
+    public void setFallbackProvider(String fallbackProvider) {
+        this.fallbackProvider = fallbackProvider;
+    }
+
+    public boolean isFallbackEnabled() {
+        return fallbackEnabled;
+    }
+
+    public void setFallbackEnabled(boolean fallbackEnabled) {
+        this.fallbackEnabled = fallbackEnabled;
+    }
+
+    public int getRequestTimeoutMs() {
+        return requestTimeoutMs;
+    }
+
+    public void setRequestTimeoutMs(int requestTimeoutMs) {
+        this.requestTimeoutMs = requestTimeoutMs;
     }
 
     public String getModel() {
@@ -184,5 +213,72 @@ public class AiProperties {
 
     public void setFunctionCallingEnabled(boolean functionCallingEnabled) {
         this.functionCallingEnabled = functionCallingEnabled;
+    }
+
+    public GeminiProperties getGemini() {
+        return gemini;
+    }
+
+    public void setGemini(GeminiProperties gemini) {
+        this.gemini = gemini;
+    }
+
+    public DeepSeekProperties getDeepseek() {
+        return deepseek;
+    }
+
+    public void setDeepseek(DeepSeekProperties deepseek) {
+        this.deepseek = deepseek;
+    }
+
+    public static class GeminiProperties {
+        private String model = "gemini-2.5-flash";
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+    }
+
+    public static class DeepSeekProperties {
+        private String apiKey = "";
+        private String baseUrl = "https://api.deepseek.com";
+        private String model = "deepseek-chat";
+        private int timeoutMs = 60_000;
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public int getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public void setTimeoutMs(int timeoutMs) {
+            this.timeoutMs = timeoutMs;
+        }
     }
 }

@@ -22,6 +22,8 @@ public class InventoryAuditAiAnalysisResponse {
     private ArrayList<InventoryAuditAiInsight> serialFindings = new ArrayList<>();
     private Instant generatedAt;
     private String model;
+    private String providerName;
+    private String providerCode;
     private boolean aiGenerated;
     private int rowCountAnalyzed;
 }

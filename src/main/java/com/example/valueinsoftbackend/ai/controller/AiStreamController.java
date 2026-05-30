@@ -32,7 +32,7 @@ public class AiStreamController {
                         .data(chunk)
                         .build())
                 .onErrorResume(error -> Flux.just(ServerSentEvent.<AiStreamChunk>builder()
-                        .data(new AiStreamChunk("error", "An error occurred: " + error.getMessage(), null))
+                        .data(new AiStreamChunk("error", "AI streaming is temporarily unavailable. Try again shortly.", null))
                         .build()));
     }
 }

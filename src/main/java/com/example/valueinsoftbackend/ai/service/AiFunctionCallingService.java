@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.ai.dto.AiActionDto;
 import com.example.valueinsoftbackend.ai.dto.AiSourceDto;
 import com.example.valueinsoftbackend.ai.dto.AiToolCallDto;
 import com.example.valueinsoftbackend.ai.dto.AiStreamChunk;
+import com.example.valueinsoftbackend.ai.config.AiProperties;
 import com.example.valueinsoftbackend.ai.service.AiChatOrchestratorService.OrchestratedChatResult;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -21,21 +22,25 @@ public class AiFunctionCallingService {
     private final AiModelClient aiModelClient;
     private final AiToolRegistry toolRegistry;
     private final AiSystemPromptBuilder systemPromptBuilder;
+    private final AiProperties aiProperties;
     private final Gson gson = new Gson();
 
     public AiFunctionCallingService(AiModelClient aiModelClient,
                                     AiToolRegistry toolRegistry,
-                                    AiSystemPromptBuilder systemPromptBuilder) {
+                                    AiSystemPromptBuilder systemPromptBuilder,
+                                    AiProperties aiProperties) {
         this.aiModelClient = aiModelClient;
         this.toolRegistry = toolRegistry;
         this.systemPromptBuilder = systemPromptBuilder;
+        this.aiProperties = aiProperties;
     }
 
     public OrchestratedChatResult execute(String userMessage,
                                           Long branchId,
                                           AiSecurityContext securityContext,
                                           UUID conversationId,
-                                          String conversationContext) {
+                                          String conversationContext,
+                                          String provider) {
         log.debug("Starting Gemini function calling execution. User: {}, Branch: {}", securityContext.username(), branchId);
 
         // 1. Build context-rich system prompt
@@ -81,7 +86,8 @@ public class AiFunctionCallingService {
                 userMessage,
                 "BUSINESS",
                 "",
-                conversationContext
+                conversationContext,
+                provider
         );
 
         AiModelResponse modelResponse = aiModelClient.generateWithFunctions(modelRequest, functions);
@@ -94,7 +100,9 @@ public class AiFunctionCallingService {
                 suggestions,
                 actions,
                 List.of(), // Sources
-                executedTools
+                executedTools,
+                modelResponse.providerName(),
+                modelResponse.providerCode()
         );
     }
 
@@ -102,7 +110,8 @@ public class AiFunctionCallingService {
                                              Long branchId,
                                              AiSecurityContext securityContext,
                                              UUID conversationId,
-                                             String conversationContext) {
+                                             String conversationContext,
+                                             String provider) {
         log.debug("Starting Gemini streaming function calling execution. User: {}, Branch: {}", securityContext.username(), branchId);
 
         String systemPrompt = systemPromptBuilder.buildPrompt(securityContext, branchId);
@@ -114,7 +123,8 @@ public class AiFunctionCallingService {
                 userMessage,
                 "BUSINESS",
                 "",
-                conversationContext
+                conversationContext,
+                provider
         );
 
         return Flux.create(sink -> {
@@ -153,6 +163,30 @@ public class AiFunctionCallingService {
                 }
             });
 
+            if (!isGeminiSelected(modelRequest)) {
+                try {
+                    AiModelResponse modelResponse = aiModelClient.generateWithFunctions(modelRequest, functions);
+                    sink.next(new AiStreamChunk("provider", modelResponse.providerCode(), providerData(modelResponse)));
+                    if (modelResponse.answer() != null && !modelResponse.answer().isBlank()) {
+                        sink.next(new AiStreamChunk("delta", modelResponse.answer(), null));
+                    }
+                    List<String> suggestions = generateSuggestions(executedTools);
+                    if (!suggestions.isEmpty()) {
+                        sink.next(new AiStreamChunk("suggestions", null, suggestions));
+                    }
+                    sink.next(new AiStreamChunk("done", "", providerData(modelResponse)));
+                } catch (RuntimeException exception) {
+                    log.error("Error in non-streaming AI generation for stream endpoint type={} detail={}",
+                            exception.getClass().getSimpleName(),
+                            safeStreamErrorDetail(exception));
+                    sink.next(new AiStreamChunk("error", "AI streaming is temporarily unavailable. Try again shortly.", null));
+                } finally {
+                    sink.complete();
+                }
+                return;
+            }
+
+            sink.next(new AiStreamChunk("provider", "GEM", Map.of("providerCode", "GEM", "providerName", "gemini")));
             aiModelClient.streamWithFunctions(modelRequest, functions)
                     .subscribe(
                             chatResponse -> {
@@ -164,8 +198,10 @@ public class AiFunctionCallingService {
                                 }
                             },
                             error -> {
-                                log.error("Error in AI stream generation", error);
-                                sink.next(new AiStreamChunk("error", "Error generating response: " + error.getMessage(), null));
+                                log.error("Error in AI stream generation type={} detail={}",
+                                        error.getClass().getSimpleName(),
+                                        safeStreamErrorDetail(error));
+                                sink.next(new AiStreamChunk("error", "AI streaming is temporarily unavailable. Try again shortly.", null));
                                 sink.complete();
                             },
                             () -> {
@@ -176,7 +212,7 @@ public class AiFunctionCallingService {
                                 if (!suggestions.isEmpty()) {
                                     sink.next(new AiStreamChunk("suggestions", null, suggestions));
                                 }
-                                sink.next(new AiStreamChunk("done", "", null));
+                                sink.next(new AiStreamChunk("done", "", Map.of("providerCode", "GEM", "providerName", "gemini")));
                                 sink.complete();
                             }
                     );
@@ -192,6 +228,34 @@ public class AiFunctionCallingService {
             case "CUSTOMERS" -> "viewClient";
             default -> "Dashboard";
         };
+    }
+
+    private String safeStreamErrorDetail(Throwable error) {
+        String message = error.getMessage();
+        if (message == null || message.isBlank()) {
+            return "n/a";
+        }
+        return message.length() > 180 ? message.substring(0, 180) + "..." : message;
+    }
+
+    private boolean isGeminiSelected(AiModelRequest request) {
+        String selectedProvider = request != null && request.provider() != null && !request.provider().isBlank()
+                ? request.provider()
+                : aiProperties.getProvider();
+        String normalizedProvider = selectedProvider == null ? "" : selectedProvider.trim().toLowerCase(Locale.ROOT);
+        return normalizedProvider.isBlank()
+                || normalizedProvider.equals("gemini")
+                || normalizedProvider.equals("google")
+                || normalizedProvider.equals("google-genai")
+                || normalizedProvider.equals("genai");
+    }
+
+    private Map<String, String> providerData(AiModelResponse response) {
+        return Map.of(
+                "providerCode", response.providerCode() == null ? "" : response.providerCode(),
+                "providerName", response.providerName() == null ? "" : response.providerName(),
+                "model", response.modelName() == null ? "" : response.modelName()
+        );
     }
 
     private List<String> generateSuggestions(List<AiToolCallDto> tools) {

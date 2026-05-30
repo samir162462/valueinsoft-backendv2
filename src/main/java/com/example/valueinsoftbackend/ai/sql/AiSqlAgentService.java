@@ -76,7 +76,8 @@ public class AiSqlAgentService {
                     rows.size(),
                     elapsedMs(startedAt)
             );
-            String answer = summarize(userQuestion, conversationContext, validatedSql, rows);
+            AiModelResponse summary = summarize(userQuestion, conversationContext, validatedSql, rows);
+            String answer = summary.answer();
             log.debug("AI SQL summary completed conversationId={} rowCount={} answerLength={} durationMs={}",
                     conversationId,
                     rows.size(),
@@ -94,7 +95,7 @@ public class AiSqlAgentService {
                     null,
                     elapsedMs(startedAt)
             );
-            return new AiSqlAnswer(answer, validatedSql, rows.size());
+            return new AiSqlAnswer(answer, validatedSql, rows.size(), summary.providerName(), summary.providerCode());
         } catch (RuntimeException exception) {
             log.warn(
                     "AI SQL SELECT rejected conversationId={} companyId={} branchId={} userId={} sql={} reason={}",
@@ -164,7 +165,7 @@ public class AiSqlAgentService {
         }
     }
 
-    private String summarize(String userQuestion, String conversationContext, String sql, List<Map<String, Object>> rows) {
+    private AiModelResponse summarize(String userQuestion, String conversationContext, String sql, List<Map<String, Object>> rows) {
         String systemPrompt = """
                 You answer ValueInSoft business questions from already-executed read-only SQL results.
                 Do not mention SQL unless the user asks.
@@ -186,8 +187,7 @@ public class AiSqlAgentService {
                 gson.toJson(rows)
         );
         log.debug("AI SQL summarize prompt ready rowCount={} userPromptLength={}", rows == null ? 0 : rows.size(), userPrompt.length());
-        AiModelResponse response = modelClient.generate(new AiModelRequest(systemPrompt, userPrompt, "SQL_SUMMARY", ""));
-        return response.answer();
+        return modelClient.generate(new AiModelRequest(systemPrompt, userPrompt, "SQL_SUMMARY", ""));
     }
 
     private String stripCodeFence(String value) {
@@ -227,7 +227,9 @@ public class AiSqlAgentService {
     public record AiSqlAnswer(
             String answer,
             String sql,
-            int rowCount
+            int rowCount,
+            String providerName,
+            String providerCode
     ) {
     }
 }

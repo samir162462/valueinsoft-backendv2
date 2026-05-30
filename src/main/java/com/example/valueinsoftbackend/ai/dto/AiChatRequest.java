@@ -10,7 +10,8 @@ public record AiChatRequest(
         @Size(max = 2000, message = "Message is too long")
         String message,
         Long branchId,
-        Boolean realAiOnly
+        Boolean realAiOnly,
+        String provider
 ) {
     public boolean useRealAiOnly() {
         return true;

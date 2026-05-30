@@ -1,234 +1,39 @@
 package com.example.valueinsoftbackend.ai.service;
 
-import com.example.valueinsoftbackend.ai.config.AiProperties;
+import com.example.valueinsoftbackend.ai.provider.GeminiAiProvider;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.context.annotation.Primary;
-import org.springframework.stereotype.Service;
-
-import java.util.List;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.tool.ToolCallback;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 @Service
-@Primary
 @ConditionalOnClass(ChatModel.class)
 @Slf4j
 public class SpringAiChatModelClient implements AiModelClient {
 
-    private final ChatModel chatModel;
-    private final AiProperties aiProperties;
+    private final GeminiAiProvider geminiAiProvider;
 
-    public SpringAiChatModelClient(Map<String, ChatModel> chatModels, AiProperties aiProperties) {
-        this.aiProperties = aiProperties;
-        String provider = normalizeProvider(aiProperties.getProvider());
-        
-        // Match the provider to the available beans
-        // Spring AI bean names usually follow the pattern [provider]ChatModel
-        this.chatModel = chatModels.entrySet().stream()
-                .filter(entry -> entry.getKey().toLowerCase().contains(provider))
-                .map(Map.Entry::getValue)
-                .findFirst()
-                .orElseGet(() -> {
-                    log.warn("No ChatModel found for provider '{}'. Using first available bean.", provider);
-                    return chatModels.values().stream().findFirst().orElse(null);
-                });
-
-        if (this.chatModel != null) {
-            log.info("Initializing SpringAiChatModelClient with {} provider (Model: {})", 
-                    provider, this.chatModel.getClass().getSimpleName());
-        } else {
-            log.error("No ChatModel bean found in context. AI chat will fail.");
-        }
-    }
-
-    private String normalizeProvider(String provider) {
-        String normalized = provider == null ? "" : provider.trim().toLowerCase();
-        if (normalized.equals("gemini") || normalized.equals("genai") || normalized.equals("google-genai")) {
-            return "google";
-        }
-        return normalized.isBlank() ? "google" : normalized;
+    public SpringAiChatModelClient(GeminiAiProvider geminiAiProvider) {
+        this.geminiAiProvider = geminiAiProvider;
+        log.info("SpringAiChatModelClient initialized as Gemini compatibility delegate");
     }
 
     @Override
     public AiModelResponse generate(AiModelRequest request) {
-        if (chatModel == null) {
-            log.debug("AI model skipped because no ChatModel bean is loaded mode={} configuredModel={}", request.mode(), aiProperties.getModel());
-            return new AiModelResponse("AI engine not loaded correctly.", aiProperties.getModel(), true);
-        }
-        
-        try {
-            log.debug("AI model call queued provider={} configuredModel={} mode={} systemPromptLength={} userMessageLength={} knowledgeLength={} conversationLength={} timeoutSeconds={}",
-                    normalizeProvider(aiProperties.getProvider()),
-                    aiProperties.getModel(),
-                    request.mode(),
-                    request.systemPrompt() == null ? 0 : request.systemPrompt().length(),
-                    request.userMessage() == null ? 0 : request.userMessage().length(),
-                    request.knowledgeContext() == null ? 0 : request.knowledgeContext().length(),
-                    request.conversationContext() == null ? 0 : request.conversationContext().length(),
-                    aiProperties.getTimeoutSeconds());
-            return CompletableFuture.supplyAsync(() -> callModel(request))
-                    .orTimeout(Math.max(1, aiProperties.getTimeoutSeconds()), TimeUnit.SECONDS)
-                    .exceptionally(exception -> {
-                        log.error("AI model call failed: {}", exception.getMessage(), exception);
-                        return new AiModelResponse(
-                            "AI response timed out or is temporarily unavailable. Try again shortly.",
-                            aiProperties.getModel(),
-                            true
-                        );
-                    })
-                    .join();
-        } catch (RuntimeException exception) {
-            log.error("AI model call runtime exception: {}", exception.getMessage(), exception);
-            return new AiModelResponse(
-                    "AI response timed out or is temporarily unavailable. Try again shortly.",
-                    aiProperties.getModel(),
-                    true
-            );
-        }
-    }
-
-    private AiModelResponse callModel(AiModelRequest request) {
-        String userMessageContent = buildUserMessageContent(request);
-        long startedAt = System.nanoTime();
-        log.debug("AI model call start bean={} mode={} finalUserMessageLength={}",
-                chatModel.getClass().getSimpleName(),
-                request.mode(),
-                userMessageContent.length());
-
-        SystemMessage systemMessage = new SystemMessage(request.systemPrompt());
-        UserMessage userMessage = new UserMessage(userMessageContent);
-        
-        String content = chatModel.call(new Prompt(List.of(systemMessage, userMessage)))
-                .getResult()
-                .getOutput()
-                .getText();
-        log.debug("AI model call completed bean={} mode={} durationMs={} responseLength={}",
-                chatModel.getClass().getSimpleName(),
-                request.mode(),
-                Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L),
-                content == null ? 0 : content.length());
-        return new AiModelResponse(content, aiProperties.getModel(), false);
-    }
-
-    private String buildUserMessageContent(AiModelRequest request) {
-        boolean hasKnowledge = request.knowledgeContext() != null && !request.knowledgeContext().isBlank();
-        boolean hasConversation = request.conversationContext() != null && !request.conversationContext().isBlank();
-        if (!hasKnowledge && !hasConversation) {
-            return request.userMessage();
-        }
-        StringBuilder builder = new StringBuilder();
-        if (hasConversation) {
-            builder.append("Recent conversation context. Use it only to resolve follow-up references; do not invent business data from it.\n")
-                    .append(request.conversationContext().trim())
-                    .append("\n\n");
-        }
-        if (hasKnowledge) {
-            builder.append("Answer the user using only the internal help context below. ")
-                    .append("If the context does not answer the question, say the help article is not available yet.\n\n")
-                    .append("Internal help context:\n")
-                    .append(request.knowledgeContext().trim())
-                    .append("\n\n");
-        }
-        builder.append("User question:\n").append(request.userMessage());
-        return builder.toString();
+        return geminiAiProvider.generate(request);
     }
 
     @Override
     public AiModelResponse generateWithFunctions(AiModelRequest request, List<ToolCallback> functions) {
-        if (chatModel == null) {
-            log.debug("AI model skipped because no ChatModel bean is loaded mode={} configuredModel={}", request.mode(), aiProperties.getModel());
-            return new AiModelResponse("AI engine not loaded correctly.", aiProperties.getModel(), true);
-        }
-        if (functions == null || functions.isEmpty() || !aiProperties.isFunctionCallingEnabled()) {
-            return generate(request);
-        }
-
-        try {
-            log.debug("AI model call with functions queued provider={} configuredModel={} functionsCount={}",
-                    normalizeProvider(aiProperties.getProvider()),
-                    aiProperties.getModel(),
-                    functions.size());
-            return CompletableFuture.supplyAsync(() -> callModelWithFunctions(request, functions))
-                    .orTimeout(Math.max(1, aiProperties.getTimeoutSeconds()), TimeUnit.SECONDS)
-                    .exceptionally(exception -> {
-                        log.error("AI model call with functions failed: {}", exception.getMessage(), exception);
-                        return new AiModelResponse(
-                            "AI response timed out or is temporarily unavailable. Try again shortly.",
-                            aiProperties.getModel(),
-                            true
-                        );
-                    })
-                    .join();
-        } catch (RuntimeException exception) {
-            log.error("AI model call with functions runtime exception: {}", exception.getMessage(), exception);
-            return new AiModelResponse(
-                    "AI response timed out or is temporarily unavailable. Try again shortly.",
-                    aiProperties.getModel(),
-                    true
-            );
-        }
-    }
-
-    private AiModelResponse callModelWithFunctions(AiModelRequest request, List<ToolCallback> functions) {
-        String userMessageContent = buildUserMessageContent(request);
-        long startedAt = System.nanoTime();
-        log.debug("AI model call with functions start bean={} mode={} functionsCount={}",
-                chatModel.getClass().getSimpleName(),
-                request.mode(),
-                functions.size());
-
-        SystemMessage systemMessage = new SystemMessage(request.systemPrompt());
-        UserMessage userMessage = new UserMessage(userMessageContent);
-
-        org.springframework.ai.chat.prompt.ChatOptions options = org.springframework.ai.google.genai.GoogleGenAiChatOptions.builder()
-                .toolCallbacks(functions)
-                .build();
-
-        String content = chatModel.call(new Prompt(List.of(systemMessage, userMessage), options))
-                .getResult()
-                .getOutput()
-                .getText();
-
-        log.debug("AI model call with functions completed bean={} durationMs={} responseLength={}",
-                chatModel.getClass().getSimpleName(),
-                Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L),
-                content == null ? 0 : content.length());
-        return new AiModelResponse(content, aiProperties.getModel(), false);
+        return geminiAiProvider.generateWithFunctions(request, functions);
     }
 
     @Override
-    public reactor.core.publisher.Flux<org.springframework.ai.chat.model.ChatResponse> streamWithFunctions(
-            AiModelRequest request,
-            List<ToolCallback> functions) {
-        if (chatModel == null) {
-            log.debug("AI model skipped streaming because no ChatModel bean is loaded");
-            return reactor.core.publisher.Flux.empty();
-        }
-
-        String userMessageContent = buildUserMessageContent(request);
-        log.debug("AI model stream with functions start bean={} mode={} functionsCount={}",
-                chatModel.getClass().getSimpleName(),
-                request.mode(),
-                functions != null ? functions.size() : 0);
-
-        SystemMessage systemMessage = new SystemMessage(request.systemPrompt());
-        UserMessage userMessage = new UserMessage(userMessageContent);
-
-        org.springframework.ai.google.genai.GoogleGenAiChatOptions.Builder optionsBuilder = org.springframework.ai.google.genai.GoogleGenAiChatOptions.builder();
-        if (functions != null && !functions.isEmpty() && aiProperties.isFunctionCallingEnabled()) {
-            optionsBuilder.toolCallbacks(functions);
-        }
-        
-        org.springframework.ai.chat.prompt.ChatOptions options = optionsBuilder.build();
-        Prompt prompt = new Prompt(List.of(systemMessage, userMessage), options);
-
-        return chatModel.stream(prompt);
+    public Flux<ChatResponse> streamWithFunctions(AiModelRequest request, List<ToolCallback> functions) {
+        return geminiAiProvider.streamWithFunctions(request, functions);
     }
 }
