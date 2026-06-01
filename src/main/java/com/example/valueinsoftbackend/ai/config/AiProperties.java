@@ -16,7 +16,7 @@ public class AiProperties {
     private int timeoutSeconds = 30;
     private long monthlyTokenLimitDefault = 1_000_000L;
     private int dailyUserRequestLimit = 100;
-    private boolean ragEnabled = true;
+    private boolean ragEnabled = false;
     private boolean toolsEnabled = true;
     private boolean writeActionsEnabled = false;
     private boolean sqlAgentEnabled = true;
@@ -28,6 +28,8 @@ public class AiProperties {
     private int cacheTtlMinutes = 30;
     private boolean streamingEnabled = true;
     private boolean functionCallingEnabled = true;
+    private RagProperties rag = new RagProperties();
+    private EmbeddingProperties embedding = new EmbeddingProperties();
     private GeminiProperties gemini = new GeminiProperties();
     private DeepSeekProperties deepseek = new DeepSeekProperties();
 
@@ -120,11 +122,15 @@ public class AiProperties {
     }
 
     public boolean isRagEnabled() {
-        return ragEnabled;
+        return rag == null ? ragEnabled : rag.isEnabled();
     }
 
     public void setRagEnabled(boolean ragEnabled) {
         this.ragEnabled = ragEnabled;
+        if (this.rag == null) {
+            this.rag = new RagProperties();
+        }
+        this.rag.setEnabled(ragEnabled);
     }
 
     public boolean isToolsEnabled() {
@@ -215,6 +221,23 @@ public class AiProperties {
         this.functionCallingEnabled = functionCallingEnabled;
     }
 
+    public RagProperties getRag() {
+        return rag;
+    }
+
+    public void setRag(RagProperties rag) {
+        this.rag = rag == null ? new RagProperties() : rag;
+        this.ragEnabled = this.rag.isEnabled();
+    }
+
+    public EmbeddingProperties getEmbedding() {
+        return embedding;
+    }
+
+    public void setEmbedding(EmbeddingProperties embedding) {
+        this.embedding = embedding == null ? new EmbeddingProperties() : embedding;
+    }
+
     public GeminiProperties getGemini() {
         return gemini;
     }
@@ -240,6 +263,159 @@ public class AiProperties {
 
         public void setModel(String model) {
             this.model = model;
+        }
+    }
+
+    public static class RagProperties {
+        private boolean enabled = false;
+        private int topK = 5;
+        private double similarityThreshold = 0.72;
+        private int chunkTargetTokens = 700;
+        private int chunkOverlapTokens = 120;
+        private boolean keywordFallbackEnabled = true;
+        private String defaultLanguage = "en";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getTopK() {
+            return topK;
+        }
+
+        public void setTopK(int topK) {
+            this.topK = topK;
+        }
+
+        public double getSimilarityThreshold() {
+            return similarityThreshold;
+        }
+
+        public void setSimilarityThreshold(double similarityThreshold) {
+            this.similarityThreshold = similarityThreshold;
+        }
+
+        public int getChunkTargetTokens() {
+            return chunkTargetTokens;
+        }
+
+        public void setChunkTargetTokens(int chunkTargetTokens) {
+            this.chunkTargetTokens = chunkTargetTokens;
+        }
+
+        public int getChunkOverlapTokens() {
+            return chunkOverlapTokens;
+        }
+
+        public void setChunkOverlapTokens(int chunkOverlapTokens) {
+            this.chunkOverlapTokens = chunkOverlapTokens;
+        }
+
+        public boolean isKeywordFallbackEnabled() {
+            return keywordFallbackEnabled;
+        }
+
+        public void setKeywordFallbackEnabled(boolean keywordFallbackEnabled) {
+            this.keywordFallbackEnabled = keywordFallbackEnabled;
+        }
+
+        public String getDefaultLanguage() {
+            return defaultLanguage;
+        }
+
+        public void setDefaultLanguage(String defaultLanguage) {
+            this.defaultLanguage = defaultLanguage;
+        }
+    }
+
+    public static class EmbeddingProperties {
+        private boolean enabled = true;
+        private String provider = "google";
+        private String model = "gemini-embedding-2";
+        private int dimension = 768;
+        private GoogleEmbeddingProperties google = new GoogleEmbeddingProperties();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public int getDimension() {
+            return dimension;
+        }
+
+        public void setDimension(int dimension) {
+            this.dimension = dimension;
+        }
+
+        public GoogleEmbeddingProperties getGoogle() {
+            return google;
+        }
+
+        public void setGoogle(GoogleEmbeddingProperties google) {
+            this.google = google == null ? new GoogleEmbeddingProperties() : google;
+        }
+    }
+
+    public static class GoogleEmbeddingProperties {
+        private String apiKey = "";
+        private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+        private int timeoutMs = 60_000;
+        private int batchSize = 100;
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public int getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public void setTimeoutMs(int timeoutMs) {
+            this.timeoutMs = timeoutMs;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
         }
     }
 

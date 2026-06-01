@@ -273,6 +273,41 @@ public class AiChatService {
             return Flux.fromIterable(chunks);
         }
 
+        if ("HELP".equals(normalizedMode)) {
+            AiChatOrchestratorService.OrchestratedChatResult helpResult = orchestratorService.answer(
+                    request,
+                    normalizedMode,
+                    securityContext,
+                    conversation.id(),
+                    conversationContext
+            );
+            messageRepository.create(
+                    conversation.id(),
+                    securityContext.companyId(),
+                    conversation.branchId(),
+                    securityContext.userId(),
+                    "ASSISTANT",
+                    helpResult.answer(),
+                    0
+            );
+            conversationRepository.touch(conversation.id());
+
+            List<AiStreamChunk> chunks = new ArrayList<>();
+            chunks.add(new AiStreamChunk("thinking", "Searching help knowledge...", null));
+            chunks.add(new AiStreamChunk("delta", helpResult.answer(), null));
+            if (!helpResult.sources().isEmpty()) {
+                chunks.add(new AiStreamChunk("sources", null, helpResult.sources()));
+            }
+            if (!helpResult.toolCalls().isEmpty()) {
+                chunks.add(new AiStreamChunk("tool_calls", null, helpResult.toolCalls()));
+            }
+            if (!helpResult.suggestedQuestions().isEmpty()) {
+                chunks.add(new AiStreamChunk("suggestions", null, helpResult.suggestedQuestions()));
+            }
+            chunks.add(new AiStreamChunk("done", "", null));
+            return Flux.fromIterable(chunks);
+        }
+
         // Run full LLM stream
         StringBuilder fullAnswer = new StringBuilder();
         return functionCallingService.executeStream(
