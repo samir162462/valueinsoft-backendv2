@@ -43,6 +43,13 @@ public class ProductImportCsvParserService {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "CSV_EMPTY", "CSV file is empty");
             }
 
+            if (isExcelSeparatorHint(headerLine)) {
+                headerLine = reader.readLine();
+                if (headerLine == null || headerLine.isBlank()) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "CSV_EMPTY", "CSV file is empty");
+                }
+            }
+
             List<String> headers = parseLine(headerLine, 1);
             validateHeaders(headers);
 
@@ -68,6 +75,10 @@ public class ProductImportCsvParserService {
         } catch (IOException ex) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CSV_READ_FAILED", "Unable to read CSV file");
         }
+    }
+
+    private boolean isExcelSeparatorHint(String line) {
+        return line != null && line.trim().equalsIgnoreCase("sep=,");
     }
 
     private void validateFile(MultipartFile file) {
