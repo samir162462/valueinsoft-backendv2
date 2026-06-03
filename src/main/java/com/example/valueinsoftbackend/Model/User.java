@@ -18,10 +18,15 @@ public class User {
     int gender;
     int branchId;
     Timestamp creationTime;
+    boolean passwordResetRequired;
 
 
 
     public User(int userId, String userName, String userPassword, String email, String firstName, String lastName, String userPhone, String role, int gender, int branchId, Timestamp creationTime) {
+        this(userId, userName, userPassword, email, firstName, lastName, userPhone, role, gender, branchId, creationTime, false);
+    }
+
+    public User(int userId, String userName, String userPassword, String email, String firstName, String lastName, String userPhone, String role, int gender, int branchId, Timestamp creationTime, boolean passwordResetRequired) {
         this.userId = userId;
         this.userName = userName;
         this.userPassword = userPassword;
@@ -33,6 +38,7 @@ public class User {
         this.gender = gender;
         this.branchId = branchId;
         this.creationTime = creationTime;
+        this.passwordResetRequired = passwordResetRequired;
     }
 
     public int getUserId() {
@@ -121,5 +127,13 @@ public class User {
 
     public void setBranchId(int branchId) {
         this.branchId = branchId;
+    }
+
+    public boolean isPasswordResetRequired() {
+        return passwordResetRequired;
+    }
+
+    public void setPasswordResetRequired(boolean passwordResetRequired) {
+        this.passwordResetRequired = passwordResetRequired;
     }
 }

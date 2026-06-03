@@ -1,0 +1,2 @@
+ALTER TABLE public.users
+    ADD COLUMN IF NOT EXISTS password_reset_required BOOLEAN NOT NULL DEFAULT FALSE;

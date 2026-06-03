@@ -68,6 +68,10 @@ public class MyUserDetailsServices implements UserDetailsService, UserDetailsPas
         );
     }
 
+    public boolean isPasswordResetRequired(String userName) {
+        return dbUsers.isPasswordResetRequired(extractBaseUserName(userName));
+    }
+
     private String extractBaseUserName(String value) {
         if (value != null && value.contains(" : ")) {
             return value.split(" : ")[0];

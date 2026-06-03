@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.Controller;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.Service.AuthorizationService;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Request.AdminResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.ResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.SaveUserRequest;
 import com.example.valueinsoftbackend.Model.Request.UpdateUserImageRequest;
@@ -129,6 +130,7 @@ public class UserController {
                 "users.account.create"
         );
         String answer = saveUserInternal(requestBody);
+        dbUsers.setPasswordResetRequired(requestBody.getUserName(), true);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
     }
 
@@ -145,6 +147,24 @@ public class UserController {
                 userName,
                 requestBody.getOldPassword(),
                 requestBody.getPassword()
+        );
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
+    }
+
+    @PutMapping("/admin/resetPassword")
+    public ResponseEntity<String> adminResetPassword(Principal principal,
+                                                     @Valid @RequestBody AdminResetPasswordRequest requestBody) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                null,
+                requestBody.getBranchId(),
+                "users.account.edit"
+        );
+        String answer = dbUsers.adminResetUserPassword(
+                requestBody.getUserName(),
+                requestBody.getBranchId(),
+                requestBody.getPassword(),
+                requestBody.isPasswordResetRequired()
         );
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
     }

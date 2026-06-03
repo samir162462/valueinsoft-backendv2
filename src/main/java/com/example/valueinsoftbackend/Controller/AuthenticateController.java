@@ -42,6 +42,7 @@ public class AuthenticateController {
         final UserDetails userDetails = myUserDetailsServices.loadUserByUsername(authenticationRequest.username());
         final String jwt = jwtUtil.generateToken(userDetails);
         String[] card = userDetails.getUsername().split(" : ");
-        return ResponseEntity.ok(new AuthenticationResponse(jwt, card[0], card[1]));
+        boolean passwordResetRequired = myUserDetailsServices.isPasswordResetRequired(card[0]);
+        return ResponseEntity.ok(new AuthenticationResponse(jwt, card[0], card[1], passwordResetRequired));
     }
 }

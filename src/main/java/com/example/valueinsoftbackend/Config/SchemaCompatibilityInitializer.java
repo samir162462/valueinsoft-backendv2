@@ -24,6 +24,7 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         widenUsersPasswordColumn("public");
+        ensurePasswordResetRequiredColumn();
 
         List<String> tenantSchemas = jdbcTemplate.queryForList(
                 "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'c\\_%' ESCAPE '\\'",
@@ -54,5 +55,22 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
                 PASSWORD_COLUMN_LENGTH + ")";
         jdbcTemplate.execute(sql);
         log.info("Updated {}.users.userPassword to varchar({}) for BCrypt compatibility", schemaName, PASSWORD_COLUMN_LENGTH);
+    }
+
+    private void ensurePasswordResetRequiredColumn() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?",
+                Integer.class,
+                "public",
+                "users",
+                "password_reset_required"
+        );
+
+        if (count != null && count > 0) {
+            return;
+        }
+
+        jdbcTemplate.execute("ALTER TABLE public.users ADD COLUMN password_reset_required BOOLEAN NOT NULL DEFAULT FALSE");
+        log.info("Added public.users.password_reset_required for admin password reset lifecycle");
     }
 }

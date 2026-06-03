@@ -18,7 +18,7 @@ public class DbUsers {
 
     private static final String USER_SELECT_COLUMNS =
             "id, \"userName\", \"userPassword\", \"userEmail\", \"firstName\", \"lastName\", " +
-                    "\"userPhone\", \"userRole\", gender, \"branchId\", \"creationTime\"";
+                    "\"userPhone\", \"userRole\", gender, \"branchId\", \"creationTime\", password_reset_required";
 
     private static final RowMapper<User> userRowMapper = (rs, rowNum) -> new User(
             rs.getInt("id"),
@@ -31,7 +31,8 @@ public class DbUsers {
             rs.getString("userRole"),
             rs.getInt("gender"),
             rs.getInt("branchId"),
-            rs.getTimestamp("creationTime")
+            rs.getTimestamp("creationTime"),
+            rs.getBoolean("password_reset_required")
     );
 
     private static final RowMapper<User> userDetailsRowMapper = (rs, rowNum) -> new User(
@@ -45,7 +46,8 @@ public class DbUsers {
             rs.getString("userRole"),
             rs.getInt("gender"),
             rs.getInt("branchId"),
-            rs.getTimestamp("creationTime")
+            rs.getTimestamp("creationTime"),
+            rs.getBoolean("password_reset_required")
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -76,7 +78,7 @@ public class DbUsers {
 
     public User getUserDetails(String userName) {
         String sql = "SELECT id, \"userName\", \"userEmail\", \"userRole\", \"userPhone\", \"branchId\", " +
-                "\"firstName\", \"lastName\", gender, \"creationTime\" FROM public.users WHERE \"userName\" = ?";
+                "\"firstName\", \"lastName\", gender, \"creationTime\", password_reset_required FROM public.users WHERE \"userName\" = ?";
         List<User> users = jdbcTemplate.query(sql, userDetailsRowMapper, userName);
         return users.isEmpty() ? null : users.get(0);
     }
@@ -152,12 +154,44 @@ public class DbUsers {
             throw new ApiException(HttpStatus.CONFLICT, "PASSWORD_MISMATCH", "The Old Password incorrect!");
         }
 
-        String sql = "UPDATE public.users SET \"userPassword\" = ? WHERE \"userName\" = ?";
+        String sql = "UPDATE public.users SET \"userPassword\" = ?, password_reset_required = FALSE WHERE \"userName\" = ?";
         int rows = jdbcTemplate.update(sql, passwordEncoder.encode(userPassword), userName);
         if (rows != 1) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PASSWORD_UPDATE_FAILED", "The password could not be changed");
         }
         return "The Password Changed!";
+    }
+
+    public String adminResetUserPassword(String userName, int expectedBranchId, String userPassword, boolean passwordResetRequired) {
+        User user = getUser(userName);
+        if (user == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found!");
+        }
+        if (expectedBranchId > 0 && user.getBranchId() != expectedBranchId) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "USER_BRANCH_MISMATCH", "The selected user does not belong to this branch");
+        }
+
+        String sql = "UPDATE public.users SET \"userPassword\" = ?, password_reset_required = ? WHERE \"userName\" = ?";
+        int rows = jdbcTemplate.update(sql, passwordEncoder.encode(userPassword), passwordResetRequired, userName);
+        if (rows != 1) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PASSWORD_UPDATE_FAILED", "The password could not be reset");
+        }
+        return passwordResetRequired ? "Password reset. User must change it on next login." : "Password reset.";
+    }
+
+    public String setPasswordResetRequired(String userName, boolean passwordResetRequired) {
+        String sql = "UPDATE public.users SET password_reset_required = ? WHERE \"userName\" = ?";
+        int rows = jdbcTemplate.update(sql, passwordResetRequired, userName);
+        if (rows != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found!");
+        }
+        return "Password reset requirement updated.";
+    }
+
+    public boolean isPasswordResetRequired(String userName) {
+        String sql = "SELECT password_reset_required FROM public.users WHERE \"userName\" = ?";
+        List<Boolean> values = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getBoolean("password_reset_required"), userName);
+        return !values.isEmpty() && Boolean.TRUE.equals(values.get(0));
     }
 
     public void upgradeStoredPassword(String userName, String encodedPassword) throws DataAccessException {
