@@ -188,7 +188,8 @@ public class DbBranch {
                 "    \"orderBouncedBack\" INTEGER," +
                 "    \"shift_id\" INTEGER" +
                 ")";
-        return executeProvisioningSql(sql, "PosOrder", branchId, companyId);
+        boolean tableCreated = executeProvisioningSql(sql, "PosOrder", branchId, companyId);
+        return tableCreated && createOrderIndexes(branchId, companyId);
     }
 
     public boolean createSupplierTable(int branchId, int companyId) {
@@ -248,7 +249,23 @@ public class DbBranch {
                 "    FOREIGN KEY (\"orderId\") REFERENCES " + TenantSqlIdentifiers.orderTable(companyId, branchId)
                 + " (\"orderId\") ON DELETE CASCADE ON UPDATE CASCADE" +
                 ")";
-        return executeProvisioningSql(sql, "PosOrderDetail", branchId, companyId);
+        boolean tableCreated = executeProvisioningSql(sql, "PosOrderDetail", branchId, companyId);
+        return tableCreated && createOrderDetailIndexes(branchId, companyId);
+    }
+
+    private boolean createOrderIndexes(int branchId, int companyId) {
+        String table = TenantSqlIdentifiers.orderTable(companyId, branchId);
+        return executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_time ON " + table + " (\"orderTime\" DESC)", "PosOrder orderTime index", branchId, companyId)
+                && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_client_time ON " + table + " (\"clientId\", \"orderTime\" DESC)", "PosOrder client/time index", branchId, companyId)
+                && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_valid_client_time ON " + table + " (\"clientId\", \"orderTime\" DESC) WHERE \"clientId\" IS NOT NULL AND \"clientId\" > 0", "PosOrder valid-client/time index", branchId, companyId);
+    }
+
+    private boolean createOrderDetailIndexes(int branchId, int companyId) {
+        String table = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
+        return executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorderdetail_" + branchId + "_order ON " + table + " (\"orderId\")", "PosOrderDetail order index", branchId, companyId)
+                && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorderdetail_" + branchId + "_product ON " + table + " (\"productId\")", "PosOrderDetail product index", branchId, companyId)
+                && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorderdetail_" + branchId + "_order_product ON " + table + " (\"orderId\", \"productId\")", "PosOrderDetail order/product index", branchId, companyId)
+                && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorderdetail_" + branchId + "_bounced ON " + table + " (\"bouncedBack\")", "PosOrderDetail bounced-back index", branchId, companyId);
     }
 
     private boolean executeProvisioningSql(String sql, String tableLabel, int branchId, int companyId) {

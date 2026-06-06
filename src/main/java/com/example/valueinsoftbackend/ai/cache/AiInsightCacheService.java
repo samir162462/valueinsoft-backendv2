@@ -39,7 +39,7 @@ public class AiInsightCacheService {
                             SELECT answer
                             FROM public.ai_insight_cache
                             WHERE company_id = :companyId
-                              AND ((branch_id IS NULL AND :branchId IS NULL) OR branch_id = :branchId)
+                              AND ((branch_id IS NULL AND CAST(:branchId AS BIGINT) IS NULL) OR branch_id = CAST(:branchId AS BIGINT))
                               AND cache_key = :cacheKey
                               AND expires_at > now()
                             ORDER BY updated_at DESC

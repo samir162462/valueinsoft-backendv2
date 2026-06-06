@@ -309,6 +309,99 @@ public class AiToolRegistry {
                 })
         ));
 
+        tools.add(new AiToolDefinition(
+                "getCustomerSegments",
+                "Get deterministic Customer Purchase Behavior segment counts and spend summaries for a date range.",
+                "{\"type\":\"object\",\"properties\":{\"branchId\":{\"type\":\"integer\",\"description\":\"The branch ID\"},\"fromDate\":{\"type\":\"string\",\"description\":\"Start date in YYYY-MM-DD format\"},\"toDate\":{\"type\":\"string\",\"description\":\"End date in YYYY-MM-DD format\"}},\"required\":[\"branchId\",\"fromDate\",\"toDate\"]}",
+                wrap("getCustomerSegments", listener, input -> {
+                    JsonObject args = gson.fromJson(input, JsonObject.class);
+                    long branchId = args.get("branchId").getAsLong();
+                    AiToolDateRange range = new AiToolDateRange(
+                            LocalDate.parse(args.get("fromDate").getAsString()),
+                            LocalDate.parse(args.get("toDate").getAsString())
+                    );
+                    return gson.toJson(customerAiTools.getCustomerSegments(context, conversationId, branchId, range));
+                })
+        ));
+
+        tools.add(new AiToolDefinition(
+                "getAtRiskCustomers",
+                "Get at-risk customers identified by deterministic Customer Purchase Behavior segmentation.",
+                "{\"type\":\"object\",\"properties\":{\"branchId\":{\"type\":\"integer\",\"description\":\"The branch ID\"},\"fromDate\":{\"type\":\"string\",\"description\":\"Start date in YYYY-MM-DD format\"},\"toDate\":{\"type\":\"string\",\"description\":\"End date in YYYY-MM-DD format\"},\"limit\":{\"type\":\"integer\",\"description\":\"Optional limit of customers (default 10, max 25)\"}},\"required\":[\"branchId\",\"fromDate\",\"toDate\"]}",
+                wrap("getAtRiskCustomers", listener, input -> {
+                    JsonObject args = gson.fromJson(input, JsonObject.class);
+                    long branchId = args.get("branchId").getAsLong();
+                    AiToolDateRange range = new AiToolDateRange(
+                            LocalDate.parse(args.get("fromDate").getAsString()),
+                            LocalDate.parse(args.get("toDate").getAsString())
+                    );
+                    Integer limit = args.has("limit") ? args.get("limit").getAsInt() : 10;
+                    return gson.toJson(customerAiTools.getAtRiskCustomers(context, conversationId, branchId, range, limit));
+                })
+        ));
+
+        tools.add(new AiToolDefinition(
+                "getCustomerPreferences",
+                "Get top preferred products and categories from linked customer purchases in a date range.",
+                "{\"type\":\"object\",\"properties\":{\"branchId\":{\"type\":\"integer\",\"description\":\"The branch ID\"},\"fromDate\":{\"type\":\"string\",\"description\":\"Start date in YYYY-MM-DD format\"},\"toDate\":{\"type\":\"string\",\"description\":\"End date in YYYY-MM-DD format\"},\"limit\":{\"type\":\"integer\",\"description\":\"Optional limit of preferences (default 10, max 25)\"}},\"required\":[\"branchId\",\"fromDate\",\"toDate\"]}",
+                wrap("getCustomerPreferences", listener, input -> {
+                    JsonObject args = gson.fromJson(input, JsonObject.class);
+                    long branchId = args.get("branchId").getAsLong();
+                    AiToolDateRange range = new AiToolDateRange(
+                            LocalDate.parse(args.get("fromDate").getAsString()),
+                            LocalDate.parse(args.get("toDate").getAsString())
+                    );
+                    Integer limit = args.has("limit") ? args.get("limit").getAsInt() : 10;
+                    return gson.toJson(customerAiTools.getCustomerPreferences(context, conversationId, branchId, range, limit));
+                })
+        ));
+
+        tools.add(new AiToolDefinition(
+                "getCustomerPurchasePattern",
+                "Get a masked customer purchase behavior profile with RFM values, preferences, cadence, recent orders, and deterministic recommendation.",
+                "{\"type\":\"object\",\"properties\":{\"branchId\":{\"type\":\"integer\",\"description\":\"The branch ID\"},\"customerId\":{\"type\":\"integer\",\"description\":\"The customer ID\"},\"fromDate\":{\"type\":\"string\",\"description\":\"Start date in YYYY-MM-DD format\"},\"toDate\":{\"type\":\"string\",\"description\":\"End date in YYYY-MM-DD format\"}},\"required\":[\"branchId\",\"customerId\",\"fromDate\",\"toDate\"]}",
+                wrap("getCustomerPurchasePattern", listener, input -> {
+                    JsonObject args = gson.fromJson(input, JsonObject.class);
+                    long branchId = args.get("branchId").getAsLong();
+                    long customerId = args.get("customerId").getAsLong();
+                    AiToolDateRange range = new AiToolDateRange(
+                            LocalDate.parse(args.get("fromDate").getAsString()),
+                            LocalDate.parse(args.get("toDate").getAsString())
+                    );
+                    return gson.toJson(customerAiTools.getCustomerPurchasePattern(context, conversationId, branchId, customerId, range));
+                })
+        ));
+
+        tools.add(new AiToolDefinition(
+                "getCustomerAffinityProducts",
+                "Get product pairs frequently bought together by linked customers in a date range.",
+                "{\"type\":\"object\",\"properties\":{\"branchId\":{\"type\":\"integer\",\"description\":\"The branch ID\"},\"fromDate\":{\"type\":\"string\",\"description\":\"Start date in YYYY-MM-DD format\"},\"toDate\":{\"type\":\"string\",\"description\":\"End date in YYYY-MM-DD format\"}},\"required\":[\"branchId\",\"fromDate\",\"toDate\"]}",
+                wrap("getCustomerAffinityProducts", listener, input -> {
+                    JsonObject args = gson.fromJson(input, JsonObject.class);
+                    long branchId = args.get("branchId").getAsLong();
+                    AiToolDateRange range = new AiToolDateRange(
+                            LocalDate.parse(args.get("fromDate").getAsString()),
+                            LocalDate.parse(args.get("toDate").getAsString())
+                    );
+                    return gson.toJson(customerAiTools.getCustomerAffinityProducts(context, conversationId, branchId, range));
+                })
+        ));
+
+        tools.add(new AiToolDefinition(
+                "getCustomerRetentionCohorts",
+                "Get first-purchase retention cohorts and repeat purchase rates for linked customers.",
+                "{\"type\":\"object\",\"properties\":{\"branchId\":{\"type\":\"integer\",\"description\":\"The branch ID\"},\"fromDate\":{\"type\":\"string\",\"description\":\"Start date in YYYY-MM-DD format\"},\"toDate\":{\"type\":\"string\",\"description\":\"End date in YYYY-MM-DD format\"}},\"required\":[\"branchId\",\"fromDate\",\"toDate\"]}",
+                wrap("getCustomerRetentionCohorts", listener, input -> {
+                    JsonObject args = gson.fromJson(input, JsonObject.class);
+                    long branchId = args.get("branchId").getAsLong();
+                    AiToolDateRange range = new AiToolDateRange(
+                            LocalDate.parse(args.get("fromDate").getAsString()),
+                            LocalDate.parse(args.get("toDate").getAsString())
+                    );
+                    return gson.toJson(customerAiTools.getCustomerRetentionCohorts(context, conversationId, branchId, range));
+                })
+        ));
+
         // --- SQL AGENT TOOL ---
         tools.add(new AiToolDefinition(
                 "executeSqlQuery",
