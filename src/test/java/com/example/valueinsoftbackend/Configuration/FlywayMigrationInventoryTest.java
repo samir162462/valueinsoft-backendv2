@@ -169,4 +169,28 @@ class FlywayMigrationInventoryTest {
         assertFalse(sql.contains(" FLOAT"), "Finance migrations must not use FLOAT for monetary values");
         assertFalse(sql.contains(" REAL"), "Finance migrations must not use REAL for monetary values");
     }
+
+    @Test
+    void inventoryDynamicPricingFoundationMigrationExistsAndUsesDecimalMoneyTypes() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V101__inventory_dynamic_pricing_foundation.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing inventory dynamic pricing foundation migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("CREATE_INVENTORY_PRICING_ENGINE_TABLES_FOR_TENANT"));
+        assertTrue(sql.contains("INVENTORY_DYNAMIC_PRICING_POLICY"));
+        assertTrue(sql.contains("INVENTORY_PRODUCT_PRICE_HISTORY"));
+        assertTrue(sql.contains("INVENTORY_PRICE_RECOMMENDATION_RUN"));
+        assertTrue(sql.contains("INVENTORY_PRICE_RECOMMENDATION_ITEM"));
+        assertTrue(sql.contains("INVENTORY_PRICE_ADJUSTMENT_BATCH"));
+        assertTrue(sql.contains("INVENTORY_PRICE_ADJUSTMENT_ITEM"));
+        assertTrue(sql.contains("INVENTORY_PRICING_AUDIT_LOG"));
+        assertTrue(sql.contains("INVENTORY.PRICING.VIEW"));
+        assertTrue(sql.contains("NUMERIC(19,4)"), "Dynamic pricing monetary columns must use NUMERIC(19,4)");
+        assertFalse(sql.contains(" FLOAT"), "Dynamic pricing migrations must not use FLOAT for monetary values");
+        assertFalse(sql.contains(" REAL"), "Dynamic pricing migrations must not use REAL for monetary values");
+    }
 }

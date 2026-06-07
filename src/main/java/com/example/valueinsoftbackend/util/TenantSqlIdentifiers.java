@@ -116,6 +116,38 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".inventory_pricing_policy";
     }
 
+    public static String inventoryDynamicPricingPolicyTable(long companyId) {
+        return companySchema(companyId) + ".inventory_dynamic_pricing_policy";
+    }
+
+    public static String inventoryProductPriceHistoryTable(long companyId) {
+        return companySchema(companyId) + ".inventory_product_price_history";
+    }
+
+    public static String inventoryPricingMetricsDailyTable(long companyId) {
+        return companySchema(companyId) + ".inventory_product_pricing_metrics_daily";
+    }
+
+    public static String inventoryPriceRecommendationRunTable(long companyId) {
+        return companySchema(companyId) + ".inventory_price_recommendation_run";
+    }
+
+    public static String inventoryPriceRecommendationItemTable(long companyId) {
+        return companySchema(companyId) + ".inventory_price_recommendation_item";
+    }
+
+    public static String inventoryPriceAdjustmentBatchTable(long companyId) {
+        return companySchema(companyId) + ".inventory_price_adjustment_batch";
+    }
+
+    public static String inventoryPriceAdjustmentItemTable(long companyId) {
+        return companySchema(companyId) + ".inventory_price_adjustment_item";
+    }
+
+    public static String inventoryPricingAuditLogTable(long companyId) {
+        return companySchema(companyId) + ".inventory_pricing_audit_log";
+    }
+
     public static String inventoryAttributeDefinitionTable(int companyId) {
         return companySchema(companyId) + ".inventory_attribute_definition";
     }
