@@ -4,6 +4,8 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceAdjustmentApprovalRequest;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceAdjustmentBatchResponse;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceAdjustmentRejectRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.model.DynamicPricingPolicy;
+import com.example.valueinsoftbackend.pricing.dynamic.repository.DynamicPricingPolicyRepository;
 import com.example.valueinsoftbackend.pricing.dynamic.repository.PriceAdjustmentBatchRepository;
 import com.example.valueinsoftbackend.pricing.dynamic.security.DynamicPricingSecurityService;
 import org.springframework.http.HttpStatus;
@@ -18,13 +20,16 @@ public class PriceAdjustmentApprovalService {
     private final PriceAdjustmentBatchRepository repository;
     private final DynamicPricingSecurityService securityService;
     private final PricingAuditService auditService;
+    private final DynamicPricingPolicyRepository policyRepository;
 
     public PriceAdjustmentApprovalService(PriceAdjustmentBatchRepository repository,
                                           DynamicPricingSecurityService securityService,
-                                          PricingAuditService auditService) {
+                                          PricingAuditService auditService,
+                                          DynamicPricingPolicyRepository policyRepository) {
         this.repository = repository;
         this.securityService = securityService;
         this.auditService = auditService;
+        this.policyRepository = policyRepository;
     }
 
     @Transactional
@@ -52,7 +57,9 @@ public class PriceAdjustmentApprovalService {
         securityService.requireAdjustmentApprove(actorName, companyId, branchId);
         PriceAdjustmentBatchResponse batch = lockAndValidateBranch(companyId, branchId, batchId);
         requireStatus(batch, List.of("PENDING_APPROVAL"), "approve");
-        if (actorName != null && actorName.equalsIgnoreCase(batch.createdBy())) {
+        DynamicPricingPolicy policy = policyRepository.findEffectivePolicy(companyId, branchId, null)
+                .orElseGet(() -> policyRepository.systemDefaultPolicy(companyId, branchId));
+        if (policy.makerCheckerRequired() && actorName != null && actorName.equalsIgnoreCase(batch.createdBy())) {
             throw new ApiException(HttpStatus.CONFLICT, "PRICING_ADJUSTMENT_MAKER_CHECKER_REQUIRED",
                     "The creator cannot approve this adjustment batch");
         }

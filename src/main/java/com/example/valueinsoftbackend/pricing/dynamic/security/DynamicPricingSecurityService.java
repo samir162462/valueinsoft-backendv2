@@ -47,4 +47,9 @@ public class DynamicPricingSecurityService {
     public void requireAdjustmentApply(String actorName, int companyId, int branchId) {
         authorizationService.assertAuthenticatedCapability(actorName, companyId, branchId, "inventory.pricing.adjustment.apply");
     }
+
+    public void requireUsdCostEdit(String actorName, int companyId, int branchId) {
+        authorizationService.assertAuthenticatedCapability(actorName, companyId, branchId, "inventory.pricing.cost.read");
+        authorizationService.assertAuthenticatedCapability(actorName, companyId, branchId, "inventory.item.edit");
+    }
 }

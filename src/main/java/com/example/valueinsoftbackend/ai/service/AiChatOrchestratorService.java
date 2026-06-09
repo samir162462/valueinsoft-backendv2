@@ -281,6 +281,139 @@ public class AiChatOrchestratorService {
                 && normalized.contains("view id:");
     }
 
+    private static class PageContextDetails {
+        final String purpose;
+        final String actions;
+        final String safeSteps;
+        final List<String> suggestions;
+
+        PageContextDetails(String purpose, String actions, String safeSteps, List<String> suggestions) {
+            this.purpose = purpose;
+            this.actions = actions;
+            this.safeSteps = safeSteps;
+            this.suggestions = suggestions;
+        }
+    }
+
+    private PageContextDetails resolvePageContextDetails(String viewId, String page, boolean arabic) {
+        String normalized = viewId == null ? "" : viewId.trim().toLowerCase(java.util.Locale.ROOT);
+        if (arabic) {
+            switch (normalized) {
+                case "bulkproductimport":
+                    return new PageContextDetails(
+                            "استيراد عدد كبير من منتجات المخزون إلى الفرع المحدد من ملف جدول بيانات بدلاً من إنشاء كل منتج يدوياً.",
+                            "تجهيز أو تحميل قالب الاستيراد؛ رفع ملف المنتجات المكتمل؛ مراجعة أخطاء التحقق؛ وتنفيذ الاستيراد.",
+                            "جهز ملف الاستيراد بعناية، راجع الأعمدة المطلوبة ورسائل التحقق، ثم نفذ الاستيراد فقط بعد التأكد من صحة المعاينة والبيانات.",
+                            List.of("ما هي الحقول المطلوبة للاستيراد؟", "كيف أصلح أخطاء التحقق من الملف؟", "كيف أجهز جدول البيانات للاستيراد؟")
+                    );
+                case "pointsale":
+                case "mainposview":
+                    return new PageContextDetails(
+                            "إجراء عمليات بيع العملاء، وقراءة الباركود للمنتجات، وإدارة عربة التسوق، وإصدار الفواتير والإيصالات في الوقت الفعلي.",
+                            "إضافة المنتجات لعربة التسوق، تطبيق الخصومات، اختيار العميل، معالجة الدفع (نقدي/بطاقة/محفظة)، وطباعة الفاتورة أو إرسالها.",
+                            "تأكد من أن الوردية الحالية مفتوحة، راجع كميات وأسعار المنتجات في العربة، وتأكد من تحديد طريقة الدفع الصحيحة قبل تأكيد البيع.",
+                            List.of("كيف يمكنني تطبيق خصم؟", "كيف يتم الدفع بالبطاقة؟", "كيف أقوم بتعليق طلب؟")
+                    );
+                case "salesscreen":
+                case "sales_report":
+                    return new PageContextDetails(
+                            "متابعة وتحليل تقارير المبيعات، وتتبع العمليات المالية، وعرض اتجاهات الإيرادات، وتصفية الفواتير السابقة.",
+                            "تصفية المبيعات حسب التاريخ أو الفرع أو الكاشير؛ عرض تفاصيل الفاتورة؛ إجراء المرتجعات؛ وتصدير التقارير إلى PDF أو Excel.",
+                            "حدد نطاق التاريخ المطلوب بدقة، وتأكد من حالة الفاتورة (مكتملة/مرتجعة) قبل بدء عملية الإرجاع أو إصدار ملخص المبيعات.",
+                            List.of("عرض مبيعات هذا الأسبوع", "كيف أقوم بإرجاع فاتورة؟", "تصدير تقرير المبيعات إلى Excel")
+                    );
+                case "viewinventory":
+                case "inventory":
+                    return new PageContextDetails(
+                            "إدارة دليل المنتجات، تتبع رصيد المخزون للفرع، وإجراء تسويات جرد المخازن، وإعداد سياسات تسعير المنتجات.",
+                            "إنشاء أو تعديل المنتجات، التحقق من أرصدة المخازن، تعديل كميات المخزون، عرض سجل حركة الصنف، وإدارة التصنيفات.",
+                            "تأكد من وحدة القياس (UOM) والباركود قبل حفظ الصنف الجديد، وسجل سبب التسوية عند تعديل كمية المخزون يدوياً.",
+                            List.of("كيف أضيف منتجاً جديداً؟", "عرض الأصناف منخفضة المخزون", "كيف أقوم بتعديل كمية المخزون؟")
+                    );
+                case "suppliers":
+                    return new PageContextDetails(
+                            "إدارة ملفات الموردين، ومتابعة المستحقات والمدفوعات الآجلة، وتسجيل فواتير المشتريات وسندات الصرف للموردين.",
+                            "تسجيل مورد جديد، مراجعة رصيد المورد، تسجيل فواتير استلام البضائع، وإثبات المدفوعات المسددة للموردين.",
+                            "راجع بيانات المورد ورقم المرجع للفاتورة مع المستند الورقي قبل تسجيل المشتريات لضمان دقة كشف الحساب والمدفوعات.",
+                            List.of("عرض الموردين الأكثر استحقاقاً", "كيف أسجل فاتورة مورد؟", "تسجيل دفعة مسددة لمورد")
+                    );
+                case "viewclient":
+                case "customers":
+                    return new PageContextDetails(
+                            "إدارة حسابات العملاء، تتبع نقاط الولاء، ومراجعة سجل مشتريات العميل ومدفوعاته، ومتابعة الحسابات والمديونيات الآجلة.",
+                            "إضافة أو تعديل عميل، مراجعة المديونية، تسجيل سندات قبض للعملاء، ومتابعة فواتير وطلبات العميل السابقة.",
+                            "تأكد من صحة بيانات الاتصال بالعميل والحد الأقصى للائتمان (البيع الآجل) قبل الموافقة على البيع بالحساب.",
+                            List.of("كيف أسجل عميلاً جديداً؟", "البحث عن عميل برقم الهاتف", "التحقق من الحد الائتماني للعميل")
+                    );
+                case "dashboard":
+                default:
+                    return new PageContextDetails(
+                            "عرض ملخص عام رفيع المستوى لأداء عملك التجاري، بما في ذلك مؤشرات المبيعات، والأنشطة الأخيرة، والوصول السريع إلى الأقسام الرئيسية.",
+                            "تحليل مؤشرات الأداء الرئيسية (KPIs)، مراجعة العمليات الأخيرة، التحقق من التنبيهات، والانتقال إلى الأقسام المختلفة.",
+                            "تأكد من اختيار الفرع الصحيح لعرض البيانات والتقارير الخاصة بالفرع المطلوب بدقة قبل اتخاذ القرارات.",
+                            List.of("ما هو الفرع الأكثر مبيعاً؟", "كيف تسير مبيعات اليوم؟", "عرض الأنشطة الأخيرة")
+                    );
+            }
+        } else {
+            switch (normalized) {
+                case "bulkproductimport":
+                    return new PageContextDetails(
+                            "Import many inventory products into the selected branch from a spreadsheet instead of creating each item manually.",
+                            "Download or prepare the import template; upload the completed spreadsheet; review validation errors; apply the import.",
+                            "Prepare the file carefully, check required columns and validation messages, then import only after the preview looks correct.",
+                            List.of("What fields are required for import?", "How do I fix import validation errors?", "How should I prepare the spreadsheet?")
+                    );
+                case "pointsale":
+                case "mainposview":
+                    return new PageContextDetails(
+                            "Process customer sales transactions, handle barcode scanning, manage the shopping cart, and issue receipts in real-time.",
+                            "Add products to cart, apply discounts, select customers, process payments (cash/card/wallet), and print/email invoices.",
+                            "Verify the active shift is open, confirm item quantities and prices in the cart, and select the correct payment method before finalizing the sale.",
+                            List.of("How do I make a discount?", "How do I pay with card?", "How to hold an order?")
+                    );
+                case "salesscreen":
+                case "sales_report":
+                    return new PageContextDetails(
+                            "Monitor and analyze sales reports, track transactions, view revenue trends, and filter historical invoices.",
+                            "Filter sales by date range, branch, or cashier; view invoice details; handle refunds or returns; export reports to PDF/Excel.",
+                            "Set the correct date range filters and check the invoice status (completed/refunded) before processing returns or generating summaries.",
+                            List.of("Show sales for this week", "How do I refund an invoice?", "Export sales report to Excel")
+                    );
+                case "viewinventory":
+                case "inventory":
+                    return new PageContextDetails(
+                            "Manage your product catalog, track stock balances across branches, adjust stock levels, and set up pricing.",
+                            "Create or edit products, check stock balances, adjust inventory levels, view stock movement ledgers, and manage categories.",
+                            "Double-check the Unit of Measure (UOM) and barcode before saving new items, and document reasons for any manual stock adjustments.",
+                            List.of("How do I add a new product?", "Show low stock products", "How to adjust stock levels?")
+                    );
+                case "suppliers":
+                    return new PageContextDetails(
+                            "Manage supplier profiles, track outstanding payables, and record supplier invoices and payments.",
+                            "Register suppliers, check payable balances, log incoming inventory purchase invoices, and record payments made to suppliers.",
+                            "Confirm supplier details and invoice reference numbers match physical receipts before recording purchases to maintain accurate account balances.",
+                            List.of("Show top suppliers by payable", "How to log a supplier invoice?", "Record payment to supplier")
+                    );
+                case "viewclient":
+                case "customers":
+                    return new PageContextDetails(
+                            "Manage customer profiles, track loyalty points, and review customer transaction history and outstanding credit.",
+                            "Add or edit customers, view credit balances, record customer payments, and inspect history of customer orders.",
+                            "Verify customer contact information and credit limits before approving sales on account (credit sales).",
+                            List.of("How to add a customer?", "Search customer by phone", "Check customer credit limit")
+                    );
+                case "dashboard":
+                default:
+                    return new PageContextDetails(
+                            "View a high-level summary of your business performance, including sales metrics, recent activities, and quick access to major sections.",
+                            "Analyze key performance indicators (KPIs), view recent transactions, check alerts, and navigate to different modules.",
+                            "Ensure your branch is correctly selected to view accurate branch-level metrics before making decisions.",
+                            List.of("What is my top branch?", "How are today's sales doing?", "Show recent activities")
+                    );
+            }
+        }
+    }
+
     private OrchestratedChatResult answerPageContextQuestion(String message) {
         Map<String, String> context = parsePageContextPrompt(message);
         boolean arabic = message != null && message.toLowerCase().contains(" in arabic");
@@ -291,23 +424,24 @@ public class AiChatOrchestratorService {
         String branch = context.getOrDefault("branch", "");
         String purpose = context.getOrDefault("known purpose", "");
         String actions = context.getOrDefault("known actions", "");
+
+        PageContextDetails details = resolvePageContextDetails(viewId, page, arabic);
+
         if (purpose.isBlank()) {
-            purpose = defaultPagePurpose(viewId, page);
+            purpose = details.purpose;
         }
         if (actions.isBlank()) {
-            actions = defaultPageActions(viewId);
+            actions = details.actions;
         }
-        if (arabic && "BulkProductImport".equalsIgnoreCase(viewId)) {
-            purpose = "استيراد عدد كبير من منتجات المخزون إلى الفرع المحدد من ملف جدول بيانات بدلا من إنشاء كل منتج يدويا.";
-            actions = "تجهيز أو تحميل قالب الاستيراد؛ رفع ملف المنتجات المكتمل؛ مراجعة أخطاء التحقق؛ تنفيذ الاستيراد فقط بعد التأكد من أسماء المنتجات والتصنيفات والأسعار والكميات والباركود.";
-        }
+        String safeSteps = details.safeSteps;
+        List<String> suggestions = details.suggestions;
 
         String answer = arabic
-                ? arabicPageExplanation(page, module, branch, purpose, actions)
-                : englishPageExplanation(page, module, branch, purpose, actions);
+                ? arabicPageExplanation(page, module, branch, purpose, actions, safeSteps)
+                : englishPageExplanation(page, module, branch, purpose, actions, safeSteps);
         return new OrchestratedChatResult(
                 answer,
-                List.of("What fields are required for import?", "How do I fix import validation errors?", "How should I prepare the spreadsheet?"),
+                suggestions,
                 List.of(),
                 List.of(new AiSourceDto(page, "PAGE_CONTEXT", route.isBlank() ? viewId : route)),
                 List.of(new AiToolCallDto("currentPageContext", "SUCCESS", "Used current page context")),
@@ -333,21 +467,7 @@ public class AiChatOrchestratorService {
         return context;
     }
 
-    private String defaultPagePurpose(String viewId, String page) {
-        if ("BulkProductImport".equalsIgnoreCase(viewId) || page.toLowerCase().contains("bulk product import")) {
-            return "Import many inventory products into the selected branch from a spreadsheet instead of creating each item manually.";
-        }
-        return "Work with the selected ValueInSoft screen using the actions available on the page.";
-    }
-
-    private String defaultPageActions(String viewId) {
-        if ("BulkProductImport".equalsIgnoreCase(viewId)) {
-            return "Prepare or download the product import template; upload the completed spreadsheet; review validation errors; import only after names, categories, prices, quantities, and barcodes are correct.";
-        }
-        return "Review the visible information, use the available filters or buttons, and confirm changes before saving.";
-    }
-
-    private String englishPageExplanation(String page, String module, String branch, String purpose, String actions) {
+    private String englishPageExplanation(String page, String module, String branch, String purpose, String actions, String safeSteps) {
         return """
                 This page is `%s` in the `%s` area%s.
 
@@ -355,11 +475,11 @@ public class AiChatOrchestratorService {
 
                 Main actions: %s
 
-                Safe next steps: prepare the file carefully, check required columns and validation messages, then import only after the preview looks correct.
-                """.formatted(page, module, branch.isBlank() ? "" : " for branch `" + branch + "`", purpose, actions);
+                Safe next steps: %s
+                """.formatted(page, module, branch.isBlank() ? "" : " for branch `" + branch + "`", purpose, actions, safeSteps);
     }
 
-    private String arabicPageExplanation(String page, String module, String branch, String purpose, String actions) {
+    private String arabicPageExplanation(String page, String module, String branch, String purpose, String actions, String safeSteps) {
         return """
                 هذه صفحة `%s` ضمن قسم `%s`%s.
 
@@ -367,8 +487,8 @@ public class AiChatOrchestratorService {
 
                 أهم الإجراءات: %s
 
-                الخطوات الآمنة: جهز ملف الاستيراد بعناية، راجع الأعمدة المطلوبة ورسائل التحقق، ثم نفذ الاستيراد فقط بعد التأكد من صحة المعاينة والبيانات.
-                """.formatted(page, module, branch.isBlank() ? "" : " للفرع `" + branch + "`", purpose, actions);
+                الخطوات الآمنة: %s
+                """.formatted(page, module, branch.isBlank() ? "" : " للفرع `" + branch + "`", purpose, actions, safeSteps);
     }
 
     private boolean isSqlGuideQuestion(String message) {

@@ -388,6 +388,37 @@ public class PriceAdjustmentBatchRepository {
         return new ItemsPage(safePage, safeSize, totalItems, totalPages, items);
     }
 
+    public int deleteItem(int companyId, int branchId, long batchId, long itemId) {
+        String sql = """
+                DELETE FROM %s
+                WHERE item_id = :itemId
+                  AND batch_id = :batchId
+                  AND branch_id = :branchId
+                """.formatted(TenantSqlIdentifiers.inventoryPriceAdjustmentItemTable(companyId));
+        return jdbcTemplate.update(sql, new MapSqlParameterSource()
+                .addValue("itemId", itemId)
+                .addValue("batchId", batchId)
+                .addValue("branchId", branchId));
+    }
+
+    public void recalculateAndUpdateCounts(int companyId, long batchId) {
+        String sql = """
+                SELECT
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN status = 'VALID' THEN 1 END) as valid,
+                    COUNT(CASE WHEN status = 'WARNING' THEN 1 END) as warning,
+                    COUNT(CASE WHEN status = 'BLOCKED' THEN 1 END) as blocked
+                FROM %s
+                WHERE batch_id = :batchId
+                """.formatted(TenantSqlIdentifiers.inventoryPriceAdjustmentItemTable(companyId));
+        java.util.Map<String, Object> counts = jdbcTemplate.queryForMap(sql, new MapSqlParameterSource().addValue("batchId", batchId));
+        int total = ((Number) counts.get("total")).intValue();
+        int valid = counts.get("valid") != null ? ((Number) counts.get("valid")).intValue() : 0;
+        int warning = counts.get("warning") != null ? ((Number) counts.get("warning")).intValue() : 0;
+        int blocked = counts.get("blocked") != null ? ((Number) counts.get("blocked")).intValue() : 0;
+        updateCounts(companyId, batchId, total, valid, warning, blocked);
+    }
+
     private static final RowMapper<AdjustmentProductRow> PRODUCT_MAPPER = (rs, rowNum) -> new AdjustmentProductRow(
             rs.getLong("product_id"),
             null,

@@ -140,7 +140,6 @@ public class PricingMetricsRepository {
 
     private String buildWhereClause(MetricsQuery query, MapSqlParameterSource params) {
         List<String> conditions = new ArrayList<>();
-        conditions.add("p.company_id = :companyId");
 
         if (query.queryText() != null && !query.queryText().isBlank()) {
             conditions.add("(p.product_name ILIKE :queryText OR p.serial ILIKE :queryText OR p.barcode ILIKE :queryText)");
@@ -168,6 +167,9 @@ public class PricingMetricsRepository {
             params.addValue("supplierId", query.supplierId());
         }
 
+        if (conditions.isEmpty()) {
+            return "";
+        }
         return " WHERE " + String.join(" AND ", conditions);
     }
 

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.math.BigDecimal;
 
 @Repository
 public class PriceRecommendationRunRepository {
@@ -168,6 +169,60 @@ public class PriceRecommendationRunRepository {
         int totalPages = totalItems == 0 ? 0 : (int) Math.ceil((double) totalItems / safeSize);
         return new ItemsPage(safePage, safeSize, totalItems, totalPages, items);
     }
+
+    public PriceRecommendationItemResponse findItem(int companyId, int branchId, long itemId) {
+        String sql = "SELECT * FROM %s WHERE item_id = :itemId AND branch_id = :branchId"
+                .formatted(TenantSqlIdentifiers.inventoryPriceRecommendationItemTable(companyId));
+        return jdbcTemplate.queryForObject(sql, new MapSqlParameterSource()
+                .addValue("itemId", itemId)
+                .addValue("branchId", branchId), itemMapper(true));
+    }
+
+    public void updateSuggestedPrice(int companyId, int branchId, long itemId, BigDecimal suggestedPrice, BigDecimal deltaAmount, BigDecimal deltaPct, BigDecimal suggestedMarginPct) {
+        String sql = """
+                UPDATE %s
+                SET suggested_retail_price = :suggestedPrice,
+                    suggested_lowest_price = LEAST(old_lowest_price, :suggestedPrice),
+                    delta_amount = :deltaAmount,
+                    delta_pct = :deltaPct,
+                    suggested_margin_pct = :suggestedMarginPct,
+                    recommendation_status = 'RECOMMENDED'
+                WHERE item_id = :itemId
+                  AND branch_id = :branchId
+                """.formatted(TenantSqlIdentifiers.inventoryPriceRecommendationItemTable(companyId));
+
+        jdbcTemplate.update(sql, new MapSqlParameterSource()
+                .addValue("suggestedPrice", suggestedPrice)
+                .addValue("deltaAmount", deltaAmount)
+                .addValue("deltaPct", deltaPct)
+                .addValue("suggestedMarginPct", suggestedMarginPct)
+                .addValue("itemId", itemId)
+                .addValue("branchId", branchId));
+    }
+
+    public void bulkRoundSuggestedPrices(int companyId, int branchId, long runId, BigDecimal factor) {
+        String table = TenantSqlIdentifiers.inventoryPriceRecommendationItemTable(companyId);
+        String sql = """
+                UPDATE %s
+                SET suggested_retail_price = ROUND(suggested_retail_price / :factor) * :factor,
+                    suggested_lowest_price = LEAST(old_lowest_price, ROUND(suggested_retail_price / :factor) * :factor),
+                    delta_amount = (ROUND(suggested_retail_price / :factor) * :factor) - old_retail_price,
+                    delta_pct = CASE WHEN old_retail_price > 0 THEN ((ROUND(suggested_retail_price / :factor) * :factor) - old_retail_price) / old_retail_price ELSE 0 END,
+                    suggested_margin_pct = CASE WHEN (ROUND(suggested_retail_price / :factor) * :factor) > 0 AND buying_price IS NOT NULL THEN ((ROUND(suggested_retail_price / :factor) * :factor) - buying_price) / (ROUND(suggested_retail_price / :factor) * :factor) ELSE suggested_margin_pct END,
+                    recommendation_status = 'RECOMMENDED'
+                WHERE run_id = :runId
+                  AND branch_id = :branchId
+                  AND recommendation_status IN ('RECOMMENDED', 'WARNING')
+                  AND suggested_retail_price IS NOT NULL
+                """.formatted(table);
+
+        jdbcTemplate.update(sql, new MapSqlParameterSource()
+                .addValue("factor", factor)
+                .addValue("runId", runId)
+                .addValue("branchId", branchId));
+    }
+
+
 
     private static final RowMapper<PriceRecommendationRunResponse> RUN_MAPPER = (rs, rowNum) -> new PriceRecommendationRunResponse(
             rs.getLong("run_id"),

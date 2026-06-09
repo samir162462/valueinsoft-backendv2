@@ -89,7 +89,55 @@ public class AiRouterService implements AiModelClient {
             log.debug("Gemini function-calling client is unavailable; routing through non-streaming provider");
             return generate(request);
         }
-        return geminiClient.generateWithFunctions(request, functions);
+
+        try {
+            AiModelResponse response = geminiClient.generateWithFunctions(request, functions);
+            if (response != null && response.fallback()) {
+                log.warn("Gemini function calling returned fallback response (likely due to API key error/suspension). Attempting non-functional provider routing fallback.");
+                AiModelResponse fallbackResponse = tryFallbackRouting(request);
+                if (fallbackResponse != null) {
+                    return fallbackResponse;
+                }
+            }
+            return response;
+        } catch (Exception exception) {
+            log.warn("Gemini function calling failed with exception. Attempting non-functional provider routing fallback.", exception);
+            AiModelResponse fallbackResponse = tryFallbackRouting(request);
+            if (fallbackResponse != null) {
+                return fallbackResponse;
+            }
+            throw exception;
+        }
+    }
+
+    private AiModelResponse tryFallbackRouting(AiModelRequest request) {
+        if (aiProperties.isFallbackEnabled()) {
+            String fallbackProviderName = normalizeProvider(aiProperties.getFallbackProvider());
+            if (!"gemini".equals(fallbackProviderName)) {
+                log.info("Routing fallback to fallbackProvider={}", fallbackProviderName);
+                return generate(new AiModelRequest(
+                        request.systemPrompt(),
+                        request.userMessage(),
+                        request.mode(),
+                        request.knowledgeContext(),
+                        request.conversationContext(),
+                        fallbackProviderName
+                ));
+            }
+        }
+        String defaultProviderName = normalizeProvider(aiProperties.getProvider());
+        if (!"gemini".equals(defaultProviderName)) {
+            log.info("Routing fallback to defaultProvider={}", defaultProviderName);
+            return generate(new AiModelRequest(
+                    request.systemPrompt(),
+                    request.userMessage(),
+                    request.mode(),
+                    request.knowledgeContext(),
+                    request.conversationContext(),
+                    defaultProviderName
+            ));
+        }
+        return null;
     }
 
     @Override

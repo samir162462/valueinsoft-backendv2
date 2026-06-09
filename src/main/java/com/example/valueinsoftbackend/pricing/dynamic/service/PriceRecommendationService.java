@@ -14,6 +14,9 @@ import com.example.valueinsoftbackend.pricing.dynamic.security.DynamicPricingSec
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceRecommendationItemResponse;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.Locale;
 
@@ -152,6 +155,33 @@ public class PriceRecommendationService {
                 itemsPage.items()
         );
     }
+
+    public PriceRecommendationItemResponse updateItemPrice(String actorName, int companyId, int branchId, long itemId, BigDecimal suggestedRetailPrice) {
+        securityService.requireRecommendationRun(actorName, companyId, branchId);
+
+        PriceRecommendationItemResponse item = runRepository.findItem(companyId, branchId, itemId);
+        BigDecimal oldRetail = item.oldRetailPrice();
+        BigDecimal buying = item.buyingPrice();
+
+        BigDecimal deltaAmount = suggestedRetailPrice.subtract(oldRetail).setScale(4, RoundingMode.HALF_UP);
+        BigDecimal deltaPct = oldRetail.compareTo(BigDecimal.ZERO) <= 0
+                ? BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP)
+                : deltaAmount.divide(oldRetail, 4, RoundingMode.HALF_UP);
+
+        BigDecimal suggestedMargin = (suggestedRetailPrice.compareTo(BigDecimal.ZERO) <= 0 || buying == null)
+                ? null
+                : suggestedRetailPrice.subtract(buying).divide(suggestedRetailPrice, 4, RoundingMode.HALF_UP);
+
+        runRepository.updateSuggestedPrice(companyId, branchId, itemId, suggestedRetailPrice, deltaAmount, deltaPct, suggestedMargin);
+
+        return runRepository.findItem(companyId, branchId, itemId);
+    }
+
+    public void bulkRoundPrices(String actorName, int companyId, int branchId, long runId, BigDecimal roundingFactor) {
+        securityService.requireRecommendationRun(actorName, companyId, branchId);
+        runRepository.bulkRoundSuggestedPrices(companyId, branchId, runId, roundingFactor);
+    }
+
 
     private void validateWindow(int windowDays) {
         if (windowDays < 1 || windowDays > MAX_WINDOW_DAYS) {

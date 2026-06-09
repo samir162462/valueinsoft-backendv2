@@ -39,6 +39,8 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformMetricsStatusR
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformOverviewResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformRevenueTrendResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupportNoteItem;
+import com.example.valueinsoftbackend.fx.model.FxRefreshResult;
+import com.example.valueinsoftbackend.fx.model.GlobalFxRateSnapshot;
 import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingDefinitionConfig;
 import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleResponse;
 import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingsBatchUpdateRequest;
@@ -60,6 +62,7 @@ import com.example.valueinsoftbackend.Service.PlatformAdminOverviewService;
 import com.example.valueinsoftbackend.Service.PlatformSupportService;
 import com.example.valueinsoftbackend.Service.InventoryTemplateMetadataService;
 import com.example.valueinsoftbackend.Service.PlatformAdminBranchSettingsService;
+import com.example.valueinsoftbackend.fx.service.GlobalFxRateRefreshService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -91,6 +94,7 @@ public class PlatformAdminController {
     private final PlatformAdminBillingService platformAdminBillingService;
     private final PlatformAdminFinanceService platformAdminFinanceService;
     private final PlatformAdminMetricsService platformAdminMetricsService;
+    private final GlobalFxRateRefreshService globalFxRateRefreshService;
     private final PlatformSupportService platformSupportService;
     private final InventoryTemplateMetadataService inventoryTemplateMetadataService;
     private final PlatformAdminBranchSettingsService platformAdminBranchSettingsService;
@@ -104,6 +108,7 @@ public class PlatformAdminController {
                                    PlatformAdminBillingService platformAdminBillingService,
                                    PlatformAdminFinanceService platformAdminFinanceService,
                                    PlatformAdminMetricsService platformAdminMetricsService,
+                                   GlobalFxRateRefreshService globalFxRateRefreshService,
                                    PlatformSupportService platformSupportService,
                                    InventoryTemplateMetadataService inventoryTemplateMetadataService,
                                    PlatformAdminBranchSettingsService platformAdminBranchSettingsService) {
@@ -116,6 +121,7 @@ public class PlatformAdminController {
         this.platformAdminBillingService = platformAdminBillingService;
         this.platformAdminFinanceService = platformAdminFinanceService;
         this.platformAdminMetricsService = platformAdminMetricsService;
+        this.globalFxRateRefreshService = globalFxRateRefreshService;
         this.platformSupportService = platformSupportService;
         this.inventoryTemplateMetadataService = inventoryTemplateMetadataService;
         this.platformAdminBranchSettingsService = platformAdminBranchSettingsService;
@@ -504,6 +510,17 @@ public class PlatformAdminController {
     @GetMapping("/metrics/daily/status")
     public PlatformMetricsStatusResponse getDailyMetricsStatus(Principal principal) {
         return platformAdminMetricsService.getMetricsStatusForAuthenticatedUser(principal.getName());
+    }
+
+    @GetMapping("/fx/usd-egp/latest")
+    public GlobalFxRateSnapshot getLatestUsdEgpRate(Principal principal) {
+        return globalFxRateRefreshService.latestValidForAuthenticatedUser(principal.getName()).orElse(null);
+    }
+
+    @PostMapping("/fx/usd-egp/refresh")
+    public FxRefreshResult refreshUsdEgpRate(Principal principal,
+                                             @RequestParam(value = "processCompanies", defaultValue = "true") boolean processCompanies) {
+        return globalFxRateRefreshService.manualRefresh(principal.getName(), processCompanies);
     }
 
     @GetMapping("/companies/{tenantId}/finance/expenses")

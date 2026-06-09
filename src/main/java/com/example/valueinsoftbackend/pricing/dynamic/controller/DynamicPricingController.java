@@ -13,24 +13,40 @@ import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceAdjustmentItemsPa
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceAdjustmentPreviewRequest;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceAdjustmentPreviewResponse;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceAdjustmentRejectRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceRecommendationBulkRoundRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceRecommendationItemResponse;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceRecommendationItemUpdateRequest;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceRecommendationItemsPageResponse;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceRecommendationRunRequest;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PriceRecommendationRunResponse;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PricingMetricsRequest;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.PricingMetricsResponse;
 import com.example.valueinsoftbackend.pricing.dynamic.dto.RecommendationAdjustmentCreateRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.InflationPreviewRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.InflationPreviewResponse;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.InflationApplyRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.InflationApplyResponse;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.UsdPricingCostUpdateRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.UsdPricingProductRequest;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.UsdPricingProductResponse;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.UsdPricingProductsPageResponse;
+import com.example.valueinsoftbackend.pricing.dynamic.dto.UsdPricingRateResponse;
 import com.example.valueinsoftbackend.pricing.dynamic.service.BulkPriceAdjustmentService;
 import com.example.valueinsoftbackend.pricing.dynamic.service.DynamicPricingPolicyService;
 import com.example.valueinsoftbackend.pricing.dynamic.service.PriceAdjustmentApplyService;
 import com.example.valueinsoftbackend.pricing.dynamic.service.PriceAdjustmentApprovalService;
 import com.example.valueinsoftbackend.pricing.dynamic.service.PriceRecommendationService;
 import com.example.valueinsoftbackend.pricing.dynamic.service.PricingMetricsService;
+import com.example.valueinsoftbackend.pricing.dynamic.service.InflationPricingService;
+import com.example.valueinsoftbackend.pricing.dynamic.service.UsdPricingService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -49,19 +65,25 @@ public class DynamicPricingController {
     private final BulkPriceAdjustmentService adjustmentService;
     private final PriceAdjustmentApprovalService approvalService;
     private final PriceAdjustmentApplyService applyService;
+    private final InflationPricingService inflationPricingService;
+    private final UsdPricingService usdPricingService;
 
     public DynamicPricingController(DynamicPricingPolicyService policyService,
                                     PricingMetricsService metricsService,
                                     PriceRecommendationService recommendationService,
                                     BulkPriceAdjustmentService adjustmentService,
                                     PriceAdjustmentApprovalService approvalService,
-                                    PriceAdjustmentApplyService applyService) {
+                                    PriceAdjustmentApplyService applyService,
+                                    InflationPricingService inflationPricingService,
+                                    UsdPricingService usdPricingService) {
         this.policyService = policyService;
         this.metricsService = metricsService;
         this.recommendationService = recommendationService;
         this.adjustmentService = adjustmentService;
         this.approvalService = approvalService;
         this.applyService = applyService;
+        this.inflationPricingService = inflationPricingService;
+        this.usdPricingService = usdPricingService;
     }
 
     @GetMapping("/policy/effective")
@@ -76,6 +98,27 @@ public class DynamicPricingController {
     public DynamicPricingPolicyResponse savePolicy(Principal principal,
                                                    @Valid @RequestBody DynamicPricingPolicyRequest request) {
         return policyService.savePolicy(principal.getName(), request);
+    }
+
+    @GetMapping("/policies")
+    public java.util.List<DynamicPricingPolicyResponse> listPolicies(Principal principal,
+                                                                     @RequestParam @Positive Integer companyId,
+                                                                     @RequestParam(required = false) @Positive Integer branchId) {
+        return policyService.listPolicies(principal.getName(), companyId, branchId);
+    }
+
+    @GetMapping("/policies/{policyId}")
+    public DynamicPricingPolicyResponse getPolicy(Principal principal,
+                                                  @RequestParam @Positive Integer companyId,
+                                                  @PathVariable @Positive Long policyId) {
+        return policyService.getPolicy(principal.getName(), companyId, policyId);
+    }
+
+    @DeleteMapping("/policies/{policyId}")
+    public void deletePolicy(Principal principal,
+                             @RequestParam @Positive Integer companyId,
+                             @PathVariable @Positive Long policyId) {
+        policyService.deletePolicy(principal.getName(), companyId, policyId);
     }
 
     @PostMapping("/metrics/preview")
@@ -107,6 +150,20 @@ public class DynamicPricingController {
                                                                        @RequestParam(defaultValue = "0") Integer page,
                                                                        @RequestParam(defaultValue = "50") Integer size) {
         return recommendationService.getItems(principal.getName(), companyId, branchId, runId, status, page, size);
+    }
+
+    @PostMapping("/recommendations/items/{itemId}/price")
+    public PriceRecommendationItemResponse updateRecommendationItemPrice(Principal principal,
+                                                                         @PathVariable @Positive Long itemId,
+                                                                         @Valid @RequestBody PriceRecommendationItemUpdateRequest request) {
+        return recommendationService.updateItemPrice(principal.getName(), request.companyId(), request.branchId(), itemId, request.suggestedRetailPrice());
+    }
+
+    @PostMapping("/recommendations/runs/{runId}/round")
+    public void bulkRoundRecommendationPrices(Principal principal,
+                                             @PathVariable @Positive Long runId,
+                                             @Valid @RequestBody PriceRecommendationBulkRoundRequest request) {
+        recommendationService.bulkRoundPrices(principal.getName(), request.companyId(), request.branchId(), runId, request.roundingFactor());
     }
 
     @PostMapping("/adjustments/preview")
@@ -191,6 +248,15 @@ public class DynamicPricingController {
         return approvalService.cancel(principal.getName(), companyId, branchId, batchId);
     }
 
+    @DeleteMapping("/adjustments/{batchId}/items/{itemId}")
+    public PriceAdjustmentBatchResponse deleteAdjustmentItem(Principal principal,
+                                                             @PathVariable @Positive Long batchId,
+                                                             @PathVariable @Positive Long itemId,
+                                                             @RequestParam @Positive Integer companyId,
+                                                             @RequestParam @Positive Integer branchId) {
+        return adjustmentService.deleteItem(principal.getName(), companyId, branchId, batchId, itemId);
+    }
+
     @PostMapping("/adjustments/{batchId}/apply")
     public PriceAdjustmentApplyResponse applyAdjustment(Principal principal,
                                                         @PathVariable @Positive Long batchId,
@@ -198,5 +264,37 @@ public class DynamicPricingController {
                                                         @RequestParam @Positive Integer branchId,
                                                         @RequestBody(required = false) PriceAdjustmentApplyRequest request) {
         return applyService.apply(principal.getName(), companyId, branchId, batchId, request);
+    }
+
+    @PostMapping("/inflation/preview")
+    public InflationPreviewResponse previewInflation(Principal principal,
+                                                     @Valid @RequestBody InflationPreviewRequest request) {
+        return inflationPricingService.preview(principal.getName(), request);
+    }
+
+    @PostMapping("/inflation/apply")
+    public InflationApplyResponse applyInflation(Principal principal,
+                                                 @Valid @RequestBody InflationApplyRequest request) {
+        return inflationPricingService.apply(principal.getName(), request);
+    }
+
+    @PostMapping("/usd/products")
+    public UsdPricingProductsPageResponse listUsdPricingProducts(Principal principal,
+                                                                 @Valid @RequestBody UsdPricingProductRequest request) {
+        return usdPricingService.listProducts(principal.getName(), request);
+    }
+
+    @GetMapping("/usd/exchange-rate/current")
+    public UsdPricingRateResponse getCurrentUsdPricingRate(Principal principal,
+                                                           @RequestParam @Positive Integer companyId,
+                                                           @RequestParam @Positive Integer branchId) {
+        return usdPricingService.currentRate(principal.getName(), companyId, branchId);
+    }
+
+    @PutMapping("/usd/products/{productId}/cost")
+    public UsdPricingProductResponse updateUsdReplacementCost(Principal principal,
+                                                              @PathVariable @Positive Long productId,
+                                                              @Valid @RequestBody UsdPricingCostUpdateRequest request) {
+        return usdPricingService.updateCost(principal.getName(), productId, request);
     }
 }

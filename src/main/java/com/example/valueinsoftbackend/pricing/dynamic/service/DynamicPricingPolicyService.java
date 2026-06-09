@@ -61,6 +61,37 @@ public class DynamicPricingPolicyService {
         return DynamicPricingPolicyResponse.from(saved);
     }
 
+    public java.util.List<DynamicPricingPolicyResponse> listPolicies(String actorName, int companyId, Integer branchId) {
+        securityService.requireView(actorName, companyId, branchId != null ? branchId : 0);
+        return repository.findAll(companyId, branchId).stream()
+                .map(DynamicPricingPolicyResponse::from)
+                .toList();
+    }
+
+    public DynamicPricingPolicyResponse getPolicy(String actorName, int companyId, long policyId) {
+        DynamicPricingPolicy policy = repository.findById(companyId, policyId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PRICING_POLICY_NOT_FOUND", "Pricing policy not found"));
+        securityService.requireView(actorName, companyId, policy.branchId() != null ? policy.branchId().intValue() : 0);
+        return DynamicPricingPolicyResponse.from(policy);
+    }
+
+    public void deletePolicy(String actorName, int companyId, long policyId) {
+        DynamicPricingPolicy policy = repository.findById(companyId, policyId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PRICING_POLICY_NOT_FOUND", "Pricing policy not found"));
+        securityService.requirePolicyManage(actorName, companyId, policy.branchId() != null ? policy.branchId().intValue() : 0);
+        repository.delete(companyId, policyId);
+        auditService.log(
+                companyId,
+                policy.branchId() != null ? policy.branchId().intValue() : null,
+                "PRICING_POLICY_DELETED",
+                "POLICY",
+                String.valueOf(policyId),
+                actorName,
+                "Dynamic pricing policy deleted",
+                "{\"displayName\":\"" + policy.displayName() + "\"}"
+        );
+    }
+
     private void validatePolicy(DynamicPricingPolicyRequest request) {
         if (request.targetMarginPct().compareTo(request.minMarginPct()) < 0) {
             throw new ApiException(

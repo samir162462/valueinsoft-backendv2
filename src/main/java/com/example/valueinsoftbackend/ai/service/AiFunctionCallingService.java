@@ -201,7 +201,48 @@ public class AiFunctionCallingService {
                                 log.error("Error in AI stream generation type={} detail={}",
                                         error.getClass().getSimpleName(),
                                         safeStreamErrorDetail(error));
-                                sink.next(new AiStreamChunk("error", "AI streaming is temporarily unavailable. Try again shortly.", null));
+                                
+                                String fallbackProvider = aiProperties.getFallbackProvider();
+                                String defaultProvider = aiProperties.getProvider();
+                                String targetProvider = !"gemini".equalsIgnoreCase(fallbackProvider) && !"google".equalsIgnoreCase(fallbackProvider) && !"google-genai".equalsIgnoreCase(fallbackProvider) && !"genai".equalsIgnoreCase(fallbackProvider)
+                                        ? fallbackProvider
+                                        : (!"gemini".equalsIgnoreCase(defaultProvider) && !"google".equalsIgnoreCase(defaultProvider) && !"google-genai".equalsIgnoreCase(defaultProvider) && !"genai".equalsIgnoreCase(defaultProvider) ? defaultProvider : null);
+
+                                if (targetProvider != null) {
+                                    log.info("Attempting stream failure fallback to non-streaming provider={}", targetProvider);
+                                    try {
+                                        AiModelRequest fallbackRequest = new AiModelRequest(
+                                                modelRequest.systemPrompt(),
+                                                modelRequest.userMessage(),
+                                                modelRequest.mode(),
+                                                modelRequest.knowledgeContext(),
+                                                modelRequest.conversationContext(),
+                                                targetProvider
+                                        );
+                                        AiModelResponse modelResponse = aiModelClient.generate(fallbackRequest);
+                                        sink.next(new AiStreamChunk("provider", modelResponse.providerCode(), Map.of(
+                                                "providerCode", modelResponse.providerCode() == null ? "" : modelResponse.providerCode(),
+                                                "providerName", modelResponse.providerName() == null ? "" : modelResponse.providerName(),
+                                                "model", modelResponse.modelName() == null ? "" : modelResponse.modelName()
+                                        )));
+                                        if (modelResponse.answer() != null && !modelResponse.answer().isBlank()) {
+                                            sink.next(new AiStreamChunk("delta", modelResponse.answer(), null));
+                                        }
+                                        List<String> suggestions = generateSuggestions(executedTools);
+                                        if (!suggestions.isEmpty()) {
+                                            sink.next(new AiStreamChunk("suggestions", null, suggestions));
+                                        }
+                                        sink.next(new AiStreamChunk("done", "", Map.of(
+                                                "providerCode", modelResponse.providerCode() == null ? "" : modelResponse.providerCode(),
+                                                "providerName", modelResponse.providerName() == null ? "" : modelResponse.providerName()
+                                        )));
+                                    } catch (Exception ex) {
+                                        log.error("Stream fallback also failed", ex);
+                                        sink.next(new AiStreamChunk("error", "AI streaming is temporarily unavailable. Try again shortly.", null));
+                                    }
+                                } else {
+                                    sink.next(new AiStreamChunk("error", "AI streaming is temporarily unavailable. Try again shortly.", null));
+                                }
                                 sink.complete();
                             },
                             () -> {

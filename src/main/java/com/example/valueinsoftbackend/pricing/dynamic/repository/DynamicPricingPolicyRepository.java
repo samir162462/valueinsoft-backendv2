@@ -271,6 +271,38 @@ public class DynamicPricingPolicyRepository {
         );
     }
 
+    public List<DynamicPricingPolicy> findAll(int companyId, Integer branchId) {
+        String table = TenantSqlIdentifiers.inventoryDynamicPricingPolicyTable(companyId);
+        String sql;
+        MapSqlParameterSource params = new MapSqlParameterSource().addValue("companyId", companyId);
+        if (branchId == null) {
+            sql = "SELECT * FROM " + table + " WHERE company_id = :companyId ORDER BY scope_type, updated_at DESC";
+        } else {
+            sql = "SELECT * FROM " + table + " WHERE company_id = :companyId AND (branch_id = :branchId OR branch_id IS NULL) ORDER BY scope_type, updated_at DESC";
+            params.addValue("branchId", branchId);
+        }
+        return jdbcTemplate.query(sql, params, POLICY_MAPPER);
+    }
+
+    public Optional<DynamicPricingPolicy> findById(int companyId, long policyId) {
+        String table = TenantSqlIdentifiers.inventoryDynamicPricingPolicyTable(companyId);
+        String sql = "SELECT * FROM " + table + " WHERE company_id = :companyId AND policy_id = :policyId";
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("companyId", companyId)
+                .addValue("policyId", policyId);
+        List<DynamicPricingPolicy> list = jdbcTemplate.query(sql, params, POLICY_MAPPER);
+        return list.stream().findFirst();
+    }
+
+    public void delete(int companyId, long policyId) {
+        String table = TenantSqlIdentifiers.inventoryDynamicPricingPolicyTable(companyId);
+        String sql = "DELETE FROM " + table + " WHERE company_id = :companyId AND policy_id = :policyId";
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("companyId", companyId)
+                .addValue("policyId", policyId);
+        jdbcTemplate.update(sql, params);
+    }
+
     public DynamicPricingPolicy systemDefaultPolicy(int companyId, int branchId) {
         return defaultValue(companyId, branchId);
     }

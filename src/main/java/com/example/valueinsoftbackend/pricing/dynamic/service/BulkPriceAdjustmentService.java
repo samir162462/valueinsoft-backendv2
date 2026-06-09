@@ -148,6 +148,36 @@ public class BulkPriceAdjustmentService {
         );
     }
 
+    @org.springframework.transaction.annotation.Transactional
+    public PriceAdjustmentBatchResponse deleteItem(String actorName, int companyId, int branchId, long batchId, long itemId) {
+        securityService.requireAdjustmentCreate(actorName, companyId, branchId);
+        
+        PriceAdjustmentBatchResponse batch = repository.lockBatch(companyId, batchId);
+        if (batch.branchId() != branchId) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "PRICING_ADJUSTMENT_BATCH_NOT_FOUND",
+                    "Adjustment batch was not found for this branch");
+        }
+        
+        if (!List.of("DRAFT", "PREVIEWED").contains(batch.status())) {
+            throw new ApiException(HttpStatus.CONFLICT, "PRICING_ADJUSTMENT_STATUS_INVALID",
+                    "Cannot delete items from adjustment batch while status is " + batch.status());
+        }
+        
+        int deleted = repository.deleteItem(companyId, branchId, batchId, itemId);
+        if (deleted == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "PRICING_ADJUSTMENT_ITEM_NOT_FOUND",
+                    "Adjustment item was not found in this batch");
+        }
+        
+        repository.recalculateAndUpdateCounts(companyId, batchId);
+        
+        auditService.log(companyId, branchId, "ADJUSTMENT_BATCH_ITEM_DELETED", "BATCH", String.valueOf(batchId),
+                actorName, "Deleted item " + itemId + " from price adjustment batch",
+                "{\"batchId\":" + batchId + ",\"itemId\":" + itemId + "}");
+                
+        return repository.findBatch(companyId, batchId);
+    }
+
     PriceAdjustmentBatchRepository.AdjustmentItemDraft buildDraft(PriceAdjustmentBatchRepository.AdjustmentProductRow product,
                                                                   DynamicPricingPolicy policy,
                                                                   PriceAdjustmentMode mode,

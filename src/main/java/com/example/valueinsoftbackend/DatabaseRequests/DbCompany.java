@@ -622,12 +622,18 @@ public class DbCompany {
                 " img_file TEXT," +
                 " business_line_key VARCHAR(40) NOT NULL DEFAULT 'MOBILE'," +
                 " template_key VARCHAR(80) NOT NULL DEFAULT 'mobile_device'," +
+                " fx_pricing_enabled BOOLEAN NOT NULL DEFAULT FALSE," +
+                " replacement_cost_usd NUMERIC(19,4)," +
+                " replacement_cost_currency VARCHAR(3) NOT NULL DEFAULT 'USD'," +
+                " replacement_cost_updated_at TIMESTAMPTZ," +
                 " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
                 " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
                 " CONSTRAINT inventory_product_price_order_ck CHECK (retail_price >= lowest_price AND lowest_price >= buying_price)," +
                 " CONSTRAINT inventory_product_state_ck CHECK (product_state IN ('New', 'Used'))," +
                 " CONSTRAINT inventory_product_activation_ck CHECK (activation_period >= 0)," +
-                " CONSTRAINT inventory_product_battery_ck CHECK (battery_life >= 0)" +
+                " CONSTRAINT inventory_product_battery_ck CHECK (battery_life >= 0)," +
+                " CONSTRAINT inventory_product_replacement_cost_ck CHECK (replacement_cost_usd IS NULL OR replacement_cost_usd > 0)," +
+                " CONSTRAINT inventory_product_replacement_currency_ck CHECK (replacement_cost_currency = UPPER(replacement_cost_currency) AND LENGTH(replacement_cost_currency) = 3)" +
                 ")");
         statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_major ON " + schemaName + ".inventory_product (major, product_id DESC)");
         statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_name ON " + schemaName + ".inventory_product (product_name)");
@@ -825,6 +831,7 @@ public class DbCompany {
         statements.add("ALTER TABLE " + schemaName + ".inventory_product DROP CONSTRAINT IF EXISTS inventory_product_pricing_policy_fk");
         statements.add("ALTER TABLE " + schemaName + ".inventory_product ADD CONSTRAINT inventory_product_uom_fk FOREIGN KEY (base_uom_code) REFERENCES " + schemaName + ".inventory_uom_unit (uom_code)");
         statements.add("ALTER TABLE " + schemaName + ".inventory_product ADD CONSTRAINT inventory_product_pricing_policy_fk FOREIGN KEY (pricing_policy_code) REFERENCES " + schemaName + ".inventory_pricing_policy (pricing_policy_code)");
+        statements.add("SELECT public.create_inventory_fx_pricing_tables_for_tenant('" + schemaName + "')");
 
         return statements;
     }

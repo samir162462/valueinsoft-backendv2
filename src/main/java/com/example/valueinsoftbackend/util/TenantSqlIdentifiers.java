@@ -148,6 +148,10 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".inventory_pricing_audit_log";
     }
 
+    public static String inventoryFxProductImpactTable(long companyId) {
+        return companySchema(companyId) + ".inventory_fx_product_impact";
+    }
+
     public static String inventoryAttributeDefinitionTable(int companyId) {
         return companySchema(companyId) + ".inventory_attribute_definition";
     }
