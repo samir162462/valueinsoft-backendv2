@@ -200,6 +200,26 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"ClientReceipts\"";
     }
 
+    public static String loyaltyProgramConfigTable(int companyId) {
+        return companySchema(companyId) + ".loyalty_program_config";
+    }
+
+    public static String loyaltyAccountTable(int companyId) {
+        return companySchema(companyId) + ".loyalty_account";
+    }
+
+    public static String loyaltyLedgerTable(int companyId) {
+        return companySchema(companyId) + ".loyalty_ledger";
+    }
+
+    public static String loyaltyRewardTable(int companyId) {
+        return companySchema(companyId) + ".loyalty_reward";
+    }
+
+    public static String loyaltyRedemptionTable(int companyId) {
+        return companySchema(companyId) + ".loyalty_redemption";
+    }
+
     public static String userTable(int companyId) {
         return companySchema(companyId) + ".\"users\"";
     }

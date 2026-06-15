@@ -7,11 +7,11 @@ import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportHistory
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportMode;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportRowsPageResponse;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportValidateResponse;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
-import com.example.valueinsoftbackend.Service.ProductImportConfirmService;
-import com.example.valueinsoftbackend.Service.ProductImportErrorReportService;
-import com.example.valueinsoftbackend.Service.ProductImportTemplateService;
-import com.example.valueinsoftbackend.Service.ProductImportValidationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.product.ProductImportConfirmService;
+import com.example.valueinsoftbackend.Service.product.ProductImportErrorReportService;
+import com.example.valueinsoftbackend.Service.product.ProductImportTemplateService;
+import com.example.valueinsoftbackend.Service.product.ProductImportValidationService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;

@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbMoney.DBMSupplierReceip
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Request.SupplierReceiptCreateRequest;
 import com.example.valueinsoftbackend.Model.Sales.SupplierReceipt;
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;

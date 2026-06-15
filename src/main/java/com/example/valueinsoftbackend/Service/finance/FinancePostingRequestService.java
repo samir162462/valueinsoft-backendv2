@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceJournal;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinancePostingRequest;
@@ -7,6 +7,7 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestProcessResponse;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinancePostingRequestCreateRequest;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -19,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

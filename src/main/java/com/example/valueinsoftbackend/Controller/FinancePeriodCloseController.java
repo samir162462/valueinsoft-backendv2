@@ -4,7 +4,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceClosingEntryResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinancePeriodCloseValidationResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinancePeriodCloseRunResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTrialBalanceSnapshotResponse;
-import com.example.valueinsoftbackend.Service.FinancePeriodCloseService;
+import com.example.valueinsoftbackend.Service.finance.FinancePeriodCloseService;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;

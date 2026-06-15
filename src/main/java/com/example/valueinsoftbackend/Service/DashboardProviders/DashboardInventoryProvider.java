@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Service.DashboardProviders;
 
+import com.example.valueinsoftbackend.DatabaseRequests.DbBranchSettings;
 import com.example.valueinsoftbackend.Model.Response.DashboardSummaryResponse;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -7,27 +8,32 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class DashboardInventoryProvider {
 
     private final JdbcTemplate jdbcTemplate;
+    private final DbBranchSettings dbBranchSettings;
 
-    public DashboardInventoryProvider(JdbcTemplate jdbcTemplate) {
+    public DashboardInventoryProvider(JdbcTemplate jdbcTemplate, DbBranchSettings dbBranchSettings) {
         this.jdbcTemplate = jdbcTemplate;
+        this.dbBranchSettings = dbBranchSettings;
     }
 
     public List<DashboardSummaryResponse.DashboardAlert> getInventoryAlerts(Integer companyId, Integer branchId) {
         List<DashboardSummaryResponse.DashboardAlert> alerts = new ArrayList<>();
 
         // 1. Shortages (Low Stock)
-        int shortagesCount = countShortages(companyId, branchId);
+        InventoryLowStockSettings lowStockSettings = resolveLowStockSettings(companyId, branchId);
+        int shortagesCount = countShortages(companyId, branchId, lowStockSettings);
         if (shortagesCount > 0) {
             DashboardSummaryResponse.DashboardAlert alert = new DashboardSummaryResponse.DashboardAlert();
             alert.setId("inv_shortage");
             alert.setTitle("نواقص المخزون");
-            alert.setType("warning");
-            alert.setSeverity("WARNING");
+            boolean critical = shortagesCount >= lowStockSettings.criticalCount();
+            alert.setType(critical ? "critical" : "warning");
+            alert.setSeverity(critical ? "DANGER" : "WARNING");
             alert.setCount(shortagesCount);
             alert.setMessage("يوجد " + shortagesCount + " أصناف شارفت على الانتهاء");
             alert.setActionLabel("عرض النواقص");
@@ -98,19 +104,42 @@ public class DashboardInventoryProvider {
         }
     }
 
-    private int countShortages(Integer companyId, Integer branchId) {
+    private int countShortages(Integer companyId, Integer branchId, InventoryLowStockSettings settings) {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
+
+        String serializedAvailableSql = "SELECT product_id, COUNT(*) FILTER (WHERE status = 'AVAILABLE') AS quantity " +
+                "FROM " + unitTable + " WHERE branch_id = ? GROUP BY product_id";
+
+        List<Object> params = new ArrayList<>();
+        params.add(branchId);
+        params.add(branchId);
+        params.add(settings.excludeSerialized());
+        params.add(settings.threshold());
         
         String sql = "SELECT COUNT(*)::integer FROM (" +
-                "  SELECT p.product_name, SUM(COALESCE(st.quantity, 0)) as total_qty " +
+                "  SELECT p.product_name, SUM(" +
+                "    CASE WHEN COALESCE(p.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL') " +
+                "    THEN COALESCE(serialized_stock.quantity, 0) ELSE COALESCE(st.quantity, 0) END" +
+                "  ) as total_qty " +
                 "  FROM " + productTable + " p " +
-                "  JOIN " + stockTable + " st ON st.product_id = p.product_id AND st.branch_id = ? " +
+                "  LEFT JOIN " + stockTable + " st ON st.product_id = p.product_id AND st.branch_id = ? " +
+                "  LEFT JOIN (" + serializedAvailableSql + ") serialized_stock ON serialized_stock.product_id = p.product_id " +
+                "  WHERE (? = FALSE OR COALESCE(p.tracking_type, 'QUANTITY') NOT IN ('IMEI', 'SERIAL')) " +
                 "  GROUP BY p.product_name " +
-                "  HAVING SUM(COALESCE(st.quantity, 0)) > 0 AND SUM(COALESCE(st.quantity, 0)) <= 5" +
+                "  HAVING SUM(CASE WHEN COALESCE(p.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL') " +
+                "    THEN COALESCE(serialized_stock.quantity, 0) ELSE COALESCE(st.quantity, 0) END) <= ? ";
+
+        if (!settings.includeOutOfStock()) {
+            sql += " AND SUM(CASE WHEN COALESCE(p.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL') " +
+                    "THEN COALESCE(serialized_stock.quantity, 0) ELSE COALESCE(st.quantity, 0) END) > 0 ";
+        }
+
+        sql +=
                 ") sub";
         
-        return jdbcTemplate.queryForObject(sql, Integer.class, branchId);
+        return jdbcTemplate.queryForObject(sql, Integer.class, params.toArray());
     }
 
     private int countOutOfStock(Integer companyId, Integer branchId) {
@@ -126,6 +155,51 @@ public class DashboardInventoryProvider {
                 ") sub";
         
         return jdbcTemplate.queryForObject(sql, Integer.class, branchId);
+    }
+
+    private InventoryLowStockSettings resolveLowStockSettings(Integer companyId, Integer branchId) {
+        Map<String, Object> settings = dbBranchSettings.getEffectiveValueMap(companyId, branchId);
+        return new InventoryLowStockSettings(
+                readInt(settings, "inventory.lowStockThreshold", 5),
+                readBoolean(settings, "inventory.excludeSerializedFromLowStock", true),
+                readBoolean(settings, "inventory.includeOutOfStockInLowStock", true),
+                readInt(settings, "inventory.lowStockCriticalCount", 10)
+        );
+    }
+
+    private int readInt(Map<String, Object> settings, String key, int fallback) {
+        Object value = settings.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Integer.parseInt(text.trim());
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    private boolean readBoolean(Map<String, Object> settings, String key, boolean fallback) {
+        Object value = settings.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof String text) {
+            if ("true".equalsIgnoreCase(text.trim())) return true;
+            if ("false".equalsIgnoreCase(text.trim())) return false;
+        }
+        return fallback;
+    }
+
+    private record InventoryLowStockSettings(
+            int threshold,
+            boolean excludeSerialized,
+            boolean includeOutOfStock,
+            int criticalCount
+    ) {
     }
 
     public DashboardSummaryResponse.DashboardInventoryHealth getInventoryHealth(Integer companyId, Integer branchId) {

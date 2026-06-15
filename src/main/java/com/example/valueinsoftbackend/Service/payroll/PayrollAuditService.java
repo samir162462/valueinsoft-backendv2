@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.payroll;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPayroll;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollAuditLog;

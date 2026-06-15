@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceClose;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceJournal;
@@ -12,8 +12,6 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceJournalEntryItem;
 import com.example.valueinsoftbackend.Model.Finance.FinancePeriodCloseValidationResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinancePeriodCloseRunResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTrialBalanceSnapshotResponse;
-import com.example.valueinsoftbackend.Service.finance.FinanceAuditService;
-import com.example.valueinsoftbackend.Service.finance.FinancePeriodCloseService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

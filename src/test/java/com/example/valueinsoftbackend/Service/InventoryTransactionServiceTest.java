@@ -3,6 +3,8 @@ package com.example.valueinsoftbackend.Service;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosInventoryTransaction;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Request.CreateInventoryTransactionRequest;
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
+import com.example.valueinsoftbackend.Service.inventory.InventoryTransactionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

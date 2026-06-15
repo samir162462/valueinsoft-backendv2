@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.company;
 
 import lombok.extern.slf4j.Slf4j;
 

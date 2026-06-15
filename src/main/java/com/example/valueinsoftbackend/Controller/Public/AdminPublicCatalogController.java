@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.Controller.Public;
 
 import com.example.valueinsoftbackend.Model.Public.PublicTenantDTO;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.Public.PublicCatalogService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

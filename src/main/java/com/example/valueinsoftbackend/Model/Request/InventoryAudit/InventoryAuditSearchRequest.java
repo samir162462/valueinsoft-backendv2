@@ -32,6 +32,8 @@ public class InventoryAuditSearchRequest {
     private Integer supplierId;
     private Integer lowStockThreshold;
     private Boolean lowStockOnly = false;
+    private Boolean excludeSerializedFromLowStock = false;
+    private Boolean includeOutOfStockInLowStock = true;
     private String groupBy = "NONE";
     private Integer page = 1;
     private Integer size = 25;

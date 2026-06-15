@@ -78,6 +78,15 @@ public class DbBranchSettings {
         return values;
     }
 
+    public Map<String, Object> getEffectiveValueMap(int tenantId, int branchId) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        getDefinitions(true).forEach((definition) ->
+                values.put(definition.getSettingKey(), definition.getDefaultValue())
+        );
+        values.putAll(getActiveOverrideValueMap(tenantId, branchId));
+        return values;
+    }
+
     public void upsertBranchSettingValue(int tenantId,
                                          int branchId,
                                          String settingKey,

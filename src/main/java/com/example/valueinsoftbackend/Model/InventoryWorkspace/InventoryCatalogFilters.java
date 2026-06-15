@@ -24,6 +24,9 @@ public class InventoryCatalogFilters {
     private Integer sellPriceMax;
     private Boolean hasBarcode;
     private Boolean hasSupplier;
+    private Integer lowStockThreshold;
+    private Boolean excludeSerializedFromLowStock;
+    private Boolean includeOutOfStockInLowStock;
     private String createdFrom;
     private String createdTo;
     private String lastMovementFrom;

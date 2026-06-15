@@ -16,6 +16,7 @@ public class Order {
     int orderIncome;
     int totalBouncedBack;
     Integer requestedShiftId;
+    Long loyaltyRedemptionId;
     ArrayList<OrderDetails> orderDetails;
 
 
@@ -34,6 +35,7 @@ public class Order {
         this.orderIncome = orderIncome;
         this.totalBouncedBack = totalBouncedBack;
         this.requestedShiftId = null;
+        this.loyaltyRedemptionId = null;
         this.orderDetails = orderDetails;
     }
 
@@ -131,6 +133,14 @@ public class Order {
 
     public void setRequestedShiftId(Integer requestedShiftId) {
         this.requestedShiftId = requestedShiftId;
+    }
+
+    public Long getLoyaltyRedemptionId() {
+        return loyaltyRedemptionId;
+    }
+
+    public void setLoyaltyRedemptionId(Long loyaltyRedemptionId) {
+        this.loyaltyRedemptionId = loyaltyRedemptionId;
     }
 
     public ArrayList<OrderDetails> getOrderDetails() {

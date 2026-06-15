@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.billing;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBillingWriteModels;
 import com.example.valueinsoftbackend.Model.Company;

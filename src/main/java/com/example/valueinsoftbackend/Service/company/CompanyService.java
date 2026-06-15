@@ -1,5 +1,7 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.company;
 
+import com.example.valueinsoftbackend.Service.BusinessPackageCatalogService;
+import com.example.valueinsoftbackend.Service.branch.BranchService;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
@@ -77,7 +79,7 @@ public class CompanyService {
             CacheConfig.MAIN_MAJORS
     }, allEntries = true)
     public Company createCompany(CreateCompanyRequest request) {
-        User owner = dbUsers.getUser(normalize(request.getOwnerName()));
+        User owner = resolveOrCreateOwner(request);
         if (owner == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "OWNER_NOT_FOUND", "Owner user not found");
         }
@@ -117,7 +119,8 @@ public class CompanyService {
 
         String branchName = normalize(request.getBranchName());
         if (branchName.length() > 2) {
-            branchService.createBranch(companyId, branchName, "Egypt");
+            int branchId = branchService.createBranch(companyId, branchName, "Egypt");
+            dbUsers.updateUserBranch(owner.getUserName(), branchId);
         }
 
         Company company = dbCompany.getCompanyById(companyId);
@@ -149,6 +152,39 @@ public class CompanyService {
 
     private String normalizeNullable(String value) {
         return value == null ? null : value.trim();
+    }
+
+    private User resolveOrCreateOwner(CreateCompanyRequest request) {
+        CreateCompanyRequest.OwnerUserRequest ownerUser = request.getOwnerUser();
+        if (ownerUser != null) {
+            String userName = normalize(ownerUser.getUserName());
+            String email = normalize(ownerUser.getEmail());
+            if (dbUsers.checkExistUsername(userName)) {
+                throw new ApiException(HttpStatus.CONFLICT, "OWNER_USERNAME_EXISTS", "The owner username already exists");
+            }
+            if (dbUsers.checkExistingEmail(email)) {
+                throw new ApiException(HttpStatus.CONFLICT, "OWNER_EMAIL_EXISTS", "The owner email already exists");
+            }
+            dbUsers.addUser(
+                    userName,
+                    ownerUser.getPassword(),
+                    email,
+                    "Owner",
+                    normalize(ownerUser.getFirstName()),
+                    normalize(ownerUser.getLastName()),
+                    ownerUser.getGender(),
+                    normalize(ownerUser.getPhone()),
+                    0,
+                    null
+            );
+            return dbUsers.getUser(userName);
+        }
+
+        String ownerLookup = normalize(request.getOwnerEmail());
+        if (ownerLookup.isEmpty()) {
+            ownerLookup = normalize(request.getOwnerName());
+        }
+        return dbUsers.getUserByUserNameOrEmail(ownerLookup);
     }
 
     private String resolveBusinessPackageId(CreateCompanyRequest request) {

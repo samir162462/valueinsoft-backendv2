@@ -1,5 +1,7 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.inventory;
 
+import com.example.valueinsoftbackend.Service.SerializedInventoryService;
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosInventoryTransaction;

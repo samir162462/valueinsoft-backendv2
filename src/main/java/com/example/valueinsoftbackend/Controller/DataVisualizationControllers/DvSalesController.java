@@ -10,7 +10,7 @@ import com.example.valueinsoftbackend.Model.DataVisualizationModels.DVSalesYearl
 import com.example.valueinsoftbackend.Model.Request.SalesOfMonthRequest;
 import com.example.valueinsoftbackend.Model.Request.SalesOfYearRequest;
 import com.example.valueinsoftbackend.Model.Request.SalesProductsByPeriodRequest;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.SalesAnalyticsService;
 import com.example.valueinsoftbackend.Model.Sales.SalesProduct;
 import org.springframework.http.ContentDisposition;

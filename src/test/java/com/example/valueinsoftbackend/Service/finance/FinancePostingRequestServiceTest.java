@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceJournal;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinancePostingRequest;
@@ -7,9 +7,6 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestProcessResponse;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinancePostingRequestCreateRequest;
-import com.example.valueinsoftbackend.Service.finance.FinanceAuditService;
-import com.example.valueinsoftbackend.Service.finance.FinancePostingAdapter;
-import com.example.valueinsoftbackend.Service.finance.FinancePostingRequestService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;

@@ -2,13 +2,12 @@ package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformPlanItem;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.PlatformPlanUpdateRequest;
-import com.example.valueinsoftbackend.Service.PlatformAdminPlanService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminPlanService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;

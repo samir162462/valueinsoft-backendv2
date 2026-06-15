@@ -3,7 +3,7 @@ package com.example.valueinsoftbackend.Controller.posController;
 import com.example.valueinsoftbackend.Model.MainMajor;
 import com.example.valueinsoftbackend.Model.Configuration.BusinessPackageConfig;
 import com.example.valueinsoftbackend.Model.Request.SaveCategoryRequest;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.BusinessPackageCatalogService;
 import com.example.valueinsoftbackend.Service.CategoryService;
 import com.example.valueinsoftbackend.util.CustomPair;

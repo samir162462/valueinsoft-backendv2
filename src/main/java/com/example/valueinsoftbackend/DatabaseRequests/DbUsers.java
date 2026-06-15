@@ -76,6 +76,12 @@ public class DbUsers {
         return users.isEmpty() ? null : users.get(0);
     }
 
+    public User getUserByUserNameOrEmail(String userNameOrEmail) {
+        String sql = "SELECT " + USER_SELECT_COLUMNS + " FROM public.users WHERE \"userName\" = ? OR \"userEmail\" = ? ORDER BY id ASC LIMIT 1";
+        List<User> users = jdbcTemplate.query(sql, userRowMapper, userNameOrEmail, userNameOrEmail);
+        return users.isEmpty() ? null : users.get(0);
+    }
+
     public User getUserDetails(String userName) {
         String sql = "SELECT id, \"userName\", \"userEmail\", \"userRole\", \"userPhone\", \"branchId\", " +
                 "\"firstName\", \"lastName\", gender, \"creationTime\", password_reset_required FROM public.users WHERE \"userName\" = ?";
@@ -143,6 +149,15 @@ public class DbUsers {
         String sql = "UPDATE " + validatedSchemaName + ".users SET \"userRole\" = ? WHERE id = ?";
         int rows = jdbcTemplate.update(sql, newRole, userId);
         return rows > 0 ? "The user Role Updated!" : "The user not Updated because of error!";
+    }
+
+    public void updateUserBranch(String userName, int branchId) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        String sql = "UPDATE public.users SET \"branchId\" = ? WHERE \"userName\" = ?";
+        int rows = jdbcTemplate.update(sql, branchId, userName);
+        if (rows != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found!");
+        }
     }
 
     public String updateUserPassword(String userName, String oldPassword, String userPassword) {

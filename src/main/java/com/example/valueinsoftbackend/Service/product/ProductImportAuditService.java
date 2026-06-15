@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.product;
 
 import com.example.valueinsoftbackend.DatabaseRequests.InventoryImport.ProductImportRepository;
 import lombok.extern.slf4j.Slf4j;

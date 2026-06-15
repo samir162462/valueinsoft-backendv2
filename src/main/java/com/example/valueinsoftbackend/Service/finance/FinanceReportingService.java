@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceReporting;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
@@ -11,6 +11,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceProfitAndLossResponse
 import com.example.valueinsoftbackend.Model.Finance.FinanceStatementLineItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTrialBalanceLineItem;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTrialBalanceResponse;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 

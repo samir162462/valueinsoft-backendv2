@@ -6,7 +6,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceJournalLineItem;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceJournalReversalRequest;
-import com.example.valueinsoftbackend.Service.FinanceJournalService;
+import com.example.valueinsoftbackend.Service.finance.FinanceJournalService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;

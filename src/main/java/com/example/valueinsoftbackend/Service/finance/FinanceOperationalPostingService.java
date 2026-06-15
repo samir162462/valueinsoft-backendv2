@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;

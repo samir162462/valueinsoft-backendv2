@@ -216,6 +216,9 @@ public class CustomerBehaviorAiService {
                                                     String modelName,
                                                     String locale) {
         boolean isAr = locale != null && locale.trim().toLowerCase().startsWith("ar");
+        if (isAr) {
+            return fallbackArabicInsight(overview, preferences, fallbackUsed, modelName);
+        }
         List<String> keyPatterns = new ArrayList<>();
         if (isAr) {
             keyPatterns.add("العملاء المشترون: " + overview.purchasingCustomers());
@@ -259,6 +262,41 @@ public class CustomerBehaviorAiService {
         );
     }
 
+    private CustomerBehaviorInsight fallbackArabicInsight(CustomerBehaviorOverview overview,
+                                                          CustomerPreferenceSummary preferences,
+                                                          boolean fallbackUsed,
+                                                          String modelName) {
+        List<String> keyPatterns = new ArrayList<>();
+        keyPatterns.add("العملاء اللي اشتروا: " + overview.purchasingCustomers());
+        keyPatterns.add("معدل تكرار الشراء: " + overview.repeatPurchaseRate());
+        keyPatterns.add("عملاء محتاجين متابعة: " + overview.atRiskCustomerCount());
+        if (preferences != null && preferences.topCategories() != null && !preferences.topCategories().isEmpty()) {
+            keyPatterns.add("أكتر فئة العملاء بيفضلوها: " + preferences.topCategories().get(0).name());
+        }
+
+        List<String> actions = new ArrayList<>();
+        if (overview.atRiskCustomerCount() > 0) {
+            actions.add("ابدأ بحملة رجوع مخصصة للعملاء اللي بقالهم فترة ما اشتروش.");
+        }
+        actions.add("ركّز العروض على الفئات اللي العملاء بيشتروها أكتر بدل عروض عامة.");
+        actions.add("راجع الخصومات والمرتجعات قبل ما تطلع عروض كبيرة عشان تحافظ على الهامش.");
+
+        return new CustomerBehaviorInsight(
+                "تم توليد تحليل سلوك العملاء من بيانات الشراء الفعلية في الفترة المحددة، مع توضيح العملاء النشطين والمتكررين والعملاء اللي محتاجين متابعة.",
+                keyPatterns,
+                List.of("AT_RISK", "VIP", "LOYAL"),
+                actions,
+                0.72,
+                overview.dataQualityWarnings(),
+                List.of("النظام الحالي مش بيسجل مشاهدات المنتجات أو السلة أو البحث أو جلسات الويب أو مصدر الحملات."),
+                "backend-summary",
+                false,
+                OffsetDateTime.now(ZoneOffset.UTC).toString(),
+                modelName,
+                fallbackUsed
+        );
+    }
+
     private String systemPrompt() {
         return """
                 You summarize Customer Purchase Behavior Analytics for a multi-tenant SaaS.
@@ -267,7 +305,7 @@ public class CustomerBehaviorAiService {
                 Do not ask for or expose raw phone numbers, addresses, card details, or customer notes.
                 Return strict JSON only with keys:
                 summary, keyPatterns, prioritySegments, recommendedActions, confidence, warnings, dataGaps.
-                Respond in the language specified by the requested Locale (e.g., if Locale is 'ar' or starts with 'ar', return the values of the JSON fields in Arabic; otherwise, return them in English).
+                Respond in the language specified by the requested Locale. If Locale is 'ar' or starts with 'ar', return all user-facing JSON text in clear Egyptian Arabic dialect, not English and not Modern Standard Arabic. Otherwise, return English.
                 The prioritySegments list contains segment keys which must always remain in English (e.g. "VIP", "LOYAL", "AT_RISK"). All other text field values must be translated.
                 """;
     }
@@ -275,6 +313,7 @@ public class CustomerBehaviorAiService {
     private String userPrompt(String locale, Map<String, Object> evidence) {
         return """
                 Locale: %s
+                If Locale starts with ar: write the summary, keyPatterns, recommendedActions, warnings, and dataGaps in Egyptian Arabic. Keep only prioritySegments keys in English.
                 Product scope: Customer Purchase Behavior Analytics only. This system does not collect product views, search events, cart events, abandoned carts, wishlists, campaign attribution, or web sessions.
                 Trusted analytics DTO JSON:
                 %s

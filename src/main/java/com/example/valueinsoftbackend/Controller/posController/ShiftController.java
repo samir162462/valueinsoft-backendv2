@@ -8,7 +8,7 @@ import com.example.valueinsoftbackend.Model.Request.OpenShiftRequest;
 import com.example.valueinsoftbackend.Model.Request.ShiftOrdersRequest;
 import com.example.valueinsoftbackend.Model.Shift.Shift;
 import com.example.valueinsoftbackend.Model.Shift.ShiftPeriod;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.ShiftService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;

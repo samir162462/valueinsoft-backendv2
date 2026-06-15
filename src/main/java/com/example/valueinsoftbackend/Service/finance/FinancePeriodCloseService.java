@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceClose;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceJournal;
@@ -13,6 +13,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinancePeriodCloseValidation
 import com.example.valueinsoftbackend.Model.Finance.FinancePeriodCloseValidationResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinancePeriodCloseRunResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTrialBalanceSnapshotResponse;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;

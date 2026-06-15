@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.platform;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminAudit;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminDailyMetrics;

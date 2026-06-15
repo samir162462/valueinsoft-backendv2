@@ -228,6 +228,7 @@ public class DbPosOrder {
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String sql = "SELECT od.\"orderDetailsId\", od.\"orderId\", od.quantity, od.total, od.\"productId\", " +
                 "COALESCE(od.\"bouncedBack\", 0) AS \"bouncedBack\", ord.\"salesUser\", ord.\"clientId\", COALESCE(ord.\"orderDiscount\", 0) AS \"orderDiscount\", " +
+                "COALESCE(ord.\"orderTotal\", 0) AS \"orderTotal\", " +
                 "COALESCE(prod.buying_price, 0) AS \"buyingPrice\", " +
                 "EXISTS (" +
                 " SELECT 1 FROM " + detailTable + " other " +
@@ -248,6 +249,7 @@ public class DbPosOrder {
                 rs.getString("salesUser"),
                 rs.getObject("clientId") != null ? rs.getInt("clientId") : null,
                 rs.getInt("orderDiscount"),
+                rs.getInt("orderTotal"),
                 rs.getInt("buyingPrice"),
                 rs.getBoolean("hasOtherActiveItems")
         ), odId);
@@ -752,11 +754,12 @@ public class DbPosOrder {
         private final String salesUser;
         private final Integer clientId;
         private final int orderDiscount;
+        private final int orderTotal;
         private final int buyingPrice;
         private final boolean hasOtherActiveItems;
 
         public OrderBounceBackContext(int orderDetailId, int orderId, int quantity, int total, int productId,
-                                      int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int buyingPrice,
+                                      int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int orderTotal, int buyingPrice,
                                       boolean hasOtherActiveItems) {
             this.orderDetailId = orderDetailId;
             this.orderId = orderId;
@@ -767,6 +770,7 @@ public class DbPosOrder {
             this.salesUser = salesUser;
             this.clientId = clientId;
             this.orderDiscount = orderDiscount;
+            this.orderTotal = orderTotal;
             this.buyingPrice = buyingPrice;
             this.hasOtherActiveItems = hasOtherActiveItems;
         }
@@ -805,6 +809,10 @@ public class DbPosOrder {
 
         public int getOrderDiscount() {
             return orderDiscount;
+        }
+
+        public int getOrderTotal() {
+            return orderTotal;
         }
 
         public int getBuyingPrice() {

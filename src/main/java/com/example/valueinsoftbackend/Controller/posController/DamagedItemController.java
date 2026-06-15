@@ -6,8 +6,7 @@ package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.Model.DamagedItem;
 import com.example.valueinsoftbackend.Model.Request.CreateDamagedItemRequest;
-import com.example.valueinsoftbackend.Model.Request.SupplierUpdateRequest;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.DamagedItemService;
 import com.example.valueinsoftbackend.Service.SupplierService;
 import org.springframework.beans.factory.annotation.Autowired;

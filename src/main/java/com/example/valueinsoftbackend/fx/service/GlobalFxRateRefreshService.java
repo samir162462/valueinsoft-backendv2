@@ -4,7 +4,7 @@ import com.example.valueinsoftbackend.Config.FxDeepSeekProperties;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminAuditWriter;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.User;
-import com.example.valueinsoftbackend.Service.PlatformAuthorizationService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAuthorizationService;
 import com.example.valueinsoftbackend.fx.model.FxCompanyProcessingSummary;
 import com.example.valueinsoftbackend.fx.model.FxDeepSeekFetchResult;
 import com.example.valueinsoftbackend.fx.model.FxRatePayload;
@@ -20,7 +20,6 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.net.InetAddress;
 import java.time.Duration;
 import java.time.LocalDate;

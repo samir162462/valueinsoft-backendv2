@@ -46,7 +46,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         
         int qty = item.getQuantityOnHand();
         item.setStockStatus(qty > 0 ? "IN_STOCK" : "OUT_OF_STOCK");
-        item.setLowStock(qty > 0 && qty <= 5); // Simple heuristic
+        item.setLowStock(qty > 0 && qty <= 5);
         item.setSellable(true);
         item.setUsed("Used".equalsIgnoreCase(rs.getString("pState")));
         item.setSellPrice(rs.getInt("sellPrice"));
@@ -201,6 +201,12 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         }
 
         InventoryCatalogFilters filters = request.getFilters();
+        int lowStockThreshold = resolveLowStockThreshold(filters);
+        boolean excludeSerializedFromLowStock = filters != null && Boolean.TRUE.equals(filters.getExcludeSerializedFromLowStock());
+        boolean includeOutOfStockInLowStock = filters == null || !Boolean.FALSE.equals(filters.getIncludeOutOfStockInLowStock());
+
+        params.addValue("lowStockThreshold", lowStockThreshold);
+
         if (filters != null) {
             if (filters.getSupplierId() != null) {
                 conditions.add("p.supplier_id = :supplierId");
@@ -223,7 +229,12 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                         conditions.add(effectiveQuantitySql + " <= 0");
                         break;
                     case "LOW_STOCK":
-                        conditions.add(effectiveQuantitySql + " > 0 AND " + effectiveQuantitySql + " <= 5");
+                        conditions.add(buildLowStockCondition(
+                                effectiveQuantitySql,
+                                "p",
+                                includeOutOfStockInLowStock,
+                                excludeSerializedFromLowStock
+                        ));
                         break;
                     case "USED":
                         conditions.add("p.product_state = 'Used'");
@@ -261,6 +272,12 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         params.addValue("offset", offset);
 
         List<InventoryCatalogItem> data = jdbcTemplate.query(sql.toString(), params, CATALOG_ROW_MAPPER);
+        data.forEach((item) -> item.setLowStock(isLowStockItem(
+                item,
+                lowStockThreshold,
+                includeOutOfStockInLowStock,
+                excludeSerializedFromLowStock
+        )));
 
         // Total count for pagination
         StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM ").append(productTable).append(" p ");
@@ -348,6 +365,46 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         return "CASE WHEN COALESCE(" + productAlias + ".tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL') " +
                 "THEN COALESCE(" + serializedAlias + ".available_quantity, 0) " +
                 "ELSE COALESCE(" + stockAlias + ".quantity, 0) END";
+    }
+
+    private static int resolveLowStockThreshold(InventoryCatalogFilters filters) {
+        if (filters == null || filters.getLowStockThreshold() == null || filters.getLowStockThreshold() < 0) {
+            return 5;
+        }
+        return filters.getLowStockThreshold();
+    }
+
+    private static String buildLowStockCondition(String effectiveQuantitySql,
+                                                 String productAlias,
+                                                 boolean includeOutOfStockInLowStock,
+                                                 boolean excludeSerializedFromLowStock) {
+        List<String> conditions = new ArrayList<>();
+        conditions.add(effectiveQuantitySql + " <= :lowStockThreshold");
+        if (!includeOutOfStockInLowStock) {
+            conditions.add(effectiveQuantitySql + " > 0");
+        }
+        if (excludeSerializedFromLowStock) {
+            conditions.add("COALESCE(" + productAlias + ".tracking_type, 'QUANTITY') NOT IN ('IMEI', 'SERIAL')");
+        }
+        return "(" + String.join(" AND ", conditions) + ")";
+    }
+
+    private static boolean isLowStockItem(InventoryCatalogItem item,
+                                          int lowStockThreshold,
+                                          boolean includeOutOfStockInLowStock,
+                                          boolean excludeSerializedFromLowStock) {
+        if (item == null) {
+            return false;
+        }
+        String trackingType = item.getTrackingType() == null ? "QUANTITY" : item.getTrackingType().trim().toUpperCase();
+        if (excludeSerializedFromLowStock && ("IMEI".equals(trackingType) || "SERIAL".equals(trackingType))) {
+            return false;
+        }
+        int quantity = item.getQuantityOnHand();
+        if (!includeOutOfStockInLowStock && quantity <= 0) {
+            return false;
+        }
+        return quantity <= lowStockThreshold;
     }
 
     private static String serializedStockJoin(String unitTable, String supplierTable) {

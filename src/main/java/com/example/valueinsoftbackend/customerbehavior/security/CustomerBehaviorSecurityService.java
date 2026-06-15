@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.customerbehavior.security;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.ai.service.AiSecurityContext;
 import com.example.valueinsoftbackend.ai.service.AiSecurityContextResolver;
 import com.example.valueinsoftbackend.customerbehavior.dto.CustomerBehaviorFilter;

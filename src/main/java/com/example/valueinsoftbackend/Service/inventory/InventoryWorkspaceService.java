@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.inventory;
 
 import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.InventoryAnalysisQueryGateway;
 import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.InventoryProductQueryGateway;

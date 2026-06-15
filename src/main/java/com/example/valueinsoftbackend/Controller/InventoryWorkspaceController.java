@@ -9,7 +9,7 @@ import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.Inventory
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryPresetCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryPresetUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryQuickFindRequest;
-import com.example.valueinsoftbackend.Service.InventoryWorkspaceService;
+import com.example.valueinsoftbackend.Service.inventory.InventoryWorkspaceService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -3,7 +3,7 @@ package com.example.valueinsoftbackend.Controller;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditPageResponse;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditAiAnalysisResponse;
 import com.example.valueinsoftbackend.Model.Request.InventoryAudit.InventoryAuditSearchRequest;
-import com.example.valueinsoftbackend.Service.InventoryAuditService;
+import com.example.valueinsoftbackend.Service.inventory.InventoryAuditService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;

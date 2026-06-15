@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceDailyCashClosingReport;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.Model.Finance.DailyCashClosingPaymentBreak
 import com.example.valueinsoftbackend.Model.Finance.DailyCashClosingReportData;
 import com.example.valueinsoftbackend.Model.Finance.DailyCashClosingSummary;
 import com.example.valueinsoftbackend.Model.Request.Finance.DailyCashClosingReportRequest;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;

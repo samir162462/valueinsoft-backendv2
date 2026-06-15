@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.inventory;
 
 import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.InventoryPresetGateway;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryPresetResponse;

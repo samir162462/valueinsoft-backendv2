@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
@@ -9,8 +9,6 @@ import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
 import com.example.valueinsoftbackend.Model.Sales.SupplierReceipt;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinancePostingRequestCreateRequest;
-import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
-import com.example.valueinsoftbackend.Service.finance.FinancePostingRequestService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -566,6 +564,7 @@ class FinanceOperationalPostingServiceTest {
                 "sam",
                 55,
                 100,
+                300,
                 300,
                 false);
     }

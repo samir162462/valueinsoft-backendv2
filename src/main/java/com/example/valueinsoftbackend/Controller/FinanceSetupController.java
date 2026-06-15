@@ -17,7 +17,7 @@ import com.example.valueinsoftbackend.Model.Request.Finance.FinanceFiscalYearCre
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceFiscalYearUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceTaxCodeCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceTaxCodeUpdateRequest;
-import com.example.valueinsoftbackend.Service.FinanceSetupService;
+import com.example.valueinsoftbackend.Service.finance.FinanceSetupService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.PathVariable;

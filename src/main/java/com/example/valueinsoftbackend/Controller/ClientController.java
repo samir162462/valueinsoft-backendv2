@@ -2,8 +2,8 @@ package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.Client;
 import com.example.valueinsoftbackend.Model.Request.CreateClientRequest;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
-import com.example.valueinsoftbackend.Service.ClientService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.client.ClientService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;

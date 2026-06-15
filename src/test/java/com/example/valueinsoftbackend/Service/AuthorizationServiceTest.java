@@ -2,6 +2,8 @@ package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Configuration.ResolvedCapabilityConfig;
+import com.example.valueinsoftbackend.Service.security.AuthenticatedEffectiveConfigurationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;

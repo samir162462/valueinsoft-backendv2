@@ -4,7 +4,7 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.User;
-import com.example.valueinsoftbackend.Service.PlatformAuthorizationService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAuthorizationService;
 import com.example.valueinsoftbackend.ai.dto.AiKnowledgeDocumentCreateRequest;
 import com.example.valueinsoftbackend.ai.dto.AiKnowledgeDocumentDto;
 import com.example.valueinsoftbackend.ai.dto.AiKnowledgeDocumentListResponse;

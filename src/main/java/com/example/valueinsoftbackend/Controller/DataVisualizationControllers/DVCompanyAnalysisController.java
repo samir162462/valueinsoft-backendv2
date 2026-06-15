@@ -8,8 +8,8 @@ package com.example.valueinsoftbackend.Controller.DataVisualizationControllers;
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.CompanyAnalysis;
 import com.example.valueinsoftbackend.Model.Request.CompanyAnalysisRequest;
 import com.example.valueinsoftbackend.Model.Request.CompanyAnalysisUpdateRequest;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
-import com.example.valueinsoftbackend.Service.CompanyAnalysisService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.company.CompanyAnalysisService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 

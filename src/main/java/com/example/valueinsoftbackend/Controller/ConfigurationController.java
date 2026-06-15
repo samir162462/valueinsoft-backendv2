@@ -4,8 +4,8 @@ import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleR
 import com.example.valueinsoftbackend.Model.Configuration.EffectiveConfiguration;
 import com.example.valueinsoftbackend.Model.Configuration.NavigationItemConfig;
 import com.example.valueinsoftbackend.Model.Configuration.ResolvedCapabilityConfig;
-import com.example.valueinsoftbackend.Service.AuthenticatedEffectiveConfigurationService;
-import com.example.valueinsoftbackend.Service.BranchSettingsService;
+import com.example.valueinsoftbackend.Service.security.AuthenticatedEffectiveConfigurationService;
+import com.example.valueinsoftbackend.Service.branch.BranchSettingsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;

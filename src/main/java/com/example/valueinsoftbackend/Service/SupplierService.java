@@ -1,7 +1,10 @@
 package com.example.valueinsoftbackend.Service;
 
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
+import com.example.valueinsoftbackend.Service.inventory.InventoryTransactionService;
 import lombok.extern.slf4j.Slf4j;
 
+import com.example.valueinsoftbackend.DatabaseRequests.DbBranchSettings;
 import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
@@ -35,18 +38,21 @@ import java.util.Locale;
 public class SupplierService {
 
     private final DbSupplier dbSupplier;
+    private final DbBranchSettings dbBranchSettings;
     private final FinanceOperationalPostingService financeOperationalPostingService;
     private final InventoryTransactionService inventoryTransactionService;
 
     public SupplierService(DbSupplier dbSupplier) {
-        this(dbSupplier, null, null);
+        this(dbSupplier, null, null, null);
     }
 
     @Autowired
     public SupplierService(DbSupplier dbSupplier,
+                           DbBranchSettings dbBranchSettings,
                            FinanceOperationalPostingService financeOperationalPostingService,
                            InventoryTransactionService inventoryTransactionService) {
         this.dbSupplier = dbSupplier;
+        this.dbBranchSettings = dbBranchSettings;
         this.financeOperationalPostingService = financeOperationalPostingService;
         this.inventoryTransactionService = inventoryTransactionService;
     }
@@ -294,6 +300,12 @@ public class SupplierService {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         TenantSqlIdentifiers.requirePositive(productId, "productId");
+        if (!isSupplierReturnsEnabled(companyId, branchId)) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "SUPPLIER_RETURNS_DISABLED",
+                    "Supplier returns are disabled for this branch");
+        }
 
         Timestamp time = RequestTimestampParser.parse(request.getTime(), "time");
         SupplierBProduct supplierBProduct = new SupplierBProduct(
@@ -320,6 +332,21 @@ public class SupplierService {
 
         log.info("Created supplier bought-product row for company {} branch {} product {}", companyId, branchId, productId);
         return created;
+    }
+
+    private boolean isSupplierReturnsEnabled(int companyId, int branchId) {
+        if (dbBranchSettings == null) {
+            return true;
+        }
+
+        Object value = dbBranchSettings.getEffectiveValueMap(companyId, branchId).get("inventory.allowSupplierReturns");
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String stringValue) {
+            return Boolean.parseBoolean(stringValue);
+        }
+        return true;
     }
 
     private void enrichFinanceSupplierReturn(int companyId, int branchId, SupplierBProduct returnedProduct) {

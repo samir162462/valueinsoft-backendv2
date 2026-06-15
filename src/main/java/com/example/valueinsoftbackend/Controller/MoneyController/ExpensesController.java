@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.Controller.MoneyController;
 
 import com.example.valueinsoftbackend.Model.Request.ExpenseUpsertRequest;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.ExpensesService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

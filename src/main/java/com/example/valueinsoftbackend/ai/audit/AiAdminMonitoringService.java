@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.ai.audit;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
-import com.example.valueinsoftbackend.Service.PlatformAuthorizationService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAuthorizationService;
 import com.example.valueinsoftbackend.ai.config.AiProperties;
 import com.example.valueinsoftbackend.ai.dto.AiAdminErrorDto;
 import com.example.valueinsoftbackend.ai.dto.AiAdminErrorsResponse;

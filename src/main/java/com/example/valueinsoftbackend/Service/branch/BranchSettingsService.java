@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.branch;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranchSettings;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleR
 import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingValueInput;
 import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingsBatchUpdateRequest;
 import com.example.valueinsoftbackend.Config.CacheConfig;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.cache.annotation.CacheEvict;
@@ -86,7 +87,7 @@ public class BranchSettingsService {
         return buildBundle(tenantId, branchId, "server");
     }
 
-    protected BranchSettingsBundleResponse buildBundle(int tenantId, int branchId, String source) {
+    public BranchSettingsBundleResponse buildBundle(int tenantId, int branchId, String source) {
         ArrayList<BranchSettingDefinitionConfig> definitions = dbBranchSettings.getDefinitions(true);
         Map<String, Object> overrides = dbBranchSettings.getActiveOverrideValueMap(tenantId, branchId);
         ArrayList<BranchEffectiveSettingConfig> effectiveSettings = new ArrayList<>();
@@ -110,10 +111,10 @@ public class BranchSettingsService {
         );
     }
 
-    protected void saveBranchSettingsInternal(int tenantId,
-                                              int branchId,
-                                              String actor,
-                                              BranchSettingsBatchUpdateRequest request) {
+    public void saveBranchSettingsInternal(int tenantId,
+                                           int branchId,
+                                           String actor,
+                                           BranchSettingsBatchUpdateRequest request) {
         ArrayList<BranchSettingDefinitionConfig> definitions = dbBranchSettings.getDefinitions(true);
         Map<String, BranchSettingDefinitionConfig> definitionMap = definitions.stream().collect(
                 Collectors.toMap(BranchSettingDefinitionConfig::getSettingKey, definition -> definition, (left, right) -> left, LinkedHashMap::new)

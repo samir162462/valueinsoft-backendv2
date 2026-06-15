@@ -1,6 +1,6 @@
 package com.example.valueinsoftbackend.ai.service;
 
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.ai.config.AiProperties;
 import com.example.valueinsoftbackend.ai.memory.AiConversationRecord;
 import com.example.valueinsoftbackend.ai.memory.AiConversationRepository;

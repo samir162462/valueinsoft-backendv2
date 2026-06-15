@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.Config.BillingProperties;
 import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackRequest;
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.TransactionProcessedCallback;
+import com.example.valueinsoftbackend.Service.payment.PaymentProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;

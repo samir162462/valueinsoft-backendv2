@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.Finance.FinanceAccountBalanceRebuildResponse;
-import com.example.valueinsoftbackend.Service.FinanceProjectionService;
+import com.example.valueinsoftbackend.Service.finance.FinanceProjectionService;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;

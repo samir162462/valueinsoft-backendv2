@@ -1,9 +1,8 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceJournal;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
-import com.example.valueinsoftbackend.Model.Finance.FinanceAccountItem;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;

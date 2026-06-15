@@ -6,8 +6,8 @@ package com.example.valueinsoftbackend.Controller.MoneyController;
 
 import com.example.valueinsoftbackend.Model.Request.CreateClientReceiptRequest;
 import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
-import com.example.valueinsoftbackend.Service.ClientReceiptService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.client.ClientReceiptService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 

@@ -4,7 +4,7 @@ import com.example.valueinsoftbackend.Model.Finance.FinanceBalanceSheetResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceGeneralLedgerResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceProfitAndLossResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTrialBalanceResponse;
-import com.example.valueinsoftbackend.Service.FinanceReportingService;
+import com.example.valueinsoftbackend.Service.finance.FinanceReportingService;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;

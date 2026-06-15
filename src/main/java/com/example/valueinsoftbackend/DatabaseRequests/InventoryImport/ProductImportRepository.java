@@ -31,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
 public class ProductImportRepository {
@@ -38,6 +39,7 @@ public class ProductImportRepository {
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final int previewPageMaxSize;
+    private final Set<Integer> importTablesReady = ConcurrentHashMap.newKeySet();
 
     public ProductImportRepository(NamedParameterJdbcTemplate jdbcTemplate,
                                    ObjectMapper objectMapper,
@@ -779,15 +781,35 @@ public class ProductImportRepository {
     }
 
     private String batchTable(int companyId) {
+        ensureImportTables(companyId);
         return TenantSqlIdentifiers.inventoryImportBatchTable(companyId);
     }
 
     private String rowTable(int companyId) {
+        ensureImportTables(companyId);
         return TenantSqlIdentifiers.inventoryImportRowTable(companyId);
     }
 
     private String errorTable(int companyId) {
+        ensureImportTables(companyId);
         return TenantSqlIdentifiers.inventoryImportErrorTable(companyId);
+    }
+
+    private void ensureImportTables(int companyId) {
+        if (importTablesReady.contains(companyId)) {
+            return;
+        }
+
+        synchronized (importTablesReady) {
+            if (importTablesReady.contains(companyId)) {
+                return;
+            }
+
+            String schemaName = TenantSqlIdentifiers.companySchema(companyId);
+            jdbcTemplate.getJdbcOperations()
+                    .execute("SELECT public.create_inventory_product_import_tables_for_tenant('" + schemaName + "')");
+            importTablesReady.add(companyId);
+        }
     }
 
     private String blankToNull(String value) {

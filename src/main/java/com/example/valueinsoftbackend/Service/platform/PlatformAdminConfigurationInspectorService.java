@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.platform;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
@@ -22,9 +22,9 @@ import com.example.valueinsoftbackend.Model.Configuration.RoleDefinitionConfig;
 import com.example.valueinsoftbackend.Model.Configuration.RoleGrantConfig;
 import com.example.valueinsoftbackend.Model.Configuration.TenantAdminPortalConfig;
 import com.example.valueinsoftbackend.Model.Configuration.TenantConfig;
-import com.example.valueinsoftbackend.Model.Configuration.TenantRoleAssignmentConfig;
 import com.example.valueinsoftbackend.Model.Configuration.TenantUserGrantOverrideConfig;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformConfigAssignmentsResponse;
+import com.example.valueinsoftbackend.Service.EffectiveConfigurationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 

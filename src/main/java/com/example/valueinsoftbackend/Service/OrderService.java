@@ -1,7 +1,9 @@
 package com.example.valueinsoftbackend.Service;
 
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
 import lombok.extern.slf4j.Slf4j;
 
+import com.example.valueinsoftbackend.DatabaseRequests.DbBranchSettings;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Order;
@@ -10,6 +12,8 @@ import com.example.valueinsoftbackend.Model.Request.BounceBackOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.CreateOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.OrderItemRequest;
 import com.example.valueinsoftbackend.Model.Request.OrderPeriodRequest;
+import com.example.valueinsoftbackend.loyalty.dto.LoyaltyReversalResult;
+import com.example.valueinsoftbackend.loyalty.service.LoyaltyService;
 import com.example.valueinsoftbackend.util.RequestTimestampParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
@@ -30,15 +34,21 @@ public class OrderService {
     private final com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod;
     private final FinanceOperationalPostingService financeOperationalPostingService;
     private final PosSalePostingService posSalePostingService;
+    private final DbBranchSettings dbBranchSettings;
+    private final LoyaltyService loyaltyService;
 
     public OrderService(DbPosOrder dbPosOrder,
             com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod,
             FinanceOperationalPostingService financeOperationalPostingService,
-            PosSalePostingService posSalePostingService) {
+            PosSalePostingService posSalePostingService,
+            DbBranchSettings dbBranchSettings,
+            LoyaltyService loyaltyService) {
         this.dbPosOrder = dbPosOrder;
         this.dbPosShiftPeriod = dbPosShiftPeriod;
         this.financeOperationalPostingService = financeOperationalPostingService;
         this.posSalePostingService = posSalePostingService;
+        this.dbBranchSettings = dbBranchSettings;
+        this.loyaltyService = loyaltyService;
     }
 
     @Transactional
@@ -125,6 +135,12 @@ public class OrderService {
     @Transactional
     public String bounceBackProduct(BounceBackOrderRequest request, int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        if (request.getToWho() == 2 && !isSupplierReturnsEnabled(companyId, request.getBranchId())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "SUPPLIER_RETURNS_DISABLED",
+                    "Supplier returns are disabled for this branch");
+        }
 
         DbPosOrder.OrderBounceBackContext context = dbPosOrder.getBounceBackContext(
                 request.getOdId(),
@@ -202,6 +218,8 @@ public class OrderService {
             throw new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Order not found for bounce back");
         }
 
+        reverseLoyaltyForBounceBack(companyId, request.getBranchId(), context, refundAmount);
+
         enqueueFinancePosSaleReturnAfterCommit(
                 companyId,
                 request.getBranchId(),
@@ -219,6 +237,55 @@ public class OrderService {
                 request.getBranchId(),
                 request.getToWho());
         return "Bounce back successful";
+    }
+
+    private void reverseLoyaltyForBounceBack(int companyId,
+                                             int branchId,
+                                             DbPosOrder.OrderBounceBackContext context,
+                                             int refundAmount) {
+        if (loyaltyService == null) {
+            return;
+        }
+        try {
+            LoyaltyReversalResult reversal = loyaltyService.reverseOrderDetailReturn(
+                    companyId,
+                    branchId,
+                    context,
+                    refundAmount,
+                    !context.hasOtherActiveItems());
+            if (reversal.inserted()) {
+                log.info(
+                        "Reversed loyalty for company {} branch {} order {} detail {}: earned={} restored={}",
+                        companyId,
+                        branchId,
+                        context.getOrderId(),
+                        context.getOrderDetailId(),
+                        reversal.earnedPointsReversed(),
+                        reversal.redeemedPointsRestored());
+            }
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Order detail {} was bounced for company {} branch {}, but loyalty reversal failed: {}",
+                    context.getOrderDetailId(),
+                    companyId,
+                    branchId,
+                    exception.getMessage());
+        }
+    }
+
+    private boolean isSupplierReturnsEnabled(int companyId, int branchId) {
+        if (dbBranchSettings == null) {
+            return true;
+        }
+
+        Object value = dbBranchSettings.getEffectiveValueMap(companyId, branchId).get("inventory.allowSupplierReturns");
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String stringValue) {
+            return Boolean.parseBoolean(stringValue);
+        }
+        return true;
     }
 
     private void enqueueFinancePosSaleReturnAfterCommit(int companyId,
@@ -293,7 +360,7 @@ public class OrderService {
                     unitIdentifiers));
         }
 
-        return new Order(
+        Order order = new Order(
                 request.orderId(),
                 new Timestamp(System.currentTimeMillis()),
                 request.clientName() == null ? "" : request.clientName().trim(),
@@ -306,5 +373,7 @@ public class OrderService {
                 request.orderIncome(),
                 0,
                 details);
+        order.setLoyaltyRedemptionId(request.loyaltyRedemptionId());
+        return order;
     }
 }

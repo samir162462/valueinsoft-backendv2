@@ -3,7 +3,7 @@ package com.example.valueinsoftbackend.ai.knowledge;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.Model.User;
-import com.example.valueinsoftbackend.Service.PlatformAuthorizationService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAuthorizationService;
 import com.example.valueinsoftbackend.ai.dto.AiKnowledgeDocumentCreateRequest;
 import com.example.valueinsoftbackend.ai.dto.AiKnowledgeDocumentListResponse;
 import com.example.valueinsoftbackend.ai.dto.AiKnowledgeIngestResponse;

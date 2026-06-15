@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.payment;
 
 import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackRequest;

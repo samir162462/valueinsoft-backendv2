@@ -3,7 +3,7 @@ package com.example.valueinsoftbackend.Controller;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestProcessResponse;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinancePostingRequestCreateRequest;
-import com.example.valueinsoftbackend.Service.FinancePostingRequestService;
+import com.example.valueinsoftbackend.Service.finance.FinancePostingRequestService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;

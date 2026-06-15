@@ -112,7 +112,11 @@ public class DbInventoryAuditReadModels {
                              COALESCE(SUM(closing_qty), 0) AS total_closing_qty,
                              COALESCE(SUM(total_value), 0) AS total_stock_value,
                              COALESCE(SUM(CASE
-                                 WHEN CAST(:lowStockThreshold AS INTEGER) IS NOT NULL AND closing_qty <= CAST(:lowStockThreshold AS INTEGER) THEN 1
+                                 WHEN CAST(:lowStockThreshold AS INTEGER) IS NOT NULL
+                                      AND closing_qty <= CAST(:lowStockThreshold AS INTEGER)
+                                      AND (:includeOutOfStockInLowStock = TRUE OR closing_qty > 0)
+                                      AND (:excludeSerializedFromLowStock = FALSE OR tracking_type NOT IN ('IMEI', 'SERIAL'))
+                                 THEN 1
                                  ELSE 0
                              END), 0) AS low_stock_count
                          FROM audit_base
@@ -205,7 +209,9 @@ public class DbInventoryAuditReadModels {
                 .addValue("templateKey", normalizeText(request.getTemplateKey()))
                 .addValue("supplierId", request.getSupplierId())
                 .addValue("lowStockOnly", Boolean.TRUE.equals(request.getLowStockOnly()))
-                .addValue("lowStockThreshold", request.getLowStockThreshold());
+                .addValue("lowStockThreshold", request.getLowStockThreshold() == null ? 5 : request.getLowStockThreshold())
+                .addValue("excludeSerializedFromLowStock", Boolean.TRUE.equals(request.getExcludeSerializedFromLowStock()))
+                .addValue("includeOutOfStockInLowStock", !Boolean.FALSE.equals(request.getIncludeOutOfStockInLowStock()));
     }
 
     private String buildBaseAuditSql(int companyId) {
@@ -382,8 +388,10 @@ public class DbInventoryAuditReadModels {
             where.append(" AND supplier_id = :supplierId ");
         }
 
-        if (Boolean.TRUE.equals(request.getLowStockOnly()) && request.getLowStockThreshold() != null) {
+        if (Boolean.TRUE.equals(request.getLowStockOnly())) {
             where.append(" AND closing_qty <= :lowStockThreshold ");
+            where.append(" AND (:includeOutOfStockInLowStock = TRUE OR closing_qty > 0) ");
+            where.append(" AND (:excludeSerializedFromLowStock = FALSE OR tracking_type NOT IN ('IMEI', 'SERIAL')) ");
         }
 
         return where.toString();

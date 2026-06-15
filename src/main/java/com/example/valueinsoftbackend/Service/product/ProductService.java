@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.product;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProduct;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProductCommandRepository;
@@ -9,6 +9,7 @@ import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
 import com.example.valueinsoftbackend.Model.ResponseModel.ResponsePagination;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
+import com.example.valueinsoftbackend.Service.LegacyInventoryBackfillService;
 import com.example.valueinsoftbackend.util.PageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

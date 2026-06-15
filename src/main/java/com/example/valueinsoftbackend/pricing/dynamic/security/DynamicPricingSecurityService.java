@@ -1,6 +1,6 @@
 package com.example.valueinsoftbackend.pricing.dynamic.security;
 
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.springframework.stereotype.Service;
 
 @Service

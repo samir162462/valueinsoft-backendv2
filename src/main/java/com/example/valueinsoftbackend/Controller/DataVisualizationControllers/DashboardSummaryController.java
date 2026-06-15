@@ -7,7 +7,7 @@ import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Request.DashboardSummaryRequest;
 import com.example.valueinsoftbackend.Model.Response.DashboardSummaryResponse;
 import com.example.valueinsoftbackend.Model.User;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.DashboardSummaryService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

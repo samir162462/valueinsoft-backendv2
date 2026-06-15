@@ -6,7 +6,7 @@ package com.example.valueinsoftbackend.Controller.DataVisualizationControllers;
 
 import com.example.valueinsoftbackend.Model.Request.CompanySalesWindowRequest;
 import com.example.valueinsoftbackend.Model.DataVisualizationModels.DvCompanyChartSalesIncome;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.SalesAnalyticsService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;

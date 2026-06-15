@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.pos.offline.controller;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.pos.offline.dto.request.DeviceHeartbeatRequest;
 import com.example.valueinsoftbackend.pos.offline.dto.request.OfflineSyncUploadRequest;
 import com.example.valueinsoftbackend.pos.offline.dto.request.RegisterPosDeviceRequest;

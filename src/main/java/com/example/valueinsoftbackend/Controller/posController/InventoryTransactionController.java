@@ -4,7 +4,7 @@
 
 package com.example.valueinsoftbackend.Controller.posController;
 
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Model.Inventory.ProductUnitStatus;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Request.CreateInventoryTransactionRequest;
@@ -12,7 +12,7 @@ import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitStoc
 import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitTransferRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryTransactionQueryRequest;
 import com.example.valueinsoftbackend.Service.SerializedInventoryService;
-import com.example.valueinsoftbackend.Service.InventoryTransactionService;
+import com.example.valueinsoftbackend.Service.inventory.InventoryTransactionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;

@@ -3,6 +3,9 @@ package com.example.valueinsoftbackend.Service;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
 import com.example.valueinsoftbackend.Model.Order;
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
+import com.example.valueinsoftbackend.loyalty.dto.LoyaltyRecordedEarn;
+import com.example.valueinsoftbackend.loyalty.service.LoyaltyService;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -10,8 +13,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 
@@ -24,13 +25,16 @@ public class PosSalePostingService {
     private final DbPosOrder dbPosOrder;
     private final DbPosShiftPeriod dbPosShiftPeriod;
     private final FinanceOperationalPostingService financeOperationalPostingService;
+    private final LoyaltyService loyaltyService;
 
     public PosSalePostingService(DbPosOrder dbPosOrder,
             DbPosShiftPeriod dbPosShiftPeriod,
-            FinanceOperationalPostingService financeOperationalPostingService) {
+            FinanceOperationalPostingService financeOperationalPostingService,
+            LoyaltyService loyaltyService) {
         this.dbPosOrder = dbPosOrder;
         this.dbPosShiftPeriod = dbPosShiftPeriod;
         this.financeOperationalPostingService = financeOperationalPostingService;
+        this.loyaltyService = loyaltyService;
     }
 
     public DbPosOrder.AddOrderResult postSale(int companyId, Order order) {
@@ -44,6 +48,8 @@ public class PosSalePostingService {
             BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> onFailure) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         DbPosOrder.AddOrderResult result = dbPosOrder.addOrder(order, companyId);
+        confirmLoyaltyRedemption(companyId, order, result);
+        recordLoyaltyEarn(companyId, order, result);
 
         Integer shiftId = result.shiftId();
         if (shiftId == null) {
@@ -67,6 +73,29 @@ public class PosSalePostingService {
         log.info("Saved order {} for company {} branch {} with {} items",
                 result.orderId(), companyId, order.getBranchId(), order.getOrderDetails().size());
         return result;
+    }
+
+    private void confirmLoyaltyRedemption(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+        if (loyaltyService == null || order.getLoyaltyRedemptionId() == null || order.getLoyaltyRedemptionId() <= 0) {
+            return;
+        }
+        loyaltyService.confirmOrderRedemption(companyId, order, result);
+    }
+
+    private void recordLoyaltyEarn(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+        if (loyaltyService == null) {
+            return;
+        }
+        try {
+            LoyaltyRecordedEarn earned = loyaltyService.recordOrderEarn(companyId, order, result);
+            if (earned.inserted() && earned.pointsEarned() > 0) {
+                log.info("Awarded {} loyalty points for company {} branch {} order {} client {}",
+                        earned.pointsEarned(), companyId, order.getBranchId(), result.orderId(), order.getClientId());
+            }
+        } catch (RuntimeException exception) {
+            log.warn("POS order {} saved for company {} branch {}, but loyalty points were not recorded: {}",
+                    result.orderId(), companyId, order.getBranchId(), exception.getMessage());
+        }
     }
 
     private boolean isDirectSale(String type) {

@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Service;
 
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbMoney.DBMSupplierReceipt;

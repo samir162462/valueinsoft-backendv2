@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.product;
 
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportColumn;
 import org.springframework.stereotype.Service;

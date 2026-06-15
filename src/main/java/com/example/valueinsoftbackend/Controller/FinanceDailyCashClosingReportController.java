@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.Request.Finance.DailyCashClosingReportRequest;
-import com.example.valueinsoftbackend.Service.FinanceDailyCashClosingReportService;
+import com.example.valueinsoftbackend.Service.finance.FinanceDailyCashClosingReportService;
 import jakarta.validation.constraints.Positive;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;

@@ -4,7 +4,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbHR;
 import com.example.valueinsoftbackend.Model.HR.Employee;
 import com.example.valueinsoftbackend.Model.HR.EmployeeShift;
 import com.example.valueinsoftbackend.Model.HR.Shift;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.HRService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

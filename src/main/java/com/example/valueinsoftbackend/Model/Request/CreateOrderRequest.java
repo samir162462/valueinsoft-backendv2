@@ -39,7 +39,10 @@ public record CreateOrderRequest(
 
         @Valid
         @NotEmpty(message = "orderDetails must contain at least one item")
-        List<OrderItemRequest> orderDetails
+        List<OrderItemRequest> orderDetails,
+
+        @PositiveOrZero(message = "loyaltyRedemptionId must be zero or greater")
+        Long loyaltyRedemptionId
 ) {
     public CreateOrderRequest {
         if (orderDetails == null) {

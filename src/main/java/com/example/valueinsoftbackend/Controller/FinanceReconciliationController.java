@@ -9,7 +9,7 @@ import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliatio
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationItemResolutionRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationRunCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceReconciliationSourceImportRequest;
-import com.example.valueinsoftbackend.Service.FinanceReconciliationService;
+import com.example.valueinsoftbackend.Service.finance.FinanceReconciliationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;

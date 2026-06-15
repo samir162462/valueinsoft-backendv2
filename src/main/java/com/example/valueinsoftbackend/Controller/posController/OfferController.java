@@ -2,7 +2,7 @@ package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOffer;
 import com.example.valueinsoftbackend.Model.Offer;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;

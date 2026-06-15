@@ -2,7 +2,7 @@ package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbHR;
 import com.example.valueinsoftbackend.Model.HR.AttendanceDay;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.HRService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;

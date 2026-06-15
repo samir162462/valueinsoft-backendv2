@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.inventory;
 
 import com.example.valueinsoftbackend.DatabaseRequests.InventoryAudit.DbInventoryAuditReadModels;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditPageRes
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditRow;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditSummary;
 import com.example.valueinsoftbackend.Model.Request.InventoryAudit.InventoryAuditSearchRequest;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.ai.config.AiProperties;
 import com.example.valueinsoftbackend.ai.service.AiModelClient;
 import com.example.valueinsoftbackend.ai.service.AiModelRequest;
@@ -31,7 +32,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;

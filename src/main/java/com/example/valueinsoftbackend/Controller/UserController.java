@@ -1,7 +1,7 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Request.AdminResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.ResetPasswordRequest;

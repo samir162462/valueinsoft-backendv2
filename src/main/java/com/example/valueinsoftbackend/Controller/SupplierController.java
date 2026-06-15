@@ -15,7 +15,7 @@ import com.example.valueinsoftbackend.Model.Response.SupplierReferenceResponse;
 import com.example.valueinsoftbackend.Model.Response.SupplierStatementResponse;
 import com.example.valueinsoftbackend.Model.Supplier;
 import com.example.valueinsoftbackend.Model.SupplierBProduct;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.SupplierService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

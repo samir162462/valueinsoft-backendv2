@@ -49,24 +49,29 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupplierReceip
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.CreatePlatformSupportNoteRequest;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.ManualBillingActionRequest;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.PlatformAlertAcknowledgmentRequest;
+import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.PlatformCompanyOwnerUpdateRequest;
+import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.PlatformUserPasswordResetRequest;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.PlatformLifecycleActionRequest;
-import com.example.valueinsoftbackend.Service.PlatformAdminAlertService;
-import com.example.valueinsoftbackend.Service.PlatformAdminAuditService;
-import com.example.valueinsoftbackend.Service.PlatformAdminBillingService;
-import com.example.valueinsoftbackend.Service.PlatformAdminCompanyService;
-import com.example.valueinsoftbackend.Service.PlatformAdminConfigurationInspectorService;
-import com.example.valueinsoftbackend.Service.PlatformAdminFinanceService;
-import com.example.valueinsoftbackend.Service.PlatformAdminLifecycleService;
-import com.example.valueinsoftbackend.Service.PlatformAdminMetricsService;
-import com.example.valueinsoftbackend.Service.PlatformAdminOverviewService;
-import com.example.valueinsoftbackend.Service.PlatformSupportService;
-import com.example.valueinsoftbackend.Service.InventoryTemplateMetadataService;
-import com.example.valueinsoftbackend.Service.PlatformAdminBranchSettingsService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminAlertService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminAuditService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminBillingService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminCompanyService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminConfigurationInspectorService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminFinanceService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminLifecycleService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminMetricsService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminOverviewService;
+import com.example.valueinsoftbackend.Service.platform.PlatformSupportService;
+import com.example.valueinsoftbackend.Service.inventory.InventoryTemplateMetadataService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAdminBranchSettingsService;
 import com.example.valueinsoftbackend.fx.service.GlobalFxRateRefreshService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -228,6 +233,17 @@ public class PlatformAdminController {
         return platformAdminCompanyService.getCompany360ForAuthenticatedUser(principal.getName(), tenantId);
     }
 
+    @PutMapping("/companies/{tenantId}/owner")
+    public PlatformCompany360Response updateCompanyOwner(Principal principal,
+                                                         @PathVariable int tenantId,
+                                                         @Valid @RequestBody PlatformCompanyOwnerUpdateRequest request) {
+        return platformAdminCompanyService.updateCompanyOwnerForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                request.getUserId()
+        );
+    }
+
     @GetMapping("/companies/{tenantId}/branches")
     public ArrayList<PlatformCompanyBranchSummary> getCompanyBranches(Principal principal,
                                                                       @PathVariable int tenantId) {
@@ -239,6 +255,29 @@ public class PlatformAdminController {
                                                                     @PathVariable int tenantId,
                                                                     @RequestParam(value = "branchId", required = false) Integer branchId) {
         return platformAdminCompanyService.getCompanyUsersForAuthenticatedUser(principal.getName(), tenantId, branchId);
+    }
+
+    @GetMapping("/companies/{tenantId}/owner-candidates")
+    public ArrayList<ConfigurationAdminUserSummary> getCompanyOwnerCandidates(Principal principal,
+                                                                              @PathVariable int tenantId) {
+        return platformAdminCompanyService.getCompanyOwnerCandidatesForAuthenticatedUser(principal.getName(), tenantId);
+    }
+
+    @PutMapping("/users/reset-password")
+    public ResponseEntity<String> resetUserPassword(Principal principal,
+                                                    @Valid @RequestBody PlatformUserPasswordResetRequest request) {
+        String answer = platformAdminCompanyService.resetUserPasswordForAuthenticatedUser(
+                principal.getName(),
+                request.getUserName(),
+                request.getPassword(),
+                request.isPasswordResetRequired()
+        );
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(answer);
+    }
+
+    @GetMapping("/users")
+    public ArrayList<ConfigurationAdminUserSummary> getPlatformUsers(Principal principal) {
+        return platformAdminCompanyService.getPlatformUsersForAuthenticatedUser(principal.getName());
     }
 
     @GetMapping("/companies/{tenantId}/subscriptions")

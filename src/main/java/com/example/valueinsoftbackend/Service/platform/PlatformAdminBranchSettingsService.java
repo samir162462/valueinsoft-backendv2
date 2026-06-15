@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.platform;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranchSettings;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;

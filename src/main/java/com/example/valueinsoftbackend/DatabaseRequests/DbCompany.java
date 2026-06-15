@@ -171,6 +171,13 @@ public class DbCompany {
         return jdbcTemplate.update(sql, img, companyId);
     }
 
+    public int updateCompanyOwner(int companyId, int ownerId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(ownerId, "ownerId");
+        String sql = "UPDATE public.\"Company\" SET \"ownerId\" = ? WHERE id = ?";
+        return jdbcTemplate.update(sql, ownerId, companyId);
+    }
+
     public boolean createCompanySchema(int companyId) {
         try {
             for (String statement : buildCompanySchemaSql(companyId)) {
@@ -190,6 +197,7 @@ public class DbCompany {
         ArrayList<String> statements = new ArrayList<>(List.of(
                 "CREATE SCHEMA IF NOT EXISTS " + schemaName,
                 SQLCompanyUsers(schemaName, databaseOwner),
+                SQLClient(schemaName, databaseOwner),
                 SQLPosShiftPeriod(schemaName, databaseOwner),
                 SQLShiftEvent(schemaName, databaseOwner),
                 SQLShiftCashMovement(schemaName, databaseOwner),
@@ -205,7 +213,11 @@ public class DbCompany {
                 SQLFixArea(schemaName, databaseOwner),
                 SQLExpenses(schemaName, databaseOwner),
                 SQLExpensesStatic(schemaName, databaseOwner),
-                SQLClient(schemaName, databaseOwner)
+                SQLLoyaltyProgramConfig(schemaName, databaseOwner),
+                SQLLoyaltyAccount(schemaName, databaseOwner),
+                SQLLoyaltyLedger(schemaName, databaseOwner),
+                SQLLoyaltyReward(schemaName, databaseOwner),
+                SQLLoyaltyRedemption(schemaName, databaseOwner)
         ));
         statements.addAll(SQLModernInventoryFoundation(schemaName, companyId, databaseOwner));
         return statements;
@@ -320,8 +332,11 @@ public class DbCompany {
                 " reference_type VARCHAR(60)," +
                 " reference_id VARCHAR(120)," +
                 " note VARCHAR(500)," +
+                " client_id INTEGER," +
+                " associated_user_id VARCHAR," +
                 " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
                 " CONSTRAINT shift_cash_movement_shift_fk FOREIGN KEY (shift_id) REFERENCES " + SchemaName + ".\"PosShiftPeriod\" (\"PosSOID\") ON DELETE CASCADE," +
+                " CONSTRAINT shift_cash_movement_client_fk FOREIGN KEY (client_id) REFERENCES " + SchemaName + ".\"Client\" (c_id) ON DELETE SET NULL," +
                 " CONSTRAINT shift_cash_movement_type_ck CHECK (movement_type IN ('OPENING_FLOAT','CASH_SALE','CASH_REFUND','PAID_IN','PAID_OUT','SAFE_DROP','CASH_ADJUSTMENT','CLOSE_COUNT'))" +
                 "); " +
                 "CREATE INDEX IF NOT EXISTS idx_shift_cash_movement_shift ON " + SchemaName + ".shift_cash_movement (shift_id, created_at); " +
@@ -415,6 +430,135 @@ public class DbCompany {
                 "    OWNER to " + DBOwner + ";";
 
         return query;
+    }
+
+    static String SQLLoyaltyProgramConfig(String SchemaName, String DBOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".loyalty_program_config (" +
+                " program_id BIGSERIAL PRIMARY KEY," +
+                " branch_id INTEGER," +
+                " status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'," +
+                " points_name VARCHAR(40) NOT NULL DEFAULT 'Points'," +
+                " earn_amount NUMERIC(14,2) NOT NULL DEFAULT 10," +
+                " earn_points INTEGER NOT NULL DEFAULT 1," +
+                " min_eligible_amount NUMERIC(14,2) NOT NULL DEFAULT 1," +
+                " expiry_months INTEGER," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT loyalty_program_config_status_ck CHECK (status IN ('ACTIVE','PAUSED','DISABLED'))," +
+                " CONSTRAINT loyalty_program_config_earn_amount_ck CHECK (earn_amount > 0)," +
+                " CONSTRAINT loyalty_program_config_earn_points_ck CHECK (earn_points > 0)," +
+                " CONSTRAINT loyalty_program_config_min_amount_ck CHECK (min_eligible_amount >= 0)," +
+                " CONSTRAINT loyalty_program_config_expiry_ck CHECK (expiry_months IS NULL OR expiry_months > 0)" +
+                "); " +
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_program_branch_unique ON " + SchemaName + ".loyalty_program_config (COALESCE(branch_id, 0)); " +
+                "INSERT INTO " + SchemaName + ".loyalty_program_config (branch_id, status, points_name, earn_amount, earn_points, min_eligible_amount) " +
+                "VALUES (NULL, 'ACTIVE', 'Points', 10, 1, 1) ON CONFLICT DO NOTHING; " +
+                "ALTER TABLE " + SchemaName + ".loyalty_program_config OWNER to " + DBOwner + "; ";
+    }
+
+    static String SQLLoyaltyAccount(String SchemaName, String DBOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".loyalty_account (" +
+                " loyalty_account_id BIGSERIAL PRIMARY KEY," +
+                " client_id INTEGER NOT NULL," +
+                " branch_id INTEGER," +
+                " phone_normalized VARCHAR(40)," +
+                " status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'," +
+                " available_points INTEGER NOT NULL DEFAULT 0," +
+                " pending_points INTEGER NOT NULL DEFAULT 0," +
+                " lifetime_points INTEGER NOT NULL DEFAULT 0," +
+                " redeemed_points INTEGER NOT NULL DEFAULT 0," +
+                " expired_points INTEGER NOT NULL DEFAULT 0," +
+                " tier_name VARCHAR(40) NOT NULL DEFAULT 'Base'," +
+                " last_activity_at TIMESTAMP," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT loyalty_account_client_fk FOREIGN KEY (client_id) REFERENCES " + SchemaName + ".\"Client\" (c_id) ON DELETE CASCADE," +
+                " CONSTRAINT loyalty_account_status_ck CHECK (status IN ('ACTIVE','PAUSED','BLOCKED'))," +
+                " CONSTRAINT loyalty_account_points_ck CHECK (available_points >= 0 AND pending_points >= 0 AND lifetime_points >= 0 AND redeemed_points >= 0 AND expired_points >= 0)" +
+                "); " +
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_account_client ON " + SchemaName + ".loyalty_account (client_id); " +
+                "CREATE INDEX IF NOT EXISTS idx_loyalty_account_branch ON " + SchemaName + ".loyalty_account (branch_id, last_activity_at DESC); " +
+                "ALTER TABLE " + SchemaName + ".loyalty_account OWNER to " + DBOwner + "; ";
+    }
+
+    static String SQLLoyaltyLedger(String SchemaName, String DBOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".loyalty_ledger (" +
+                " ledger_id BIGSERIAL PRIMARY KEY," +
+                " loyalty_account_id BIGINT NOT NULL," +
+                " client_id INTEGER NOT NULL," +
+                " branch_id INTEGER NOT NULL," +
+                " movement_type VARCHAR(40) NOT NULL," +
+                " points_delta INTEGER NOT NULL," +
+                " monetary_value NUMERIC(14,2) NOT NULL DEFAULT 0," +
+                " source_type VARCHAR(40) NOT NULL," +
+                " source_id VARCHAR(120) NOT NULL," +
+                " order_id INTEGER," +
+                " order_detail_id INTEGER," +
+                " idempotency_key VARCHAR(200) NOT NULL," +
+                " note VARCHAR(500)," +
+                " created_by VARCHAR(120)," +
+                " expires_at TIMESTAMP," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT loyalty_ledger_account_fk FOREIGN KEY (loyalty_account_id) REFERENCES " + SchemaName + ".loyalty_account (loyalty_account_id) ON DELETE CASCADE," +
+                " CONSTRAINT loyalty_ledger_client_fk FOREIGN KEY (client_id) REFERENCES " + SchemaName + ".\"Client\" (c_id) ON DELETE CASCADE," +
+                " CONSTRAINT loyalty_ledger_type_ck CHECK (movement_type IN ('EARN','REDEEM','RESERVE','RELEASE_RESERVATION','CONFIRM_REDEMPTION','RETURN_REVERSAL','VOID_REVERSAL','EXPIRE','MANUAL_ADJUST','MIGRATION'))" +
+                "); " +
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_ledger_idempotency ON " + SchemaName + ".loyalty_ledger (idempotency_key); " +
+                "CREATE INDEX IF NOT EXISTS idx_loyalty_ledger_account_time ON " + SchemaName + ".loyalty_ledger (loyalty_account_id, created_at DESC); " +
+                "CREATE INDEX IF NOT EXISTS idx_loyalty_ledger_order ON " + SchemaName + ".loyalty_ledger (branch_id, order_id); " +
+                "ALTER TABLE " + SchemaName + ".loyalty_ledger OWNER to " + DBOwner + "; ";
+    }
+
+    static String SQLLoyaltyReward(String SchemaName, String DBOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".loyalty_reward (" +
+                " reward_id BIGSERIAL PRIMARY KEY," +
+                " branch_id INTEGER," +
+                " reward_name VARCHAR(120) NOT NULL," +
+                " reward_type VARCHAR(40) NOT NULL DEFAULT 'FIXED_DISCOUNT'," +
+                " points_cost INTEGER NOT NULL," +
+                " discount_amount NUMERIC(14,2) NOT NULL DEFAULT 0," +
+                " minimum_spend NUMERIC(14,2) NOT NULL DEFAULT 0," +
+                " status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'," +
+                " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " CONSTRAINT loyalty_reward_type_ck CHECK (reward_type IN ('FIXED_DISCOUNT'))," +
+                " CONSTRAINT loyalty_reward_status_ck CHECK (status IN ('ACTIVE','PAUSED','DISABLED'))," +
+                " CONSTRAINT loyalty_reward_points_ck CHECK (points_cost > 0)," +
+                " CONSTRAINT loyalty_reward_amount_ck CHECK (discount_amount > 0 AND minimum_spend >= 0)" +
+                "); " +
+                "CREATE INDEX IF NOT EXISTS idx_loyalty_reward_branch_status ON " + SchemaName + ".loyalty_reward (branch_id, status, points_cost); " +
+                "INSERT INTO " + SchemaName + ".loyalty_reward (branch_id, reward_name, reward_type, points_cost, discount_amount, minimum_spend, status) " +
+                "SELECT NULL, '100 Points = 10 LE', 'FIXED_DISCOUNT', 100, 10, 0, 'ACTIVE' " +
+                "WHERE NOT EXISTS (SELECT 1 FROM " + SchemaName + ".loyalty_reward WHERE branch_id IS NULL AND reward_type = 'FIXED_DISCOUNT'); " +
+                "ALTER TABLE " + SchemaName + ".loyalty_reward OWNER to " + DBOwner + "; ";
+    }
+
+    static String SQLLoyaltyRedemption(String SchemaName, String DBOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + SchemaName + ".loyalty_redemption (" +
+                " redemption_id BIGSERIAL PRIMARY KEY," +
+                " loyalty_account_id BIGINT NOT NULL," +
+                " client_id INTEGER NOT NULL," +
+                " branch_id INTEGER NOT NULL," +
+                " reward_id BIGINT NOT NULL," +
+                " status VARCHAR(30) NOT NULL DEFAULT 'RESERVED'," +
+                " reserved_points INTEGER NOT NULL," +
+                " discount_amount NUMERIC(14,2) NOT NULL," +
+                " order_id INTEGER," +
+                " idempotency_key VARCHAR(200) NOT NULL," +
+                " created_by VARCHAR(120)," +
+                " reserved_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                " expires_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '15 minutes')," +
+                " confirmed_at TIMESTAMP," +
+                " released_at TIMESTAMP," +
+                " CONSTRAINT loyalty_redemption_account_fk FOREIGN KEY (loyalty_account_id) REFERENCES " + SchemaName + ".loyalty_account (loyalty_account_id) ON DELETE CASCADE," +
+                " CONSTRAINT loyalty_redemption_client_fk FOREIGN KEY (client_id) REFERENCES " + SchemaName + ".\"Client\" (c_id) ON DELETE CASCADE," +
+                " CONSTRAINT loyalty_redemption_reward_fk FOREIGN KEY (reward_id) REFERENCES " + SchemaName + ".loyalty_reward (reward_id)," +
+                " CONSTRAINT loyalty_redemption_status_ck CHECK (status IN ('RESERVED','CONFIRMED','RELEASED','EXPIRED','FAILED'))," +
+                " CONSTRAINT loyalty_redemption_values_ck CHECK (reserved_points > 0 AND discount_amount > 0)" +
+                "); " +
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_redemption_idempotency ON " + SchemaName + ".loyalty_redemption (idempotency_key); " +
+                "CREATE INDEX IF NOT EXISTS idx_loyalty_redemption_account_status ON " + SchemaName + ".loyalty_redemption (loyalty_account_id, status, reserved_at DESC); " +
+                "ALTER TABLE " + SchemaName + ".loyalty_redemption OWNER to " + DBOwner + "; ";
     }
 
     //Todo SQL PosCateJson
@@ -625,7 +769,14 @@ public class DbCompany {
                 " fx_pricing_enabled BOOLEAN NOT NULL DEFAULT FALSE," +
                 " replacement_cost_usd NUMERIC(19,4)," +
                 " replacement_cost_currency VARCHAR(3) NOT NULL DEFAULT 'USD'," +
+                " purchase_usd_rate NUMERIC(19,8)," +
                 " replacement_cost_updated_at TIMESTAMPTZ," +
+                " show_online BOOLEAN DEFAULT FALSE," +
+                " online_description TEXT," +
+                " online_image_url TEXT," +
+                " online_offer_price NUMERIC(19,4)," +
+                " online_sort_order INTEGER DEFAULT 0," +
+                " online_active BOOLEAN DEFAULT TRUE," +
                 " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
                 " updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
                 " CONSTRAINT inventory_product_price_order_ck CHECK (retail_price >= lowest_price AND lowest_price >= buying_price)," +
@@ -633,7 +784,8 @@ public class DbCompany {
                 " CONSTRAINT inventory_product_activation_ck CHECK (activation_period >= 0)," +
                 " CONSTRAINT inventory_product_battery_ck CHECK (battery_life >= 0)," +
                 " CONSTRAINT inventory_product_replacement_cost_ck CHECK (replacement_cost_usd IS NULL OR replacement_cost_usd > 0)," +
-                " CONSTRAINT inventory_product_replacement_currency_ck CHECK (replacement_cost_currency = UPPER(replacement_cost_currency) AND LENGTH(replacement_cost_currency) = 3)" +
+                " CONSTRAINT inventory_product_replacement_currency_ck CHECK (replacement_cost_currency = UPPER(replacement_cost_currency) AND LENGTH(replacement_cost_currency) = 3)," +
+                " CONSTRAINT inventory_product_purchase_usd_rate_ck CHECK (purchase_usd_rate IS NULL OR purchase_usd_rate > 0)" +
                 ")");
         statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_major ON " + schemaName + ".inventory_product (major, product_id DESC)");
         statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_product_name ON " + schemaName + ".inventory_product (product_name)");
@@ -832,6 +984,7 @@ public class DbCompany {
         statements.add("ALTER TABLE " + schemaName + ".inventory_product ADD CONSTRAINT inventory_product_uom_fk FOREIGN KEY (base_uom_code) REFERENCES " + schemaName + ".inventory_uom_unit (uom_code)");
         statements.add("ALTER TABLE " + schemaName + ".inventory_product ADD CONSTRAINT inventory_product_pricing_policy_fk FOREIGN KEY (pricing_policy_code) REFERENCES " + schemaName + ".inventory_pricing_policy (pricing_policy_code)");
         statements.add("SELECT public.create_inventory_fx_pricing_tables_for_tenant('" + schemaName + "')");
+        statements.add("SELECT public.create_inventory_product_import_tables_for_tenant('" + schemaName + "')");
 
         return statements;
     }

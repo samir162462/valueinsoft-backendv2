@@ -5,10 +5,10 @@ import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleR
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingsBatchUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.CreateBranchRequest;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
-import com.example.valueinsoftbackend.Service.BranchService;
-import com.example.valueinsoftbackend.Service.BranchSettingsService;
-import com.example.valueinsoftbackend.Service.CompanyService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.branch.BranchService;
+import com.example.valueinsoftbackend.Service.branch.BranchSettingsService;
+import com.example.valueinsoftbackend.Service.company.CompanyService;
 import com.example.valueinsoftbackend.Service.SubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;

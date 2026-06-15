@@ -3,7 +3,7 @@ package com.example.valueinsoftbackend.fx.service;
 import com.example.valueinsoftbackend.Config.FxDeepSeekProperties;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminAuditWriter;
 import com.example.valueinsoftbackend.Model.User;
-import com.example.valueinsoftbackend.Service.PlatformAuthorizationService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAuthorizationService;
 import com.example.valueinsoftbackend.fx.model.FxCompanyProcessingSummary;
 import com.example.valueinsoftbackend.fx.model.FxDeepSeekFetchResult;
 import com.example.valueinsoftbackend.fx.model.FxRatePayload;

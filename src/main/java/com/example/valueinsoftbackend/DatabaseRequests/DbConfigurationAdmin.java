@@ -78,6 +78,32 @@ public class DbConfigurationAdmin {
         return jdbcTemplate.query(sql, USER_SUMMARY_ROW_MAPPER, tenantId);
     }
 
+    public List<ConfigurationAdminUserSummary> getCompanyOwnerCandidates(int tenantId) {
+        TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
+        String sql = "SELECT DISTINCT u.id AS user_id, u.\"userName\" AS user_name, u.\"userEmail\" AS email, " +
+                "u.\"firstName\" AS first_name, u.\"lastName\" AS last_name, u.\"userPhone\" AS user_phone, " +
+                "u.\"userRole\" AS legacy_role, COALESCE(u.\"branchId\", 0) AS branch_id, b.\"branchName\" AS branch_name, " +
+                "u.\"creationTime\" AS creation_time " +
+                "FROM public.users u " +
+                "LEFT JOIN public.\"Branch\" b ON b.\"branchId\" = u.\"branchId\" " +
+                "WHERE b.\"companyId\" = ? " +
+                "OR (COALESCE(b.\"companyId\", 0) = 0 " +
+                "AND NOT EXISTS (SELECT 1 FROM public.\"Company\" c WHERE c.\"ownerId\" = u.id)) " +
+                "ORDER BY branch_name ASC NULLS FIRST, user_name ASC";
+        return jdbcTemplate.query(sql, USER_SUMMARY_ROW_MAPPER, tenantId);
+    }
+
+    public List<ConfigurationAdminUserSummary> getPlatformUsers() {
+        String sql = "SELECT u.id AS user_id, u.\"userName\" AS user_name, u.\"userEmail\" AS email, " +
+                "u.\"firstName\" AS first_name, u.\"lastName\" AS last_name, u.\"userPhone\" AS user_phone, " +
+                "u.\"userRole\" AS legacy_role, COALESCE(u.\"branchId\", 0) AS branch_id, b.\"branchName\" AS branch_name, " +
+                "u.\"creationTime\" AS creation_time " +
+                "FROM public.users u " +
+                "LEFT JOIN public.\"Branch\" b ON b.\"branchId\" = u.\"branchId\" " +
+                "ORDER BY u.\"userName\" ASC";
+        return jdbcTemplate.query(sql, USER_SUMMARY_ROW_MAPPER);
+    }
+
     public List<TenantRoleAssignmentConfig> getTenantRoleAssignments(int tenantId, Integer branchId) {
         TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
         String sql = "SELECT assignment_id, tenant_id, user_id, role_id, status, assigned_at, assigned_by_user_id, " +

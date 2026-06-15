@@ -7,7 +7,7 @@ package com.example.valueinsoftbackend.Controller.posController;
 import com.example.valueinsoftbackend.Model.Request.FixAreaSlotCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.FixAreaSlotUpdateRequest;
 import com.example.valueinsoftbackend.Model.Slots.SlotsFixArea;
-import com.example.valueinsoftbackend.Service.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.FixAreaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;

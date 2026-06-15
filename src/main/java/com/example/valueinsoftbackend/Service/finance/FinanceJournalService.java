@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceJournal;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
@@ -13,6 +13,7 @@ import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournal
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceManualJournalUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.Finance.FinanceJournalReversalRequest;
 import com.example.valueinsoftbackend.Model.User;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
