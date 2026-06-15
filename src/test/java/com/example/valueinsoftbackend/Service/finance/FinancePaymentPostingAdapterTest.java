@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Finance.FinanceAccountMappingItem;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
+import com.example.valueinsoftbackend.Service.finance.FinancePaymentPostingAdapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

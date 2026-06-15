@@ -1,4 +1,4 @@
-package com.example.valueinsoftbackend.Service;
+package com.example.valueinsoftbackend.Service.security;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
@@ -9,6 +9,7 @@ import com.example.valueinsoftbackend.Model.Configuration.EffectiveConfiguration
 import com.example.valueinsoftbackend.Model.Configuration.NavigationItemConfig;
 import com.example.valueinsoftbackend.Model.Configuration.ResolvedCapabilityConfig;
 import com.example.valueinsoftbackend.Model.User;
+import com.example.valueinsoftbackend.Service.EffectiveConfigurationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 

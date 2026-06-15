@@ -699,6 +699,8 @@ public class InventoryAuditService {
                 request.getSupplierId(),
                 request.getLowStockThreshold(),
                 request.getLowStockOnly(),
+                request.getExcludeSerializedFromLowStock(),
+                request.getIncludeOutOfStockInLowStock(),
                 request.getGroupBy(),
                 1,
                 pdfMaxRows,

@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingDefinitionConfig;
 import com.example.valueinsoftbackend.Model.BranchSettings.BranchSettingsBundleResponse;
 import com.example.valueinsoftbackend.Model.Request.BranchSettings.BranchSettingsBatchUpdateRequest;
+import com.example.valueinsoftbackend.Service.branch.BranchSettingsService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
