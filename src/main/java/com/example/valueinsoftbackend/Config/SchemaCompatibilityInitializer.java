@@ -40,7 +40,13 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
         Integer currentLength = jdbcTemplate.query(
                 "SELECT character_maximum_length FROM information_schema.columns " +
                         "WHERE table_schema = ? AND table_name = ? AND column_name = ?",
-                rs -> rs.next() ? (Integer) rs.getObject(1) : null,
+                rs -> {
+                    if (!rs.next()) {
+                        return null;
+                    }
+                    Object value = rs.getObject(1);
+                    return value instanceof Number number ? number.intValue() : null;
+                },
                 schemaName,
                 "users",
                 "userPassword"

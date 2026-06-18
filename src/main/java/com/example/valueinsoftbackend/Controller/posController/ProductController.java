@@ -3,20 +3,26 @@ package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.ProductFilter;
+import com.example.valueinsoftbackend.Model.Request.ProductCatalogExportRequest;
 import com.example.valueinsoftbackend.Model.Request.Inventory.ProductTrackingTypeChangeRequest;
 import com.example.valueinsoftbackend.Model.ResponseModel.ProductOperationResponse;
 import com.example.valueinsoftbackend.Model.Util.ProductUtilNames;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.inventory.InventoryTemplateMetadataService;
+import com.example.valueinsoftbackend.Service.product.ProductCatalogExportService;
 import com.example.valueinsoftbackend.Service.product.ProductService;
 import com.example.valueinsoftbackend.Service.SerializedInventoryService;
 import com.example.valueinsoftbackend.util.PageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
@@ -34,16 +40,19 @@ public class ProductController {
     private final InventoryTemplateMetadataService inventoryTemplateMetadataService;
     private final SerializedInventoryService serializedInventoryService;
     private final AuthorizationService authorizationService;
+    private final ProductCatalogExportService productCatalogExportService;
 
     @Autowired
     public ProductController(ProductService productService,
                              InventoryTemplateMetadataService inventoryTemplateMetadataService,
                              SerializedInventoryService serializedInventoryService,
-                             AuthorizationService authorizationService) {
+                             AuthorizationService authorizationService,
+                             ProductCatalogExportService productCatalogExportService) {
         this.productService = productService;
         this.inventoryTemplateMetadataService = inventoryTemplateMetadataService;
         this.serializedInventoryService = serializedInventoryService;
         this.authorizationService = authorizationService;
+        this.productCatalogExportService = productCatalogExportService;
     }
 
     @RequestMapping(path = "/search/{searchType}/{companyId}/{branchId}/{text}/{selectedPageNumber}", method = RequestMethod.GET)
@@ -109,6 +118,26 @@ public class ProductController {
             default:
                 throw new RuntimeException("Search Type is not Correct");
         }
+    }
+
+    @PostMapping("/export/excel")
+    public ResponseEntity<StreamingResponseBody> exportProductsExcel(@Valid @RequestBody ProductCatalogExportRequest request,
+                                                                     Principal principal) {
+        StreamingResponseBody body = outputStream -> productCatalogExportService.writeExcel(principal.getName(), request, outputStream);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(buildExportFileName(request, "xlsx")).build().toString())
+                .body(body);
+    }
+
+    @PostMapping("/export/pdf")
+    public ResponseEntity<StreamingResponseBody> exportProductsPdf(@Valid @RequestBody ProductCatalogExportRequest request,
+                                                                   Principal principal) {
+        StreamingResponseBody body = outputStream -> productCatalogExportService.writePdf(principal.getName(), request, outputStream);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(buildExportFileName(request, "pdf")).build().toString())
+                .body(body);
     }
 
     @GetMapping("{companyId}/{branchId}/{productId}")
@@ -213,5 +242,9 @@ public class ProductController {
                 "inventory.item.read"
         );
         return ResponseEntity.ok(inventoryTemplateMetadataService.getTemplates(companyId));
+    }
+
+    private String buildExportFileName(ProductCatalogExportRequest request, String extension) {
+        return "inventory-catalog-branch-" + request.getBranchId() + "." + extension;
     }
 }

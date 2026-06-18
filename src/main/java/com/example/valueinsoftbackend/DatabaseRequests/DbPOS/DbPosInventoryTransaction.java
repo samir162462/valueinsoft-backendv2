@@ -10,8 +10,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -233,20 +236,23 @@ public class DbPosInventoryTransaction {
     public AddInventoryTransactionResult insertInventoryTransaction(InventoryTransaction inventoryTransaction, int branchId, int companyId) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId) +
                 " (\"productId\", \"userName\", \"supplierId\", \"transactionType\", \"NumItems\", \"transTotal\", \"payType\", \"time\", \"RemainingAmount\") " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING \"transId\"";
-        Integer transactionId = jdbcTemplate.queryForObject(
-                sql,
-                Integer.class,
-                inventoryTransaction.getProductId(),
-                inventoryTransaction.getUserName(),
-                inventoryTransaction.getSupplierId(),
-                inventoryTransaction.getTransactionType(),
-                inventoryTransaction.getNumItems(),
-                inventoryTransaction.getTransTotal(),
-                inventoryTransaction.getPayType(),
-                new Timestamp(inventoryTransaction.getTime().getTime()),
-                inventoryTransaction.getRemainingAmount()
-        );
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, new String[]{"transId"});
+            ps.setInt(1, inventoryTransaction.getProductId());
+            ps.setString(2, inventoryTransaction.getUserName());
+            ps.setInt(3, inventoryTransaction.getSupplierId());
+            ps.setString(4, inventoryTransaction.getTransactionType());
+            ps.setInt(5, inventoryTransaction.getNumItems());
+            ps.setInt(6, inventoryTransaction.getTransTotal());
+            ps.setString(7, inventoryTransaction.getPayType());
+            ps.setTimestamp(8, new Timestamp(inventoryTransaction.getTime().getTime()));
+            ps.setInt(9, inventoryTransaction.getRemainingAmount());
+            return ps;
+        }, keyHolder);
+        Number key = keyHolder.getKey();
+        Integer transactionId = key == null ? null : key.intValue();
         return new AddInventoryTransactionResult(transactionId == null ? 0 : transactionId);
     }
 
@@ -312,7 +318,13 @@ public class DbPosInventoryTransaction {
 
     public int syncLatestLedgerMetadata(int companyId, int branchId, InventoryTransaction inventoryTransaction) {
         String sql = """
-                WITH latest_ledger AS (
+                UPDATE %s ledger
+                SET supplier_id = :supplierId,
+                    trans_total = :transTotal,
+                    pay_type = :payType,
+                    remaining_amount = :remainingAmount,
+                    actor_name = COALESCE(NULLIF(ledger.actor_name, ''), :userName)
+                WHERE ledger.stock_ledger_id = (
                     SELECT stock_ledger_id
                     FROM %s
                     WHERE branch_id = :branchId
@@ -321,18 +333,8 @@ public class DbPosInventoryTransaction {
                     ORDER BY created_at DESC, stock_ledger_id DESC
                     LIMIT 1
                 )
-                UPDATE %s ledger
-                SET supplier_id = :supplierId,
-                    trans_total = :transTotal,
-                    pay_type = :payType,
-                    remaining_amount = :remainingAmount,
-                    actor_name = COALESCE(NULLIF(ledger.actor_name, ''), :userName)
-                FROM latest_ledger
-                WHERE ledger.stock_ledger_id = latest_ledger.stock_ledger_id
-                """.formatted(
-                TenantSqlIdentifiers.inventoryStockLedgerTable(companyId),
-                TenantSqlIdentifiers.inventoryStockLedgerTable(companyId)
-        );
+                """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId),
+                TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
 
         return namedParameterJdbcTemplate.update(
                 sql,

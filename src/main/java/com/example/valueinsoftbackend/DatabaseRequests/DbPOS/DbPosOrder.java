@@ -16,6 +16,8 @@ import com.google.gson.reflect.TypeToken;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -84,22 +86,31 @@ public class DbPosOrder {
 
         String sql = "INSERT INTO " + orderTable + " (" +
                 "\"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\", \"clientId\", \"orderIncome\", \"orderBouncedBack\", shift_id) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING \"orderId\"";
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-        Integer orderId = jdbcTemplate.queryForObject(
-                sql,
-                Integer.class,
-                orderTime,
-                order.getClientName(),
-                order.getOrderType(),
-                order.getOrderDiscount(),
-                order.getOrderTotal(),
-                order.getSalesUser(),
-                order.getClientId(),
-                order.getOrderIncome(),
-                0,
-                shiftId
-        );
+        KeyHolder orderKeyHolder = new GeneratedKeyHolder();
+        Integer resolvedShiftId = shiftId;
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, new String[]{"orderId"});
+            ps.setTimestamp(1, orderTime);
+            ps.setString(2, order.getClientName());
+            ps.setString(3, order.getOrderType());
+            ps.setInt(4, order.getOrderDiscount());
+            ps.setInt(5, order.getOrderTotal());
+            ps.setString(6, order.getSalesUser());
+            ps.setInt(7, order.getClientId());
+            ps.setInt(8, order.getOrderIncome());
+            ps.setInt(9, 0);
+            if (resolvedShiftId == null) {
+                ps.setObject(10, null);
+            } else {
+                ps.setInt(10, resolvedShiftId);
+            }
+            return ps;
+        }, orderKeyHolder);
+
+        Number orderKey = orderKeyHolder.getKey();
+        Integer orderId = orderKey == null ? null : orderKey.intValue();
 
         if (orderId == null) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ORDER_INSERT_FAILED", "Order was not saved");
@@ -328,20 +339,24 @@ public class DbPosOrder {
         ArrayList<OrderDetails> details = order.getOrderDetails();
         String sql = "INSERT INTO " + TenantSqlIdentifiers.orderDetailTable(companyId, order.getBranchId()) +
                 " (\"itemId\", \"itemName\", quantity, price, total, \"orderId\", \"productId\", \"bouncedBack\") " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, 0) RETURNING \"orderDetailsId\"";
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 0)";
 
         for (OrderDetails detail : details) {
-            Integer orderDetailsId = jdbcTemplate.queryForObject(
-                    sql,
-                    Integer.class,
-                    detail.getItemId(),
-                    detail.getItemName(),
-                    detail.getQuantity(),
-                    detail.getPrice(),
-                    detail.getTotal(),
-                    orderId,
-                    detail.getProductId()
-            );
+            KeyHolder detailKeyHolder = new GeneratedKeyHolder();
+            jdbcTemplate.update(connection -> {
+                PreparedStatement ps = connection.prepareStatement(sql, new String[]{"orderDetailsId"});
+                ps.setInt(1, detail.getItemId());
+                ps.setString(2, detail.getItemName());
+                ps.setInt(3, detail.getQuantity());
+                ps.setInt(4, detail.getPrice());
+                ps.setInt(5, detail.getTotal());
+                ps.setInt(6, orderId);
+                ps.setInt(7, detail.getProductId());
+                return ps;
+            }, detailKeyHolder);
+
+            Number detailKey = detailKeyHolder.getKey();
+            Integer orderDetailsId = detailKey == null ? null : detailKey.intValue();
             if (orderDetailsId == null) {
                 throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ORDER_DETAIL_INSERT_FAILED", "Order detail was not saved");
             }
