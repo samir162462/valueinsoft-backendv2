@@ -86,15 +86,10 @@ public class PosSalePostingService {
         if (loyaltyService == null) {
             return;
         }
-        try {
-            LoyaltyRecordedEarn earned = loyaltyService.recordOrderEarn(companyId, order, result);
-            if (earned.inserted() && earned.pointsEarned() > 0) {
-                log.info("Awarded {} loyalty points for company {} branch {} order {} client {}",
-                        earned.pointsEarned(), companyId, order.getBranchId(), result.orderId(), order.getClientId());
-            }
-        } catch (RuntimeException exception) {
-            log.warn("POS order {} saved for company {} branch {}, but loyalty points were not recorded: {}",
-                    result.orderId(), companyId, order.getBranchId(), exception.getMessage());
+        LoyaltyRecordedEarn earned = loyaltyService.recordOrderEarn(companyId, order, result);
+        if (earned.inserted() && earned.pointsEarned() > 0) {
+            log.info("Awarded {} loyalty points for company {} branch {} order {} client {}",
+                    earned.pointsEarned(), companyId, order.getBranchId(), result.orderId(), order.getClientId());
         }
     }
 

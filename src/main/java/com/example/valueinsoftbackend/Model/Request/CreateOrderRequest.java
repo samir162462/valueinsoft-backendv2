@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import java.math.BigDecimal;
 import java.util.List;
 
 public record CreateOrderRequest(
@@ -42,7 +43,19 @@ public record CreateOrderRequest(
         List<OrderItemRequest> orderDetails,
 
         @PositiveOrZero(message = "loyaltyRedemptionId must be zero or greater")
-        Long loyaltyRedemptionId
+        Long loyaltyRedemptionId,
+
+        @PositiveOrZero(message = "loyaltyPointsRedeemed must be zero or greater")
+        Integer loyaltyPointsRedeemed,
+
+        @PositiveOrZero(message = "loyaltyPointsEarned must be zero or greater")
+        Integer loyaltyPointsEarned,
+
+        @PositiveOrZero(message = "loyaltyDiscountAmount must be zero or greater")
+        BigDecimal loyaltyDiscountAmount,
+
+        @PositiveOrZero(message = "loyaltyNetAmount must be zero or greater")
+        BigDecimal loyaltyNetAmount
 ) {
     public CreateOrderRequest {
         if (orderDetails == null) {

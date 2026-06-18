@@ -12,6 +12,7 @@ import com.example.valueinsoftbackend.Model.Request.BounceBackOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.CreateOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.OrderItemRequest;
 import com.example.valueinsoftbackend.Model.Request.OrderPeriodRequest;
+import com.example.valueinsoftbackend.loyalty.dto.LoyaltyRecordedEarn;
 import com.example.valueinsoftbackend.loyalty.dto.LoyaltyReversalResult;
 import com.example.valueinsoftbackend.loyalty.service.LoyaltyService;
 import com.example.valueinsoftbackend.util.RequestTimestampParser;
@@ -59,6 +60,8 @@ public class OrderService {
             return posSalePostingService.postSale(companyId, order).orderId();
         }
         DbPosOrder.AddOrderResult result = dbPosOrder.addOrder(order, companyId);
+        confirmLoyaltyRedemption(companyId, order, result);
+        recordLoyaltyEarn(companyId, order, result);
 
         // Resolve shiftId: Prefer the result from addOrder, fallback to searching for
         // active shift
@@ -94,6 +97,24 @@ public class OrderService {
         log.info("Saved order {} for company {} branch {} with {} items", result.orderId(), companyId,
                 order.getBranchId(), order.getOrderDetails().size());
         return result.orderId();
+    }
+
+    private void confirmLoyaltyRedemption(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+        if (loyaltyService == null || order.getLoyaltyRedemptionId() == null || order.getLoyaltyRedemptionId() <= 0) {
+            return;
+        }
+        loyaltyService.confirmOrderRedemption(companyId, order, result);
+    }
+
+    private void recordLoyaltyEarn(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+        if (loyaltyService == null) {
+            return;
+        }
+        LoyaltyRecordedEarn earned = loyaltyService.recordOrderEarn(companyId, order, result);
+        if (earned.inserted() && earned.pointsEarned() > 0) {
+            log.info("Awarded {} loyalty points for company {} branch {} order {} client {}",
+                    earned.pointsEarned(), companyId, order.getBranchId(), result.orderId(), order.getClientId());
+        }
     }
 
     private void enqueueFinancePosSaleAfterCommit(int companyId, Order order, DbPosOrder.AddOrderResult result) {
@@ -374,6 +395,10 @@ public class OrderService {
                 0,
                 details);
         order.setLoyaltyRedemptionId(request.loyaltyRedemptionId());
+        order.setLoyaltyPointsRedeemed(request.loyaltyPointsRedeemed() == null ? 0 : request.loyaltyPointsRedeemed());
+        order.setLoyaltyPointsEarned(request.loyaltyPointsEarned() == null ? 0 : request.loyaltyPointsEarned());
+        order.setLoyaltyDiscountAmount(request.loyaltyDiscountAmount());
+        order.setLoyaltyNetAmount(request.loyaltyNetAmount());
         return order;
     }
 }

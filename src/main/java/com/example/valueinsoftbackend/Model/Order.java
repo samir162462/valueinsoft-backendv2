@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Model;
 
 import java.sql.Timestamp;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 
 public class Order {
@@ -17,6 +18,10 @@ public class Order {
     int totalBouncedBack;
     Integer requestedShiftId;
     Long loyaltyRedemptionId;
+    int loyaltyPointsRedeemed;
+    int loyaltyPointsEarned;
+    BigDecimal loyaltyDiscountAmount;
+    BigDecimal loyaltyNetAmount;
     ArrayList<OrderDetails> orderDetails;
 
 
@@ -36,6 +41,10 @@ public class Order {
         this.totalBouncedBack = totalBouncedBack;
         this.requestedShiftId = null;
         this.loyaltyRedemptionId = null;
+        this.loyaltyPointsRedeemed = 0;
+        this.loyaltyPointsEarned = 0;
+        this.loyaltyDiscountAmount = BigDecimal.ZERO;
+        this.loyaltyNetAmount = null;
         this.orderDetails = orderDetails;
     }
 
@@ -141,6 +150,38 @@ public class Order {
 
     public void setLoyaltyRedemptionId(Long loyaltyRedemptionId) {
         this.loyaltyRedemptionId = loyaltyRedemptionId;
+    }
+
+    public int getLoyaltyPointsRedeemed() {
+        return loyaltyPointsRedeemed;
+    }
+
+    public void setLoyaltyPointsRedeemed(int loyaltyPointsRedeemed) {
+        this.loyaltyPointsRedeemed = loyaltyPointsRedeemed;
+    }
+
+    public int getLoyaltyPointsEarned() {
+        return loyaltyPointsEarned;
+    }
+
+    public void setLoyaltyPointsEarned(int loyaltyPointsEarned) {
+        this.loyaltyPointsEarned = loyaltyPointsEarned;
+    }
+
+    public BigDecimal getLoyaltyDiscountAmount() {
+        return loyaltyDiscountAmount;
+    }
+
+    public void setLoyaltyDiscountAmount(BigDecimal loyaltyDiscountAmount) {
+        this.loyaltyDiscountAmount = loyaltyDiscountAmount;
+    }
+
+    public BigDecimal getLoyaltyNetAmount() {
+        return loyaltyNetAmount;
+    }
+
+    public void setLoyaltyNetAmount(BigDecimal loyaltyNetAmount) {
+        this.loyaltyNetAmount = loyaltyNetAmount;
     }
 
     public ArrayList<OrderDetails> getOrderDetails() {

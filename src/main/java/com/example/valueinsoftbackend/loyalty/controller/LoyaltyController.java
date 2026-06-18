@@ -113,7 +113,7 @@ public class LoyaltyController {
                 companyId,
                 branchId,
                 "pos.sale.create");
-        return loyaltyService.releaseRedemption(companyId, redemptionId, principal.getName());
+        return loyaltyService.releaseRedemption(companyId, branchId, redemptionId, principal.getName());
     }
 
     @GetMapping("/config")

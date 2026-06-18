@@ -168,18 +168,39 @@ public class LoyaltyRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    public List<LoyaltyLedgerItem> listLedgerByClient(int companyId, int clientId, int limit) {
+    public List<LoyaltyLedgerItem> listLedgerByClient(int companyId, int branchId, int clientId, int limit) {
         ensureTables(companyId);
         String sql = """
-                SELECT ledger_id, loyalty_account_id, client_id, branch_id, movement_type, points_delta,
-                       monetary_value, source_type, source_id, order_id, order_detail_id, note, created_by, created_at
-                FROM %s
-                WHERE client_id = :clientId
-                ORDER BY created_at DESC, ledger_id DESC
+                SELECT ledger.ledger_id,
+                       ledger.loyalty_account_id,
+                       ledger.client_id,
+                       ledger.branch_id,
+                       ledger.movement_type,
+                       CASE
+                           WHEN ledger.movement_type = 'CONFIRM_REDEMPTION' THEN -COALESCE(redemption.reserved_points, 0)
+                           WHEN ledger.movement_type IN ('RESERVE', 'RELEASE_RESERVATION') THEN 0
+                           ELSE ledger.points_delta
+                       END AS points_delta,
+                       ledger.monetary_value,
+                       ledger.source_type,
+                       ledger.source_id,
+                       ledger.order_id,
+                       ledger.order_detail_id,
+                       ledger.note,
+                       ledger.created_by,
+                       ledger.created_at
+                FROM %s ledger
+                LEFT JOIN %s redemption
+                  ON ledger.source_type = 'LOYALTY_REDEMPTION'
+                 AND ledger.source_id = redemption.redemption_id::text
+                WHERE ledger.client_id = :clientId
+                  AND ledger.branch_id = :branchId
+                ORDER BY ledger.created_at DESC, ledger.ledger_id DESC
                 LIMIT :limit
-                """.formatted(ledgerTable(companyId));
+                """.formatted(ledgerTable(companyId), redemptionTable(companyId));
         return jdbcTemplate.query(sql, new MapSqlParameterSource()
                         .addValue("clientId", clientId)
+                        .addValue("branchId", branchId)
                         .addValue("limit", Math.max(1, Math.min(limit, 200))),
                 (rs, rowNum) -> new LoyaltyLedgerItem(
                         rs.getLong("ledger_id"),
@@ -264,6 +285,8 @@ public class LoyaltyRepository {
                                                        int clientId,
                                                        Long rewardId,
                                                        BigDecimal orderNetAmount,
+                                                       Integer requestedPoints,
+                                                       BigDecimal requestedDiscountAmount,
                                                        String actor) {
         ensureTables(companyId);
         ensureAccount(companyId, branchId, clientId);
@@ -272,16 +295,15 @@ public class LoyaltyRepository {
             throw new IllegalStateException("Loyalty account was not found.");
         }
 
-        List<LoyaltyRewardResponse> rewards = listRewards(companyId, branchId, clientId, orderNetAmount).stream()
-                .filter(LoyaltyRewardResponse::eligible)
-                .filter(reward -> rewardId == null || reward.rewardId() == rewardId)
-                .sorted(Comparator.comparingInt(LoyaltyRewardResponse::pointsCost).reversed())
-                .toList();
-        if (rewards.isEmpty()) {
-            throw new IllegalStateException("No eligible loyalty reward is available.");
-        }
-
-        LoyaltyRewardResponse reward = rewards.get(0);
+        LoyaltyRewardResponse reward = resolveRewardForReservation(
+                companyId,
+                branchId,
+                clientId,
+                rewardId,
+                orderNetAmount,
+                account,
+                requestedPoints,
+                requestedDiscountAmount);
         String idempotencyKey = "LOYALTY_REDEMPTION:" + companyId + ":" + branchId + ":" + clientId + ":" + UUID.randomUUID();
         String redemptionSql = """
                 INSERT INTO %s (
@@ -350,8 +372,104 @@ public class LoyaltyRepository {
                 "Loyalty reward reserved.");
     }
 
+    private LoyaltyRewardResponse resolveRewardForReservation(int companyId,
+                                                              int branchId,
+                                                              int clientId,
+                                                              Long rewardId,
+                                                              BigDecimal orderNetAmount,
+                                                              AccountLock account,
+                                                              Integer requestedPoints,
+                                                              BigDecimal requestedDiscountAmount) {
+        boolean hasCustomPoints = requestedPoints != null && requestedPoints > 0;
+        boolean hasCustomDiscount = requestedDiscountAmount != null && requestedDiscountAmount.signum() > 0;
+        if (hasCustomPoints || hasCustomDiscount) {
+            if (!hasCustomPoints || !hasCustomDiscount) {
+                throw new IllegalStateException("Both points and discount amount are required for custom redemption.");
+            }
+            BigDecimal discountAmount = requestedDiscountAmount.setScale(2, RoundingMode.UNNECESSARY);
+            if (requestedPoints % 100 != 0) {
+                throw new IllegalStateException("Loyalty points must be redeemed in 100 point blocks.");
+            }
+            if (discountAmount.remainder(BigDecimal.TEN).compareTo(BigDecimal.ZERO) != 0) {
+                throw new IllegalStateException("Loyalty discount must be rounded down to 10 EGP blocks.");
+            }
+            if (BigDecimal.valueOf(requestedPoints).compareTo(discountAmount.multiply(BigDecimal.TEN)) != 0) {
+                throw new IllegalStateException("Loyalty redemption must use 100 points for every 10 EGP discount.");
+            }
+            BigDecimal net = orderNetAmount == null ? BigDecimal.ZERO : orderNetAmount.max(BigDecimal.ZERO);
+            if (net.compareTo(discountAmount) < 0) {
+                throw new IllegalStateException("Reward discount is greater than order total.");
+            }
+            if (account.availablePoints() < requestedPoints) {
+                throw new IllegalStateException("Customer does not have enough loyalty points.");
+            }
+            long generatedRewardId = findOrCreateExactReward(companyId, branchId, requestedPoints, discountAmount);
+            String rewardName = "Redeem max: " + requestedPoints + " pts = " + discountAmount.stripTrailingZeros().toPlainString() + " EGP";
+            return new LoyaltyRewardResponse(
+                    generatedRewardId,
+                    rewardName,
+                    "FIXED_DISCOUNT",
+                    requestedPoints,
+                    discountAmount,
+                    BigDecimal.ZERO,
+                    true,
+                    null);
+        }
+
+        List<LoyaltyRewardResponse> rewards = listRewards(companyId, branchId, clientId, orderNetAmount).stream()
+                .filter(LoyaltyRewardResponse::eligible)
+                .filter(reward -> rewardId == null || reward.rewardId() == rewardId)
+                .sorted(Comparator.comparingInt(LoyaltyRewardResponse::pointsCost).reversed())
+                .toList();
+        if (rewards.isEmpty()) {
+            throw new IllegalStateException("No eligible loyalty reward is available.");
+        }
+        return rewards.get(0);
+    }
+
+    private long findOrCreateExactReward(int companyId, int branchId, int pointsCost, BigDecimal discountAmount) {
+        String selectSql = """
+                SELECT reward_id
+                FROM %s
+                WHERE branch_id = :branchId
+                  AND reward_type = 'FIXED_DISCOUNT'
+                  AND points_cost = :pointsCost
+                  AND discount_amount = :discountAmount
+                  AND status = 'ACTIVE'
+                ORDER BY reward_id ASC
+                LIMIT 1
+                """.formatted(rewardTable(companyId));
+        List<Long> existing = jdbcTemplate.query(
+                selectSql,
+                new MapSqlParameterSource()
+                        .addValue("branchId", branchId)
+                        .addValue("pointsCost", pointsCost)
+                        .addValue("discountAmount", discountAmount),
+                (rs, rowNum) -> rs.getLong("reward_id"));
+        if (!existing.isEmpty()) {
+            return existing.get(0);
+        }
+
+        String rewardName = "Redeem max: " + pointsCost + " pts = " + discountAmount.stripTrailingZeros().toPlainString() + " EGP";
+        String insertSql = """
+                INSERT INTO %s (branch_id, reward_name, reward_type, points_cost, discount_amount, minimum_spend, status, created_at, updated_at)
+                VALUES (:branchId, :rewardName, 'FIXED_DISCOUNT', :pointsCost, :discountAmount, 0, 'ACTIVE', NOW(), NOW())
+                RETURNING reward_id
+                """.formatted(rewardTable(companyId));
+        Long rewardId = jdbcTemplate.queryForObject(insertSql, new MapSqlParameterSource()
+                .addValue("branchId", branchId)
+                .addValue("rewardName", rewardName)
+                .addValue("pointsCost", pointsCost)
+                .addValue("discountAmount", discountAmount), Long.class);
+        if (rewardId == null) {
+            throw new IllegalStateException("Loyalty reward was not created.");
+        }
+        return rewardId;
+    }
+
     public LoyaltyRedemptionResponse confirmRedemption(int companyId,
                                                        int branchId,
+                                                       int clientId,
                                                        long redemptionId,
                                                        int orderId,
                                                        String actor) {
@@ -359,6 +477,12 @@ public class LoyaltyRepository {
         RedemptionLock redemption = lockRedemption(companyId, redemptionId);
         if (redemption == null) {
             throw new IllegalStateException("Loyalty redemption was not found.");
+        }
+        if (redemption.branchId() != branchId) {
+            throw new IllegalStateException("Loyalty redemption belongs to a different branch.");
+        }
+        if (clientId <= 0 || redemption.clientId() != clientId) {
+            throw new IllegalStateException("Loyalty redemption belongs to a different customer.");
         }
         if (!"RESERVED".equals(redemption.status())) {
             return redemption.toResponse("Loyalty redemption is already " + redemption.status().toLowerCase() + ".");
@@ -413,11 +537,14 @@ public class LoyaltyRepository {
         return redemption.withStatus("CONFIRMED").toResponse("Loyalty reward confirmed.");
     }
 
-    public LoyaltyRedemptionResponse releaseRedemption(int companyId, long redemptionId, String actor) {
+    public LoyaltyRedemptionResponse releaseRedemption(int companyId, int branchId, long redemptionId, String actor) {
         ensureTables(companyId);
         RedemptionLock redemption = lockRedemption(companyId, redemptionId);
         if (redemption == null) {
             throw new IllegalStateException("Loyalty redemption was not found.");
+        }
+        if (redemption.branchId() != branchId) {
+            throw new IllegalStateException("Loyalty redemption belongs to a different branch.");
         }
         if (!"RESERVED".equals(redemption.status())) {
             return redemption.toResponse("Loyalty redemption is already " + redemption.status().toLowerCase() + ".");

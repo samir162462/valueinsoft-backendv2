@@ -72,7 +72,7 @@ public class LoyaltyService {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         TenantSqlIdentifiers.requirePositive(clientId, "clientId");
-        return loyaltyRepository.listLedgerByClient(companyId, clientId, limit);
+        return loyaltyRepository.listLedgerByClient(companyId, branchId, clientId, limit);
     }
 
     public List<LoyaltyRewardResponse> eligibleRewards(int companyId, LoyaltyRedemptionRequest request) {
@@ -94,6 +94,8 @@ public class LoyaltyService {
                     request.clientId(),
                     request.rewardId(),
                     money(request.orderNetAmount()),
+                    request.pointsRedeemed(),
+                    request.discountAmount(),
                     actor);
         } catch (IllegalStateException exception) {
             throw new ApiException(HttpStatus.CONFLICT, "LOYALTY_REDEMPTION_NOT_AVAILABLE", exception.getMessage());
@@ -101,10 +103,11 @@ public class LoyaltyService {
     }
 
     @Transactional
-    public LoyaltyRedemptionResponse releaseRedemption(int companyId, long redemptionId, String actor) {
+    public LoyaltyRedemptionResponse releaseRedemption(int companyId, int branchId, long redemptionId, String actor) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         try {
-            return loyaltyRepository.releaseRedemption(companyId, redemptionId, actor);
+            return loyaltyRepository.releaseRedemption(companyId, branchId, redemptionId, actor);
         } catch (IllegalStateException exception) {
             throw new ApiException(HttpStatus.NOT_FOUND, "LOYALTY_REDEMPTION_NOT_FOUND", exception.getMessage());
         }
@@ -119,6 +122,7 @@ public class LoyaltyService {
             return loyaltyRepository.confirmRedemption(
                     companyId,
                     order.getBranchId(),
+                    order.getClientId(),
                     order.getLoyaltyRedemptionId(),
                     result.orderId(),
                     order.getSalesUser());
@@ -155,12 +159,16 @@ public class LoyaltyService {
         }
 
         LoyaltyProgramConfig config = loyaltyRepository.getEffectiveConfig(companyId, order.getBranchId());
-        BigDecimal netAmount = BigDecimal.valueOf(order.getOrderTotal());
-        if (!config.active() || netAmount.compareTo(config.minEligibleAmount()) < 0) {
+        BigDecimal netAmount = order.getLoyaltyNetAmount() == null
+                ? BigDecimal.valueOf(order.getOrderTotal())
+                : order.getLoyaltyNetAmount().max(BigDecimal.ZERO);
+
+        int requestedPoints = Math.max(0, order.getLoyaltyPointsEarned());
+        if (requestedPoints <= 0 && (!config.active() || netAmount.compareTo(config.minEligibleAmount()) < 0)) {
             return new LoyaltyRecordedEarn(0, order.getClientId(), 0, false);
         }
 
-        int points = calculateEarnPoints(config, netAmount);
+        int points = requestedPoints > 0 ? requestedPoints : calculateEarnPoints(config, netAmount);
         if (points <= 0) {
             return new LoyaltyRecordedEarn(0, order.getClientId(), 0, false);
         }
