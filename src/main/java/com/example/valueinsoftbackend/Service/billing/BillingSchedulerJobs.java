@@ -2,11 +2,15 @@ package com.example.valueinsoftbackend.Service.billing;
 
 import com.example.valueinsoftbackend.Config.BillingProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
+@ConditionalOnExpression(
+        "'${vls.billing.renewal-scheduler-enabled:false}' == 'true' || '${vls.billing.dunning-scheduler-enabled:false}' == 'true'"
+)
 public class BillingSchedulerJobs {
 
     private final BillingSchedulerService billingSchedulerService;

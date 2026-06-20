@@ -274,7 +274,7 @@ public class PlatformAdminMetricsService {
         boolean stale = latestSnapshotDate == null || (snapshotLagDays != null && snapshotLagDays > staleThresholdDays);
 
         return new PlatformMetricsStatusResponse(
-                environment.getProperty("platform.admin.metrics.scheduler.enabled", Boolean.class, true),
+                environment.getProperty("platform.admin.metrics.scheduler.enabled", Boolean.class, false),
                 environment.getProperty("platform.admin.metrics.scheduler.cron", "0 30 2 * * *"),
                 environment.getProperty("platform.admin.metrics.scheduler.zone", "Africa/Cairo"),
                 latestRefreshEvent == null ? null : latestRefreshEvent.getCreatedAt(),

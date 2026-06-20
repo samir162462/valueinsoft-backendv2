@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -17,8 +16,7 @@ import java.util.List;
 import java.util.Date;
 
 @Component
-@EnableScheduling
-@ConditionalOnProperty(name = "Scheduling.enable" , matchIfMissing = true)
+@ConditionalOnProperty(name = "Scheduling.enable", havingValue = "true")
 @Slf4j
 public class DbSqlCloseIdles {
 

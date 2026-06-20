@@ -11,8 +11,7 @@ import java.time.LocalDate;
 @Slf4j
 @ConditionalOnProperty(
         name = "platform.admin.metrics.scheduler.enabled",
-        havingValue = "true",
-        matchIfMissing = true
+        havingValue = "true"
 )
 public class PlatformAdminMetricsScheduler {
 

@@ -6,12 +6,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.util.ArrayList;
-import java.util.Date;
 
 @SpringBootApplication
+@EnableScheduling
 @Slf4j
 public class ValueinsoftBackendApplication {
 
@@ -24,10 +24,4 @@ public class ValueinsoftBackendApplication {
         log.info("Loaded {} branches during startup", branchArrayList.size());
     }
 
-
-
-    @Scheduled(cron = "0 5 * * * *", zone = "Europe/Istanbul")
-    public void doScheduledWork() {
-        log.debug("Scheduled heartbeat at {}", new Date());
-    }
 }

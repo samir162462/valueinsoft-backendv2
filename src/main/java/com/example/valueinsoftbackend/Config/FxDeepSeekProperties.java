@@ -155,7 +155,7 @@ public class FxDeepSeekProperties {
     }
 
     public static class Schedule {
-        private boolean enabled = true;
+        private boolean enabled = false;
         private String cron = "0 0 2 * * *";
         private String timeZone = "Africa/Cairo";
 
@@ -185,7 +185,7 @@ public class FxDeepSeekProperties {
     }
 
     public static class Initialization {
-        private boolean enabled = true;
+        private boolean enabled = false;
 
         public boolean isEnabled() {
             return enabled;

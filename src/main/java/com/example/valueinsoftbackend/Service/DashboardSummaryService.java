@@ -11,6 +11,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PreDestroy;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -21,6 +22,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.example.valueinsoftbackend.Service.DashboardProviders.DashboardChartProvider;
 import com.example.valueinsoftbackend.Service.DashboardProviders.DashboardInventoryProvider;
@@ -32,13 +34,26 @@ import com.example.valueinsoftbackend.Service.DashboardProviders.DashboardProfit
 @Slf4j
 public class DashboardSummaryService {
 
+    private static final int DASHBOARD_EXECUTOR_THREADS = Math.min(
+            4,
+            Math.max(2, Runtime.getRuntime().availableProcessors())
+    );
+    private static final AtomicInteger DASHBOARD_THREAD_SEQUENCE = new AtomicInteger(1);
+
     private final DbBranch dbBranch;
     private final DashboardKpiProvider kpiProvider;
     private final DashboardChartProvider chartProvider;
     private final DashboardTopPerformerProvider topPerformerProvider;
     private final DashboardInventoryProvider inventoryProvider;
     private final DashboardProfitProvider profitProvider;
-    private final ExecutorService dashboardExecutor = Executors.newFixedThreadPool(10); // Bounded pool
+    private final ExecutorService dashboardExecutor = Executors.newFixedThreadPool(
+            DASHBOARD_EXECUTOR_THREADS,
+            runnable -> {
+                Thread thread = new Thread(runnable, "dashboard-summary-" + DASHBOARD_THREAD_SEQUENCE.getAndIncrement());
+                thread.setDaemon(true);
+                return thread;
+            }
+    );
 
     public DashboardSummaryService(DbBranch dbBranch, 
                                    DashboardKpiProvider kpiProvider,
@@ -52,6 +67,11 @@ public class DashboardSummaryService {
         this.topPerformerProvider = topPerformerProvider;
         this.inventoryProvider = inventoryProvider;
         this.profitProvider = profitProvider;
+    }
+
+    @PreDestroy
+    public void shutdownDashboardExecutor() {
+        dashboardExecutor.shutdownNow();
     }
 
     @Cacheable(

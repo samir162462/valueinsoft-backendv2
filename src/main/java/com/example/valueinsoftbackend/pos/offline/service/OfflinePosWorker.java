@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.pos.offline.model.PosSyncBatchModel;
 import com.example.valueinsoftbackend.pos.offline.repository.PosSyncBatchRepository;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ import java.util.List;
  */
 @Service
 @Slf4j
+@ConditionalOnProperty(name = "valueinsoft.pos.offline.worker.enabled", havingValue = "true")
 public class OfflinePosWorker {
 
     private final OfflinePosWorkerProperties properties;
