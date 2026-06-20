@@ -54,6 +54,12 @@ public class AuthorizationService {
                                              Integer tenantId,
                                              Integer branchId,
                                              String capabilityKey) {
+        if (isOwnerPrincipal(authenticatedName)) {
+            log.info("Capability Check | User: {} | Key: {} | Branch: {} | Allowed: true | Reason: owner_role",
+                    authenticatedName, capabilityKey, branchId);
+            return true;
+        }
+
         ArrayList<ResolvedCapabilityConfig> capabilities =
                 authenticatedEffectiveConfigurationService.getEffectiveCapabilitiesForAuthenticatedUser(
                         authenticatedName,
@@ -99,5 +105,14 @@ public class AuthorizationService {
             return value.split(" : ")[0];
         }
         return value == null ? "" : value.trim();
+    }
+
+    private boolean isOwnerPrincipal(String value) {
+        if (value == null || !value.contains(" : ")) {
+            return false;
+        }
+
+        String[] parts = value.split(" : ", 2);
+        return parts.length == 2 && "Owner".equalsIgnoreCase(parts[1].trim());
     }
 }

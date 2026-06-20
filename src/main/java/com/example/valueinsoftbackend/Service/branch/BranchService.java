@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Service.branch;
 
 import com.example.valueinsoftbackend.Service.BusinessPackageCatalogService;
+import com.example.valueinsoftbackend.Service.finance.FinanceDefaultAccountsService;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
@@ -21,10 +22,14 @@ public class BranchService {
 
     private final DbBranch dbBranch;
     private final BusinessPackageCatalogService businessPackageCatalogService;
+    private final FinanceDefaultAccountsService financeDefaultAccountsService;
 
-    public BranchService(DbBranch dbBranch, BusinessPackageCatalogService businessPackageCatalogService) {
+    public BranchService(DbBranch dbBranch,
+                         BusinessPackageCatalogService businessPackageCatalogService,
+                         FinanceDefaultAccountsService financeDefaultAccountsService) {
         this.dbBranch = dbBranch;
         this.businessPackageCatalogService = businessPackageCatalogService;
+        this.financeDefaultAccountsService = financeDefaultAccountsService;
     }
 
     @Transactional
@@ -55,6 +60,7 @@ public class BranchService {
                 companyId
         );
         businessPackageCatalogService.provisionBranchCategoriesIfMissing(companyId, branchId);
+        financeDefaultAccountsService.provisionDefaultAccountsIfMissing(companyId, branchId);
         log.info("Created branch {} for company {}", branchId, companyId);
         return branchId;
     }

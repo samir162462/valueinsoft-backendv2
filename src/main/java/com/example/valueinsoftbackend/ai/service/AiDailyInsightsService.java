@@ -213,10 +213,23 @@ public class AiDailyInsightsService {
             request.setDate(weekStart);
             request.setPeriod("WEEK");
             DashboardSummaryResponse summary = dashboardSummaryService.getBranchSummary(Math.toIntExact(context.companyId()), request);
+            JsonObject weeklyMetrics = new JsonObject();
+            weeklyMetrics.addProperty("salesRevenue", weeklyRevenue(summary));
+            weeklyMetrics.addProperty("grossProfit", weeklyGrossProfit(summary));
+            weeklyMetrics.addProperty("netProfit", weeklyNetProfit(summary));
+            weeklyMetrics.addProperty("marginPct", weeklyMargin(summary));
+            weeklyMetrics.addProperty("periodStart", weekStart);
+            JsonObject evidencePayload = new JsonObject();
+            evidencePayload.add("weeklyMetrics", weeklyMetrics);
+            evidencePayload.add("summary", gson.toJsonTree(summary));
+            evidencePayload.addProperty(
+                    "instruction",
+                    "Use weeklyMetrics for weekly sales/profit. summary.kpis is daily KPI data for the selected date and must not be treated as weekly sales."
+            );
             SqlEvidence evidence = new SqlEvidence(
                     "dashboard_summary",
                     "Backend dashboard summary for this week generated from real database providers.",
-                    gson.toJson(summary),
+                    gson.toJson(evidencePayload),
                     1,
                     true,
                     null
@@ -341,17 +354,17 @@ public class AiDailyInsightsService {
 
     private List<AiDailyInsightDto> buildInsightsFromDashboardSummary(DashboardSummaryResponse summary, int maxInsights) {
         List<AiDailyInsightDto> insights = new ArrayList<>();
-        DashboardSummaryResponse.DashboardKpis kpis = summary.getKpis();
         DashboardSummaryResponse.DashboardProfitSummary.ProfitData weekProfit =
                 summary.getProfitSummary() == null ? null : summary.getProfitSummary().getWeek();
         DashboardSummaryResponse.DashboardInventoryHealth inventory = summary.getInventoryHealth();
+        double weeklySales = weeklyRevenue(summary);
 
-        if (kpis != null && safeNumber(kpis.getTodaySales()) > 0) {
+        if (weeklySales > 0) {
             insights.add(new AiDailyInsightDto(
                     "weekly_sales_focus",
                     "success",
                     "Weekly sales focus",
-                    "Sales are at " + formatNumber(kpis.getTodaySales()) + " with " + safeInt(kpis.getOrdersCount()) + " orders. Review top items and keep fast movers available this week.",
+                    "Weekly sales are at " + formatNumber(weeklySales) + ". Review top items and keep fast movers available this week.",
                     "Open reports",
                     "FinanceReports",
                     "",
@@ -509,12 +522,35 @@ public class AiDailyInsightsService {
         return value == null ? 0 : value.doubleValue();
     }
 
-    private int safeInt(Number value) {
-        return value == null ? 0 : value.intValue();
-    }
-
     private String formatNumber(Number value) {
         return String.format(Locale.US, "%,.2f", safeNumber(value));
+    }
+
+    private DashboardSummaryResponse.DashboardProfitSummary.ProfitData weeklyProfit(DashboardSummaryResponse summary) {
+        if (summary == null || summary.getProfitSummary() == null) {
+            return null;
+        }
+        return summary.getProfitSummary().getWeek();
+    }
+
+    private double weeklyRevenue(DashboardSummaryResponse summary) {
+        DashboardSummaryResponse.DashboardProfitSummary.ProfitData week = weeklyProfit(summary);
+        return week == null ? 0 : week.getRevenue();
+    }
+
+    private double weeklyGrossProfit(DashboardSummaryResponse summary) {
+        DashboardSummaryResponse.DashboardProfitSummary.ProfitData week = weeklyProfit(summary);
+        return week == null ? 0 : week.getGrossProfit();
+    }
+
+    private double weeklyNetProfit(DashboardSummaryResponse summary) {
+        DashboardSummaryResponse.DashboardProfitSummary.ProfitData week = weeklyProfit(summary);
+        return week == null ? 0 : week.getNetProfit();
+    }
+
+    private double weeklyMargin(DashboardSummaryResponse summary) {
+        DashboardSummaryResponse.DashboardProfitSummary.ProfitData week = weeklyProfit(summary);
+        return week == null ? 0 : week.getMargin();
     }
 
     private LocalDate weekStart(LocalDate date) {

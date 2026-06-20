@@ -88,6 +88,10 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".inventory_stock_movement";
     }
 
+    public static String inventoryOperationIdempotencyTable(long companyId) {
+        return companySchema(companyId) + ".inventory_operation_idempotency";
+    }
+
     public static String inventoryImportBatchTable(int companyId) {
         return companySchema(companyId) + ".inventory_import_batch";
     }
@@ -445,3 +449,4 @@ public final class TenantSqlIdentifiers {
         }
     }
 }
+

@@ -1,14 +1,19 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.Finance.FinanceBalanceSheetResponse;
+import com.example.valueinsoftbackend.Model.Finance.FinanceAiInsightsResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceGeneralLedgerResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceProfitAndLossResponse;
 import com.example.valueinsoftbackend.Model.Finance.FinanceTrialBalanceResponse;
+import com.example.valueinsoftbackend.Model.Request.Finance.FinanceAiInsightsRequest;
+import com.example.valueinsoftbackend.Service.finance.FinanceAiInsightsService;
 import com.example.valueinsoftbackend.Service.finance.FinanceReportingService;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,9 +27,18 @@ import java.util.UUID;
 public class FinanceReportingController {
 
     private final FinanceReportingService financeReportingService;
+    private final FinanceAiInsightsService financeAiInsightsService;
 
-    public FinanceReportingController(FinanceReportingService financeReportingService) {
+    public FinanceReportingController(FinanceReportingService financeReportingService,
+                                      FinanceAiInsightsService financeAiInsightsService) {
         this.financeReportingService = financeReportingService;
+        this.financeAiInsightsService = financeAiInsightsService;
+    }
+
+    @PostMapping("/ai-insights")
+    public FinanceAiInsightsResponse generateAiInsights(Principal principal,
+                                                        @RequestBody FinanceAiInsightsRequest request) {
+        return financeAiInsightsService.generate(request, principal);
     }
 
     @GetMapping("/trial-balance")

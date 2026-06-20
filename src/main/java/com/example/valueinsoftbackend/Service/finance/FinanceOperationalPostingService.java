@@ -107,13 +107,13 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(context.getSalesUser(), request);
     }
 
-    public void enqueuePurchaseInventoryTransaction(int companyId,
+    public FinancePostingRequestItem enqueuePurchaseInventoryTransaction(int companyId,
                                                     int branchId,
                                                     InventoryTransaction transaction,
                                                     int inventoryTransactionId,
                                                     Long inventoryMovementId) {
         if (transaction.getTransTotal() <= 0 || transaction.getNumItems() <= 0) {
-            return;
+            return null;
         }
 
         LocalDate postingDate = transaction.getTime().toLocalDateTime().toLocalDate();
@@ -135,7 +135,7 @@ public class FinanceOperationalPostingService {
                 fiscalPeriodId,
                 buildPurchasePayload(transaction, inventoryTransactionId, inventoryMovementId));
 
-        financePostingRequestService.createPostingRequestFromSystem(transaction.getUserName(), request);
+        return financePostingRequestService.createPostingRequestFromSystem(transaction.getUserName(), request);
     }
 
     public void enqueuePurchaseReturnInventoryTransaction(int companyId,
@@ -925,3 +925,5 @@ public class FinanceOperationalPostingService {
         return value.setScale(4, RoundingMode.HALF_UP);
     }
 }
+
+

@@ -193,4 +193,22 @@ class FlywayMigrationInventoryTest {
         assertFalse(sql.contains(" FLOAT"), "Dynamic pricing migrations must not use FLOAT for monetary values");
         assertFalse(sql.contains(" REAL"), "Dynamic pricing migrations must not use REAL for monetary values");
     }
+
+    @Test
+    void inventoryProductReceiptIdempotencyMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V110__inventory_product_receipt_idempotency.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing inventory product receipt idempotency migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("INVENTORY_OPERATION_IDEMPOTENCY"));
+        assertTrue(sql.contains("IDEMPOTENCY_KEY"));
+        assertTrue(sql.contains("REQUEST_HASH"));
+        assertTrue(sql.contains("RESPONSE_PAYLOAD JSONB"));
+        assertTrue(sql.contains("UNIQUE INDEX"));
+        assertTrue(sql.contains("INVENTORY_STOCK_LEDGER"));
+    }
 }

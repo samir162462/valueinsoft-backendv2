@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AuthorizationServiceTest {
@@ -49,6 +50,14 @@ class AuthorizationServiceTest {
 
         assertDoesNotThrow(() ->
                 authorizationService.assertAuthenticatedCapability("sam : Owner", 7, 3, "users.account.create"));
+    }
+
+    @Test
+    void assertAuthenticatedCapabilityAllowsOwnerWithoutResolvedGrant() {
+        assertDoesNotThrow(() ->
+                authorizationService.assertAuthenticatedCapability("sam : Owner", 7, 3, "supplier.purchase.create"));
+
+        verifyNoInteractions(authenticatedEffectiveConfigurationService);
     }
 
     @Test

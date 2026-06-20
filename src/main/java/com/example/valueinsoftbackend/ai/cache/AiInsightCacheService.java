@@ -126,7 +126,7 @@ public class AiInsightCacheService {
     }
 
     public String weeklyCacheKey(long companyId, Long branchId, String weekStartDate, String locale) {
-        return cacheKey(companyId, branchId, "WEEKLY_INSIGHTS_V2", (weekStartDate == null ? "" : weekStartDate) + "|" + (locale == null ? "" : locale));
+        return cacheKey(companyId, branchId, "WEEKLY_INSIGHTS_V3", (weekStartDate == null ? "" : weekStartDate) + "|" + (locale == null ? "" : locale));
     }
 
     private MapSqlParameterSource params(AiSecurityContext context, Long branchId, String key) {
