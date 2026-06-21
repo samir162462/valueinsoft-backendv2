@@ -291,6 +291,8 @@ class GlobalFxRateRefreshServiceTest {
     private FxDeepSeekProperties properties() {
         FxDeepSeekProperties properties = new FxDeepSeekProperties();
         properties.setLockAtMostMinutes(30);
+        properties.getSchedule().setEnabled(true);
+        properties.getInitialization().setEnabled(true);
         return properties;
     }
 }

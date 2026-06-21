@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbBranch;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Request.CreateBranchRequest;
 import com.example.valueinsoftbackend.Service.BusinessPackageCatalogService;
+import com.example.valueinsoftbackend.Service.finance.FinanceDefaultAccountsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -21,13 +22,15 @@ import static org.mockito.Mockito.when;
 class BranchServiceTest {
     private DbBranch dbBranch;
     private BusinessPackageCatalogService businessPackageCatalogService;
+    private FinanceDefaultAccountsService financeDefaultAccountsService;
     private BranchService branchService;
 
     @BeforeEach
     void setUp() {
         dbBranch = Mockito.mock(DbBranch.class);
         businessPackageCatalogService = Mockito.mock(BusinessPackageCatalogService.class);
-        branchService = new BranchService(dbBranch, businessPackageCatalogService);
+        financeDefaultAccountsService = Mockito.mock(FinanceDefaultAccountsService.class);
+        branchService = new BranchService(dbBranch, businessPackageCatalogService, financeDefaultAccountsService);
     }
 
     @Test
@@ -39,6 +42,7 @@ class BranchServiceTest {
         assertEquals(1095, branchId);
         verify(dbBranch).createBranchWithTables("Downtown", "Cairo", 1074);
         verify(businessPackageCatalogService).provisionBranchCategoriesIfMissing(1074, 1095);
+        verify(financeDefaultAccountsService).provisionDefaultAccountsIfMissing(1074, 1095);
     }
 
     @Test
@@ -54,13 +58,14 @@ class BranchServiceTest {
         assertEquals(2001, branchId);
         verify(dbBranch).createBranchWithTables("Main", "Giza", 1074);
         verify(businessPackageCatalogService).provisionBranchCategoriesIfMissing(1074, 2001);
+        verify(financeDefaultAccountsService).provisionDefaultAccountsIfMissing(1074, 2001);
     }
 
     @Test
     void createBranchRejectsInvalidCompanyIdBeforeRepositoryCall() {
         assertThrows(IllegalArgumentException.class, () -> branchService.createBranch(0, "Main", "Giza"));
 
-        verifyNoInteractions(dbBranch, businessPackageCatalogService);
+        verifyNoInteractions(dbBranch, businessPackageCatalogService, financeDefaultAccountsService);
     }
 
     @Test
