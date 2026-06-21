@@ -35,6 +35,7 @@ public class CacheConfig {
     public static final String BRANCH_BY_ID = "branchById";
     public static final String BRANCH_SETTINGS_BUNDLE = "branchSettingsBundle";
     public static final String DASHBOARD_BRANCH_SUMMARY = "dashboardBranchSummary";
+    public static final String DASHBOARD_COMPANY_SUMMARY = "dashboardCompanySummary";
 
     private static final List<String> CACHE_NAMES = List.of(
             CATEGORY_JSON_FLAT,
@@ -46,7 +47,8 @@ public class CacheConfig {
             BRANCHES_BY_COMPANY,
             BRANCH_BY_ID,
             BRANCH_SETTINGS_BUNDLE,
-            DASHBOARD_BRANCH_SUMMARY
+            DASHBOARD_BRANCH_SUMMARY,
+            DASHBOARD_COMPANY_SUMMARY
     );
 
     @Bean
@@ -60,17 +62,18 @@ public class CacheConfig {
 
         return RedisCacheManager.builder(redisConnectionFactory)
                 .cacheDefaults(redisCacheConfiguration)
-                .withInitialCacheConfigurations(Map.of(
-                        CATEGORY_JSON_FLAT, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5)),
-                        CATEGORY_PAIRS, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5)),
-                        MAIN_MAJORS, redisCacheConfiguration.entryTtl(Duration.ofMinutes(10)),
-                        COMPANY_BY_OWNER, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5)),
-                        COMPANY_BRANCHES_BY_USER, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5)),
-                        COMPANY_BY_ID, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5)),
-                        BRANCHES_BY_COMPANY, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5)),
-                        BRANCH_BY_ID, redisCacheConfiguration.entryTtl(Duration.ofMinutes(10)),
-                        BRANCH_SETTINGS_BUNDLE, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5)),
-                        DASHBOARD_BRANCH_SUMMARY, redisCacheConfiguration.entryTtl(Duration.ofSeconds(60))
+                .withInitialCacheConfigurations(Map.ofEntries(
+                        Map.entry(CATEGORY_JSON_FLAT, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
+                        Map.entry(CATEGORY_PAIRS, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
+                        Map.entry(MAIN_MAJORS, redisCacheConfiguration.entryTtl(Duration.ofMinutes(10))),
+                        Map.entry(COMPANY_BY_OWNER, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
+                        Map.entry(COMPANY_BRANCHES_BY_USER, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
+                        Map.entry(COMPANY_BY_ID, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
+                        Map.entry(BRANCHES_BY_COMPANY, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
+                        Map.entry(BRANCH_BY_ID, redisCacheConfiguration.entryTtl(Duration.ofMinutes(10))),
+                        Map.entry(BRANCH_SETTINGS_BUNDLE, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
+                        Map.entry(DASHBOARD_BRANCH_SUMMARY, redisCacheConfiguration.entryTtl(Duration.ofSeconds(60))),
+                        Map.entry(DASHBOARD_COMPANY_SUMMARY, redisCacheConfiguration.entryTtl(Duration.ofSeconds(60)))
                 ))
                 .build();
     }

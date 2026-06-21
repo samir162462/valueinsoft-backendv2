@@ -4,7 +4,9 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Company;
+import com.example.valueinsoftbackend.Model.Request.CompanyDashboardSummaryRequest;
 import com.example.valueinsoftbackend.Model.Request.DashboardSummaryRequest;
+import com.example.valueinsoftbackend.Model.Response.CompanyDashboardSummaryResponse;
 import com.example.valueinsoftbackend.Model.Response.DashboardSummaryResponse;
 import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
@@ -54,6 +56,21 @@ public class DashboardSummaryController {
         );
 
         return dashboardSummaryService.getBranchSummary(companyId, request);
+    }
+
+    @PostMapping("/company-summary")
+    public CompanyDashboardSummaryResponse getCompanySummary(@Valid @RequestBody CompanyDashboardSummaryRequest request,
+                                                             Principal principal) {
+        Integer companyId = resolveCompanyId(principal);
+
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                null,
+                "dashboard.home.view"
+        );
+
+        return dashboardSummaryService.getCompanySummary(companyId, request);
     }
 
     private Integer resolveCompanyId(Principal principal) {
