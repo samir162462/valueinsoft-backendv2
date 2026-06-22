@@ -53,13 +53,19 @@ public class OrderService {
     }
 
     @Transactional
-    public int createOrder(CreateOrderRequest request, int companyId) {
+    public com.example.valueinsoftbackend.Model.Response.CreateOrderResult createOrder(CreateOrderRequest request, int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         Order order = toOrder(request);
         if (posSalePostingService != null) {
-            return posSalePostingService.postSale(companyId, order).orderId();
+            return posSalePostingService.postSale(companyId, order);
         }
-        DbPosOrder.AddOrderResult result = dbPosOrder.addOrder(order, companyId);
+        com.example.valueinsoftbackend.Model.Response.CreateOrderResult result = dbPosOrder.addOrder(order, companyId);
+        
+        if (result.idempotencyHit()) {
+            log.info("Idempotency hit detected in OrderService, skipping downstream posting for order {} receipt {}", result.orderId(), result.receiptNumber());
+            return result;
+        }
+
         confirmLoyaltyRedemption(companyId, order, result);
         recordLoyaltyEarn(companyId, order, result);
 
@@ -96,17 +102,17 @@ public class OrderService {
 
         log.info("Saved order {} for company {} branch {} with {} items", result.orderId(), companyId,
                 order.getBranchId(), order.getOrderDetails().size());
-        return result.orderId();
+        return result;
     }
 
-    private void confirmLoyaltyRedemption(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+    private void confirmLoyaltyRedemption(int companyId, Order order, com.example.valueinsoftbackend.Model.Response.CreateOrderResult result) {
         if (loyaltyService == null || order.getLoyaltyRedemptionId() == null || order.getLoyaltyRedemptionId() <= 0) {
             return;
         }
         loyaltyService.confirmOrderRedemption(companyId, order, result);
     }
 
-    private void recordLoyaltyEarn(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+    private void recordLoyaltyEarn(int companyId, Order order, com.example.valueinsoftbackend.Model.Response.CreateOrderResult result) {
         if (loyaltyService == null) {
             return;
         }
@@ -117,7 +123,7 @@ public class OrderService {
         }
     }
 
-    private void enqueueFinancePosSaleAfterCommit(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+    private void enqueueFinancePosSaleAfterCommit(int companyId, Order order, com.example.valueinsoftbackend.Model.Response.CreateOrderResult result) {
         if (order.getOrderTotal() <= 0) {
             return;
         }
@@ -402,3 +408,4 @@ public class OrderService {
         return order;
     }
 }
+

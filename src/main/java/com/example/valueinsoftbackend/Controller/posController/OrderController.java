@@ -46,7 +46,22 @@ public class OrderController {
                 newOrderShiftIn.branchId(),
                 "pos.sale.create"
         );
-        return ResponseEntity.status(201).body(orderService.createOrder(newOrderShiftIn, companyId));
+        return ResponseEntity.status(201).body(orderService.createOrder(newOrderShiftIn, companyId).orderId());
+    }
+
+    @PostMapping("/v2/pos/{companyId}/orders")
+    ResponseEntity<com.example.valueinsoftbackend.Model.Response.CreateOrderResult> newOrderV2(
+            @Valid @RequestBody CreateOrderRequest newOrderShiftIn,
+            @PathVariable @Positive int companyId,
+            Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                newOrderShiftIn.branchId(),
+                "pos.sale.create"
+        );
+        com.example.valueinsoftbackend.Model.Response.CreateOrderResult result = orderService.createOrder(newOrderShiftIn, companyId);
+        return ResponseEntity.status(result.idempotencyHit() ? 200 : 201).body(result);
     }
 
     @PostMapping(path = {"/getOrders", "/{companyId}/getOrders"})
@@ -71,13 +86,22 @@ public class OrderController {
                                                 @PathVariable @Positive int branchId,
                                                 @PathVariable @Positive int companyId,
                                                 Principal principal) {
-        authorizationService.assertAuthenticatedCapability(
-                principal.getName(),
-                companyId,
-                branchId,
-                "pos.sale.read"
-        );
+        authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "pos.sale.read");
         return dbPosOrder.getOrdersByClientId(clientId, branchId, companyId);
+    }
+
+    @GetMapping("/{companyId}/search/{branchId}")
+    public ResponseEntity<Order> searchOrderByReceipt(
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId,
+            @RequestParam("q") String receiptNumber,
+            Principal principal) {
+        authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "pos.sale.read");
+        Order order = dbPosOrder.getOrderByReceiptNumber(companyId, branchId, receiptNumber);
+        if (order == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(order);
     }
 
     @RequestMapping(path = "/getOrdersDetailsByOrderId/{companyId}/{branchId}/{orderId}", method = RequestMethod.GET)
@@ -107,3 +131,4 @@ public class OrderController {
         return orderService.bounceBackProduct(data, companyId);
     }
 }
+

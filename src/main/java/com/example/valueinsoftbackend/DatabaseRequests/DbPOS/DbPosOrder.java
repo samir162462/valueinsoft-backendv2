@@ -58,7 +58,7 @@ public class DbPosOrder {
     }
 
     @Transactional
-    public AddOrderResult addOrder(Order order, int companyId) {
+    public com.example.valueinsoftbackend.Model.Response.CreateOrderResult addOrder(Order order, int companyId) {
         validateOrder(order, companyId);
         validateAndResolveSerializedSaleLines(order, companyId);
 
@@ -66,27 +66,61 @@ public class DbPosOrder {
         Timestamp orderTime = new Timestamp(System.currentTimeMillis());
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         
-        // Resolve shift for formal FK linkage. Offline sync can provide a preferred
-        // shift id; regular online POS sales fall back to the active branch shift.
+        if (order.getIdempotencyKey() != null && !order.getIdempotencyKey().isBlank()) {
+            String lockScope = companyId + "-" + branchId + "-" + order.getIdempotencyKey();
+            int lockId1 = lockScope.hashCode();
+            int lockId2 = order.getIdempotencyKey().hashCode();
+            jdbcTemplate.execute("SELECT pg_advisory_xact_lock(" + lockId1 + ", " + lockId2 + ")");
+
+            String checkSql = "SELECT \"orderId\", \"orderTime\", shift_id, receipt_number FROM " + orderTable + " WHERE idempotency_key = ?";
+            java.util.List<com.example.valueinsoftbackend.Model.Response.CreateOrderResult> existing = jdbcTemplate.query(checkSql, (rs, rowNum) -> new com.example.valueinsoftbackend.Model.Response.CreateOrderResult(
+                    rs.getInt("orderId"),
+                    rs.getString("receipt_number"),
+                    true,
+                    rs.getObject("shift_id") != null ? rs.getInt("shift_id") : null,
+                    rs.getTimestamp("orderTime")
+            ), order.getIdempotencyKey());
+
+            if (!existing.isEmpty()) {
+                log.info("Idempotency hit for company {} branch {} key {}", companyId, branchId, order.getIdempotencyKey());
+                return existing.get(0);
+            }
+        }
+
         Integer shiftId = null;
         try {
             String shiftTable = TenantSqlIdentifiers.shiftPeriodTable(companyId);
             if (order.getRequestedShiftId() != null && order.getRequestedShiftId() > 0) {
-                String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable +
-                        " WHERE \"PosSOID\" = ? AND \"branchId\" = ? AND status = 'OPEN' LIMIT 1";
+                String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable + " WHERE \"PosSOID\" = ? AND \"branchId\" = ? AND status = 'OPEN' LIMIT 1";
                 shiftId = jdbcTemplate.queryForObject(shiftSql, Integer.class, order.getRequestedShiftId(), branchId);
             } else {
-                String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable +
-                        " WHERE \"branchId\" = ? AND status = 'OPEN' ORDER BY \"PosSOID\" DESC LIMIT 1";
+                String shiftSql = "SELECT \"PosSOID\" FROM " + shiftTable + " WHERE \"branchId\" = ? AND status = 'OPEN' ORDER BY \"PosSOID\" DESC LIMIT 1";
                 shiftId = jdbcTemplate.queryForObject(shiftSql, Integer.class, branchId);
             }
         } catch (Exception e) {
             log.warn("No open shift found for company {} branch {} when creating order. Continuing with null shift_id.", companyId, branchId);
         }
 
+        String sequenceTable = TenantSqlIdentifiers.posReceiptSequencesTable(companyId);
+        String yymm = java.time.ZonedDateTime.now(java.time.ZoneId.of("Africa/Cairo")).format(java.time.format.DateTimeFormatter.ofPattern("yyMM"));
+        
+        String seqSql = "INSERT INTO " + sequenceTable + " (branch_id, period_yymm, last_sequence_no) " +
+                "VALUES (?, ?, 1) ON CONFLICT (branch_id, period_yymm) DO UPDATE SET " +
+                "last_sequence_no = " + sequenceTable + ".last_sequence_no + 1, updated_at = NOW() " +
+                "WHERE " + sequenceTable + ".last_sequence_no < 999999 RETURNING last_sequence_no";
+        
+        java.util.List<Integer> seqResults = jdbcTemplate.query(seqSql, (rs, rowNum) -> rs.getInt(1), branchId, yymm);
+        if (seqResults.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_LIMIT_EXCEEDED", "Monthly POS receipt limit exceeded for this branch.");
+        }
+        int sequenceNo = seqResults.get(0);
+        String branchCode = String.format(java.util.Locale.ROOT, "%04d", branchId);
+        String receiptNumber = yymm + branchCode + String.format(java.util.Locale.ROOT, "%06d", sequenceNo);
+        order.setReceiptNumber(receiptNumber);
+
         String sql = "INSERT INTO " + orderTable + " (" +
-                "\"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\", \"clientId\", \"orderIncome\", \"orderBouncedBack\", shift_id) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "\"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", \"salesUser\", \"clientId\", \"orderIncome\", \"orderBouncedBack\", shift_id, receipt_number, idempotency_key) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         KeyHolder orderKeyHolder = new GeneratedKeyHolder();
         Integer resolvedShiftId = shiftId;
@@ -101,11 +135,9 @@ public class DbPosOrder {
             ps.setInt(7, order.getClientId());
             ps.setInt(8, order.getOrderIncome());
             ps.setInt(9, 0);
-            if (resolvedShiftId == null) {
-                ps.setObject(10, null);
-            } else {
-                ps.setInt(10, resolvedShiftId);
-            }
+            if (resolvedShiftId == null) ps.setObject(10, null); else ps.setInt(10, resolvedShiftId);
+            ps.setString(11, receiptNumber);
+            ps.setString(12, order.getIdempotencyKey());
             return ps;
         }, orderKeyHolder);
 
@@ -123,10 +155,8 @@ public class DbPosOrder {
         insertSoldLedgerEntries(orderId, order, companyId, orderTime);
 
         log.debug("Inserted order {} for company {} branch {}", orderId, companyId, branchId);
-        return new AddOrderResult(orderId, shiftId, orderTime);
+        return new com.example.valueinsoftbackend.Model.Response.CreateOrderResult(orderId, receiptNumber, false, shiftId, orderTime);
     }
-
-    public static record AddOrderResult(int orderId, Integer shiftId, Timestamp orderTime) {}
 
     public List<OrderFinanceCostLine> getOrderFinanceCostLines(int orderId, int branchId, int companyId) {
         TenantSqlIdentifiers.requirePositive(orderId, "orderId");
@@ -176,15 +206,29 @@ public class DbPosOrder {
         return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> mapOrder(rs, branchId), spId));
     }
 
+    public Order getOrderByReceiptNumber(int companyId, int branchId, String receiptNumber) {
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        if (receiptNumber == null || receiptNumber.isBlank()) {
+            return null;
+        }
+
+        String sql = buildOrdersWithDetailsSelect(companyId, branchId) +
+                " WHERE ord.receipt_number = ? LIMIT 1";
+
+        List<Order> results = jdbcTemplate.query(sql, (rs, rowNum) -> mapOrder(rs, branchId), receiptNumber.trim());
+        return results.isEmpty() ? null : results.get(0);
+    }
+
     public ArrayList<Order> getOrdersByClientId(int clientId, int branchId, int companyId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         TenantSqlIdentifiers.requirePositive(clientId, "clientId");
 
         String sql = "SELECT \"orderId\", \"orderTime\", \"clientName\", \"orderType\", \"orderDiscount\", \"orderTotal\", " +
-                "\"salesUser\", \"clientId\", \"orderIncome\", \"orderBouncedBack\" " +
+                "\"salesUser\", \"clientId\", \"orderIncome\", \"orderBouncedBack\", receipt_number, idempotency_key " +
                 "FROM " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " WHERE \"clientId\" = ? ORDER BY \"orderId\" DESC";
 
-        return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> new Order(
+        return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> {
+            Order o = new Order(
                 rs.getInt("orderId"),
                 rs.getTimestamp("orderTime"),
                 rs.getString("clientName"),
@@ -197,7 +241,11 @@ public class DbPosOrder {
                 rs.getInt("orderIncome"),
                 rs.getInt("orderBouncedBack"),
                 null
-        ), clientId));
+            );
+            o.setReceiptNumber(rs.getString("receipt_number"));
+            o.setIdempotencyKey(rs.getString("idempotency_key"));
+            return o;
+        }, clientId));
     }
 
     public ArrayList<OrderDetails> getOrdersDetailsByOrderId(int orderId, int branchId, int companyId) {
@@ -663,7 +711,7 @@ public class DbPosOrder {
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String detailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
         return "SELECT ord.\"orderId\", ord.\"orderTime\", ord.\"clientName\", ord.\"orderType\", ord.\"orderDiscount\", ord.\"orderTotal\", " +
-                "ord.\"salesUser\", ord.\"clientId\", ord.\"orderIncome\", ord.\"orderBouncedBack\", details.orderDetails " +
+                "ord.\"salesUser\", ord.\"clientId\", ord.\"orderIncome\", ord.\"orderBouncedBack\", ord.receipt_number, ord.idempotency_key, details.orderDetails " +
                 "FROM " + orderTable + " ord " +
                 "LEFT JOIN (" +
                 " SELECT array_to_json(array_agg(json_build_object(" +
@@ -690,7 +738,7 @@ public class DbPosOrder {
     }
 
     private Order mapOrder(java.sql.ResultSet rs, int branchId) throws SQLException {
-        return new Order(
+        Order o = new Order(
                 rs.getInt("orderId"),
                 rs.getTimestamp("orderTime"),
                 rs.getString("clientName"),
@@ -704,6 +752,9 @@ public class DbPosOrder {
                 rs.getInt("orderBouncedBack"),
                 parseOrderDetails(rs.getString("orderDetails"))
         );
+        o.setReceiptNumber(rs.getString("receipt_number"));
+        o.setIdempotencyKey(rs.getString("idempotency_key"));
+        return o;
     }
 
     private ArrayList<OrderDetails> parseOrderDetails(String detailsJson) {
@@ -839,3 +890,5 @@ public class DbPosOrder {
         }
     }
 }
+
+

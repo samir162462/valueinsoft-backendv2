@@ -55,11 +55,21 @@ public record CreateOrderRequest(
         BigDecimal loyaltyDiscountAmount,
 
         @PositiveOrZero(message = "loyaltyNetAmount must be zero or greater")
-        BigDecimal loyaltyNetAmount
+        BigDecimal loyaltyNetAmount,
+
+        /**
+         * Optional idempotency token to ensure safe retries without duplicate processing.
+         * A UUID format is strongly recommended.
+         */
+        @jakarta.validation.constraints.Size(max = 255, message = "idempotencyKey length cannot exceed 255")
+        String idempotencyKey
 ) {
     public CreateOrderRequest {
         if (orderDetails == null) {
             orderDetails = List.of();
+        }
+        if (idempotencyKey != null) {
+            idempotencyKey = idempotencyKey.trim();
         }
     }
 }

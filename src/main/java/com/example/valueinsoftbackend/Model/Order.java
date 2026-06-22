@@ -22,6 +22,8 @@ public class Order {
     int loyaltyPointsEarned;
     BigDecimal loyaltyDiscountAmount;
     BigDecimal loyaltyNetAmount;
+    String idempotencyKey;
+    String receiptNumber;
     ArrayList<OrderDetails> orderDetails;
 
 
@@ -191,4 +193,9 @@ public class Order {
     public void setOrderDetails(ArrayList<OrderDetails> orderDetails) {
         this.orderDetails = orderDetails;
     }
+
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
+    public String getReceiptNumber() { return receiptNumber; }
+    public void setReceiptNumber(String receiptNumber) { this.receiptNumber = receiptNumber; }
 }

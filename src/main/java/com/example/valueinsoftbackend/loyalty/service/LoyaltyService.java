@@ -114,7 +114,7 @@ public class LoyaltyService {
     }
 
     @Transactional
-    public LoyaltyRedemptionResponse confirmOrderRedemption(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+    public LoyaltyRedemptionResponse confirmOrderRedemption(int companyId, Order order, com.example.valueinsoftbackend.Model.Response.CreateOrderResult result) {
         if (order == null || result == null || order.getLoyaltyRedemptionId() == null || order.getLoyaltyRedemptionId() <= 0) {
             return null;
         }
@@ -153,7 +153,7 @@ public class LoyaltyService {
     }
 
     @Transactional
-    public LoyaltyRecordedEarn recordOrderEarn(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+    public LoyaltyRecordedEarn recordOrderEarn(int companyId, Order order, com.example.valueinsoftbackend.Model.Response.CreateOrderResult result) {
         if (order == null || result == null || order.getClientId() <= 0 || order.getOrderTotal() <= 0) {
             return new LoyaltyRecordedEarn(0, order == null ? 0 : order.getClientId(), 0, false);
         }
@@ -232,3 +232,4 @@ public class LoyaltyService {
         return value == null ? BigDecimal.ZERO : value.max(BigDecimal.ZERO);
     }
 }
+

@@ -217,10 +217,23 @@ public class DbCompany {
                 SQLLoyaltyAccount(schemaName, databaseOwner),
                 SQLLoyaltyLedger(schemaName, databaseOwner),
                 SQLLoyaltyReward(schemaName, databaseOwner),
-                SQLLoyaltyRedemption(schemaName, databaseOwner)
+                SQLLoyaltyRedemption(schemaName, databaseOwner),
+                SQLPosReceiptSequences(schemaName, databaseOwner)
         ));
         statements.addAll(SQLModernInventoryFoundation(schemaName, companyId, databaseOwner));
         return statements;
+    }
+
+    private String SQLPosReceiptSequences(String schemaName, String databaseOwner) {
+        return "CREATE TABLE IF NOT EXISTS " + schemaName + ".pos_receipt_sequences (" +
+                "    branch_id BIGINT NOT NULL," +
+                "    period_yymm CHAR(4) NOT NULL," +
+                "    last_sequence_no INTEGER NOT NULL DEFAULT 0," +
+                "    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()," +
+                "    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()," +
+                "    PRIMARY KEY (branch_id, period_yymm)," +
+                "    CHECK (last_sequence_no BETWEEN 0 AND 999999)" +
+                ")";
     }
 
     //Statics SQL Queries

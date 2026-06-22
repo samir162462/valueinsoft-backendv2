@@ -174,7 +174,7 @@ public class OfflineOrderPostingProcessor {
         }
 
         Order order = mapToOnlineOrder(importRecord);
-        DbPosOrder.AddOrderResult posted = posSalePostingService.postSale(
+        com.example.valueinsoftbackend.Model.Response.CreateOrderResult posted = posSalePostingService.postSale(
                 importRecord.companyId().intValue(),
                 order,
                 (postedResult, financeRequest) -> handleFinanceEnqueued(importRecord, postedResult, financeRequest),
@@ -206,7 +206,7 @@ public class OfflineOrderPostingProcessor {
     }
 
     private void handleFinanceEnqueued(OfflineOrderImportModel importRecord,
-                                       DbPosOrder.AddOrderResult postedResult,
+                                       com.example.valueinsoftbackend.Model.Response.CreateOrderResult postedResult,
                                        Optional<FinancePostingRequestItem> financeRequest) {
         Long postedOrderId = (long) postedResult.orderId();
         UUID requestId = financeRequest
@@ -243,7 +243,7 @@ public class OfflineOrderPostingProcessor {
     }
 
     private void handleFinanceEnqueueFailed(OfflineOrderImportModel importRecord,
-                                            DbPosOrder.AddOrderResult postedResult,
+                                            com.example.valueinsoftbackend.Model.Response.CreateOrderResult postedResult,
                                             RuntimeException exception) {
         Long postedOrderId = (long) postedResult.orderId();
         String compactError = compact(exception.getMessage());
@@ -656,3 +656,4 @@ public class OfflineOrderPostingProcessor {
         return OfflineErrorSeverity.HARD_FAIL;
     }
 }
+

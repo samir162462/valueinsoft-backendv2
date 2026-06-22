@@ -46,6 +46,10 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"PosOrder_" + branchId + "\"";
     }
 
+    public static String posReceiptSequencesTable(int companyId) {
+        return companySchema(companyId) + ".pos_receipt_sequences";
+    }
+
     public static String orderDetailTable(int companyId, int branchId) {
         requirePositive(branchId, "branchId");
         return companySchema(companyId) + ".\"PosOrderDetail_" + branchId + "\"";

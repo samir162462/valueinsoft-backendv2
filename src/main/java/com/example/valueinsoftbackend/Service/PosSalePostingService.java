@@ -37,17 +37,25 @@ public class PosSalePostingService {
         this.loyaltyService = loyaltyService;
     }
 
-    public DbPosOrder.AddOrderResult postSale(int companyId, Order order) {
+    public com.example.valueinsoftbackend.Model.Response.CreateOrderResult postSale(int companyId, Order order) {
         return postSale(companyId, order, null, null);
     }
 
-    public DbPosOrder.AddOrderResult postSale(
+    public com.example.valueinsoftbackend.Model.Response.CreateOrderResult postSale(
             int companyId,
             Order order,
-            BiConsumer<DbPosOrder.AddOrderResult, Optional<FinancePostingRequestItem>> onSuccess,
-            BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> onFailure) {
+            BiConsumer<com.example.valueinsoftbackend.Model.Response.CreateOrderResult, Optional<FinancePostingRequestItem>> onSuccess,
+            BiConsumer<com.example.valueinsoftbackend.Model.Response.CreateOrderResult, RuntimeException> onFailure) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
-        DbPosOrder.AddOrderResult result = dbPosOrder.addOrder(order, companyId);
+        com.example.valueinsoftbackend.Model.Response.CreateOrderResult result = dbPosOrder.addOrder(order, companyId);
+        if (result.idempotencyHit()) {
+            log.info("Idempotency hit detected in PosSalePostingService, skipping downstream posting for order {} receipt {}", result.orderId(), result.receiptNumber());
+            if (onSuccess != null) {
+                onSuccess.accept(result, Optional.empty());
+            }
+            return result;
+        }
+
         confirmLoyaltyRedemption(companyId, order, result);
         recordLoyaltyEarn(companyId, order, result);
 
@@ -75,14 +83,14 @@ public class PosSalePostingService {
         return result;
     }
 
-    private void confirmLoyaltyRedemption(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+    private void confirmLoyaltyRedemption(int companyId, Order order, com.example.valueinsoftbackend.Model.Response.CreateOrderResult result) {
         if (loyaltyService == null || order.getLoyaltyRedemptionId() == null || order.getLoyaltyRedemptionId() <= 0) {
             return;
         }
         loyaltyService.confirmOrderRedemption(companyId, order, result);
     }
 
-    private void recordLoyaltyEarn(int companyId, Order order, DbPosOrder.AddOrderResult result) {
+    private void recordLoyaltyEarn(int companyId, Order order, com.example.valueinsoftbackend.Model.Response.CreateOrderResult result) {
         if (loyaltyService == null) {
             return;
         }
@@ -102,9 +110,9 @@ public class PosSalePostingService {
     private void enqueueFinancePosSaleAfterCommit(
             int companyId,
             Order order,
-            DbPosOrder.AddOrderResult result,
-            BiConsumer<DbPosOrder.AddOrderResult, Optional<FinancePostingRequestItem>> onSuccess,
-            BiConsumer<DbPosOrder.AddOrderResult, RuntimeException> onFailure) {
+            com.example.valueinsoftbackend.Model.Response.CreateOrderResult result,
+            BiConsumer<com.example.valueinsoftbackend.Model.Response.CreateOrderResult, Optional<FinancePostingRequestItem>> onSuccess,
+            BiConsumer<com.example.valueinsoftbackend.Model.Response.CreateOrderResult, RuntimeException> onFailure) {
         if (order.getOrderTotal() <= 0) {
             if (onSuccess != null) {
                 onSuccess.accept(result, Optional.empty());
@@ -149,3 +157,4 @@ public class PosSalePostingService {
         });
     }
 }
+

@@ -186,7 +186,10 @@ public class DbBranch {
                 "    \"clientId\" INTEGER," +
                 "    \"orderIncome\" INTEGER," +
                 "    \"orderBouncedBack\" INTEGER," +
-                "    \"shift_id\" INTEGER" +
+                "    \"shift_id\" INTEGER," +
+                "    \"receipt_number\" VARCHAR(14)," +
+                "    \"idempotency_key\" VARCHAR(255)," +
+                "    CONSTRAINT check_receipt_number_format CHECK (\"receipt_number\" IS NULL OR \"receipt_number\" ~ '^[0-9]{14}$')" +
                 ")";
         boolean tableCreated = executeProvisioningSql(sql, "PosOrder", branchId, companyId);
         return tableCreated && createOrderIndexes(branchId, companyId);
@@ -257,7 +260,9 @@ public class DbBranch {
         String table = TenantSqlIdentifiers.orderTable(companyId, branchId);
         return executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_time ON " + table + " (\"orderTime\" DESC)", "PosOrder orderTime index", branchId, companyId)
                 && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_client_time ON " + table + " (\"clientId\", \"orderTime\" DESC)", "PosOrder client/time index", branchId, companyId)
-                && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_valid_client_time ON " + table + " (\"clientId\", \"orderTime\" DESC) WHERE \"clientId\" IS NOT NULL AND \"clientId\" > 0", "PosOrder valid-client/time index", branchId, companyId);
+                && executeProvisioningSql("CREATE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_valid_client_time ON " + table + " (\"clientId\", \"orderTime\" DESC) WHERE \"clientId\" IS NOT NULL AND \"clientId\" > 0", "PosOrder valid-client/time index", branchId, companyId)
+                && executeProvisioningSql("CREATE UNIQUE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_receipt ON " + table + " (\"receipt_number\") WHERE \"receipt_number\" IS NOT NULL", "PosOrder receipt index", branchId, companyId)
+                && executeProvisioningSql("CREATE UNIQUE INDEX IF NOT EXISTS idx_posorder_" + branchId + "_idemp ON " + table + " (\"idempotency_key\") WHERE \"idempotency_key\" IS NOT NULL", "PosOrder idempotency index", branchId, companyId);
     }
 
     private boolean createOrderDetailIndexes(int branchId, int companyId) {
