@@ -30,9 +30,17 @@ public class LoyaltyRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final Set<Integer> readyTenants = ConcurrentHashMap.newKeySet();
+    private final boolean isH2;
 
     public LoyaltyRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        boolean checkH2 = false;
+        try (java.sql.Connection conn = java.util.Objects.requireNonNull(jdbcTemplate.getJdbcTemplate().getDataSource()).getConnection()) {
+            checkH2 = "H2".equalsIgnoreCase(conn.getMetaData().getDatabaseProductName());
+        } catch (Exception ignored) {
+            // Default to false (production PG)
+        }
+        this.isH2 = checkH2;
     }
 
     public LoyaltyProgramConfig getEffectiveConfig(int companyId, int branchId) {
@@ -116,7 +124,31 @@ public class LoyaltyRepository {
 
     public LoyaltyAccountResponse findAccount(int companyId, int clientId) {
         ensureTables(companyId);
-        String sql = """
+        String sql;
+        if (isH2) {
+            sql = """
+                SELECT account.loyalty_account_id,
+                       account.client_id,
+                       client."clientName" AS client_name,
+                       client."clientPhone" AS client_phone,
+                       account.status,
+                       account.available_points,
+                       account.pending_points,
+                       account.lifetime_points,
+                       account.redeemed_points,
+                       account.expired_points,
+                       account.tier_name,
+                       account.last_activity_at,
+                       (SELECT points_name FROM %3$s WHERE branch_id = account.branch_id OR branch_id IS NULL ORDER BY branch_id NULLS LAST LIMIT 1) AS points_name,
+                       (SELECT earn_points FROM %3$s WHERE branch_id = account.branch_id OR branch_id IS NULL ORDER BY branch_id NULLS LAST LIMIT 1) AS earn_points,
+                       (SELECT earn_amount FROM %3$s WHERE branch_id = account.branch_id OR branch_id IS NULL ORDER BY branch_id NULLS LAST LIMIT 1) AS earn_amount
+                FROM %1$s account
+                JOIN %2$s client ON client.c_id = account.client_id
+                WHERE account.client_id = :clientId
+                LIMIT 1
+                """.formatted(accountTable(companyId), TenantSqlIdentifiers.clientTable(companyId), configTable(companyId));
+        } else {
+            sql = """
                 SELECT account.loyalty_account_id,
                        account.client_id,
                        client."clientName" AS client_name,
@@ -144,6 +176,7 @@ public class LoyaltyRepository {
                 WHERE account.client_id = :clientId
                 LIMIT 1
                 """.formatted(accountTable(companyId), TenantSqlIdentifiers.clientTable(companyId), configTable(companyId));
+        }
 
         List<LoyaltyAccountResponse> rows = jdbcTemplate.query(
                 sql,
@@ -311,7 +344,7 @@ public class LoyaltyRepository {
                     discount_amount, idempotency_key, created_by, reserved_at, expires_at
                 ) VALUES (
                     :accountId, :clientId, :branchId, :rewardId, 'RESERVED', :points,
-                    :discountAmount, :idempotencyKey, :actor, NOW(), NOW() + INTERVAL '15 minutes'
+                    :discountAmount, :idempotencyKey, :actor, NOW(), NOW() + INTERVAL '15' MINUTE
                 )
                 """.formatted(redemptionTable(companyId));
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -788,16 +821,29 @@ public class LoyaltyRepository {
     }
 
     private void ensureAccount(int companyId, int branchId, int clientId) {
-        String sql = """
-                INSERT INTO %s (client_id, branch_id, phone_normalized, status, created_at, updated_at)
-                SELECT c_id, :branchId, regexp_replace(COALESCE("clientPhone", ''), '[^0-9+]', '', 'g'), 'ACTIVE', NOW(), NOW()
-                FROM %s
-                WHERE c_id = :clientId
-                ON CONFLICT (client_id) DO NOTHING
-                """.formatted(accountTable(companyId), TenantSqlIdentifiers.clientTable(companyId));
-        jdbcTemplate.update(sql, new MapSqlParameterSource()
-                .addValue("branchId", branchId)
-                .addValue("clientId", clientId));
+        if (isH2) {
+            String checkSql = "SELECT COUNT(*) FROM " + accountTable(companyId) + " WHERE client_id = :clientId";
+            Integer count = jdbcTemplate.queryForObject(checkSql, new MapSqlParameterSource("clientId", clientId), Integer.class);
+            if (count == null || count == 0) {
+                String insertSql = "INSERT INTO " + accountTable(companyId) + " (client_id, branch_id, phone_normalized, status, created_at, updated_at) " +
+                        "SELECT c_id, :branchId, REGEXP_REPLACE(COALESCE(\"clientPhone\", ''), '[^0-9+]', ''), 'ACTIVE', NOW(), NOW() " +
+                        "FROM " + TenantSqlIdentifiers.clientTable(companyId) + " WHERE c_id = :clientId";
+                jdbcTemplate.update(insertSql, new MapSqlParameterSource()
+                        .addValue("branchId", branchId)
+                        .addValue("clientId", clientId));
+            }
+        } else {
+            String sql = """
+                    INSERT INTO %s (client_id, branch_id, phone_normalized, status, created_at, updated_at)
+                    SELECT c_id, :branchId, regexp_replace(COALESCE("clientPhone", ''), '[^0-9+]', '', 'g'), 'ACTIVE', NOW(), NOW()
+                    FROM %s
+                    WHERE c_id = :clientId
+                    ON CONFLICT (client_id) DO NOTHING
+                    """.formatted(accountTable(companyId), TenantSqlIdentifiers.clientTable(companyId));
+            jdbcTemplate.update(sql, new MapSqlParameterSource()
+                    .addValue("branchId", branchId)
+                    .addValue("clientId", clientId));
+        }
     }
 
     private void insertDefaultConfig(int companyId) {
@@ -830,6 +876,10 @@ public class LoyaltyRepository {
     }
 
     private String createConfigSql(String schema) {
+        String indexSql = isH2
+                ? "CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_program_branch_unique ON " + schema + ".loyalty_program_config (branch_id);"
+                : "CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_program_branch_unique ON " + schema + ".loyalty_program_config ((COALESCE(branch_id, 0)));";
+
         return "CREATE TABLE IF NOT EXISTS " + schema + ".loyalty_program_config (" +
                 " program_id BIGSERIAL PRIMARY KEY," +
                 " branch_id INTEGER," +
@@ -847,7 +897,7 @@ public class LoyaltyRepository {
                 " CONSTRAINT loyalty_program_config_min_amount_ck CHECK (min_eligible_amount >= 0)," +
                 " CONSTRAINT loyalty_program_config_expiry_ck CHECK (expiry_months IS NULL OR expiry_months > 0)" +
                 "); " +
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_program_branch_unique ON " + schema + ".loyalty_program_config (COALESCE(branch_id, 0));";
+                indexSql;
     }
 
     private String createAccountSql(String schema) {
@@ -935,7 +985,7 @@ public class LoyaltyRepository {
                 " idempotency_key VARCHAR(200) NOT NULL," +
                 " created_by VARCHAR(120)," +
                 " reserved_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-                " expires_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '15 minutes')," +
+                " expires_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '15' MINUTE)," +
                 " confirmed_at TIMESTAMP," +
                 " released_at TIMESTAMP," +
                 " CONSTRAINT loyalty_redemption_account_fk FOREIGN KEY (loyalty_account_id) REFERENCES " + schema + ".loyalty_account (loyalty_account_id) ON DELETE CASCADE," +

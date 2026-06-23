@@ -45,6 +45,7 @@ public class DbPosOrder {
     private final DbInventoryProductUnitRepository productUnitRepository;
     private final DbInventoryStockMovementRepository stockMovementRepository;
     private final Gson gson = new Gson();
+    private final boolean isH2;
 
     public DbPosOrder(JdbcTemplate jdbcTemplate,
                       DbInventoryProductTrackingRepository productTrackingRepository,
@@ -55,6 +56,14 @@ public class DbPosOrder {
         this.productTrackingRepository = productTrackingRepository;
         this.productUnitRepository = productUnitRepository;
         this.stockMovementRepository = stockMovementRepository;
+
+        boolean checkH2 = false;
+        try (java.sql.Connection conn = java.util.Objects.requireNonNull(jdbcTemplate.getDataSource()).getConnection()) {
+            checkH2 = "H2".equalsIgnoreCase(conn.getMetaData().getDatabaseProductName());
+        } catch (Exception ignored) {
+            // Default to false (production PG)
+        }
+        this.isH2 = checkH2;
     }
 
     @Transactional
@@ -104,16 +113,34 @@ public class DbPosOrder {
         String sequenceTable = TenantSqlIdentifiers.posReceiptSequencesTable(companyId);
         String yymm = java.time.ZonedDateTime.now(java.time.ZoneId.of("Africa/Cairo")).format(java.time.format.DateTimeFormatter.ofPattern("yyMM"));
         
-        String seqSql = "INSERT INTO " + sequenceTable + " (branch_id, period_yymm, last_sequence_no) " +
-                "VALUES (?, ?, 1) ON CONFLICT (branch_id, period_yymm) DO UPDATE SET " +
-                "last_sequence_no = " + sequenceTable + ".last_sequence_no + 1, updated_at = NOW() " +
-                "WHERE " + sequenceTable + ".last_sequence_no < 999999 RETURNING last_sequence_no";
-        
-        java.util.List<Integer> seqResults = jdbcTemplate.query(seqSql, (rs, rowNum) -> rs.getInt(1), branchId, yymm);
-        if (seqResults.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_LIMIT_EXCEEDED", "Monthly POS receipt limit exceeded for this branch.");
+        int sequenceNo;
+        if (isH2) {
+            String selectSql = "SELECT last_sequence_no FROM " + sequenceTable + " WHERE branch_id = ? AND period_yymm = ? FOR UPDATE";
+            java.util.List<Integer> existingSeq = jdbcTemplate.query(selectSql, (rs, rowNum) -> rs.getInt(1), branchId, yymm);
+            if (existingSeq.isEmpty()) {
+                String insertSql = "INSERT INTO " + sequenceTable + " (branch_id, period_yymm, last_sequence_no) VALUES (?, ?, 1)";
+                jdbcTemplate.update(insertSql, branchId, yymm);
+                sequenceNo = 1;
+            } else {
+                sequenceNo = existingSeq.get(0) + 1;
+                if (sequenceNo > 999999) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_LIMIT_EXCEEDED", "Monthly POS receipt limit exceeded for this branch.");
+                }
+                String updateSql = "UPDATE " + sequenceTable + " SET last_sequence_no = ?, updated_at = NOW() WHERE branch_id = ? AND period_yymm = ?";
+                jdbcTemplate.update(updateSql, sequenceNo, branchId, yymm);
+            }
+        } else {
+            String seqSql = "INSERT INTO " + sequenceTable + " (branch_id, period_yymm, last_sequence_no) " +
+                    "VALUES (?, ?, 1) ON CONFLICT (branch_id, period_yymm) DO UPDATE SET " +
+                    "last_sequence_no = " + sequenceTable + ".last_sequence_no + 1, updated_at = NOW() " +
+                    "WHERE " + sequenceTable + ".last_sequence_no < 999999 RETURNING last_sequence_no";
+            
+            java.util.List<Integer> seqResults = jdbcTemplate.query(seqSql, (rs, rowNum) -> rs.getInt(1), branchId, yymm);
+            if (seqResults.isEmpty()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_LIMIT_EXCEEDED", "Monthly POS receipt limit exceeded for this branch.");
+            }
+            sequenceNo = seqResults.get(0);
         }
-        int sequenceNo = seqResults.get(0);
         String branchCode = String.format(java.util.Locale.ROOT, "%04d", branchId);
         String receiptNumber = yymm + branchCode + String.format(java.util.Locale.ROOT, "%06d", sequenceNo);
         order.setReceiptNumber(receiptNumber);

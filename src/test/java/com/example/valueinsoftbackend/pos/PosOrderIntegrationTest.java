@@ -125,6 +125,18 @@ public class PosOrderIntegrationTest extends AbstractIntegrationTest {
                 """);
 
         jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS c_1.pos_receipt_sequences (
+                    branch_id BIGINT NOT NULL,
+                    period_yymm CHAR(4) NOT NULL,
+                    last_sequence_no INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (branch_id, period_yymm),
+                    CHECK (last_sequence_no BETWEEN 0 AND 999999)
+                )
+                """);
+
+        jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS c_1."PosOrder_1" (
                     "orderId" SERIAL PRIMARY KEY,
                     "orderTime" TIMESTAMP NOT NULL,
@@ -136,7 +148,9 @@ public class PosOrderIntegrationTest extends AbstractIntegrationTest {
                     "clientId" INTEGER,
                     "orderIncome" INTEGER,
                     "orderBouncedBack" INTEGER,
-                    "shift_id" INTEGER
+                    "shift_id" INTEGER,
+                    receipt_number VARCHAR(14),
+                    idempotency_key VARCHAR(255)
                 )
                 """);
 

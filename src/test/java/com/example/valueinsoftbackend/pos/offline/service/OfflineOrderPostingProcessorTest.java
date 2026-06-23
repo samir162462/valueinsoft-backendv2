@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.pos.offline.service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosOrder;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod;
+import com.example.valueinsoftbackend.Model.Response.CreateOrderResult;
 import com.example.valueinsoftbackend.Service.PosSalePostingService;
 import com.example.valueinsoftbackend.pos.offline.enums.OfflineOrderImportStatus;
 import com.example.valueinsoftbackend.pos.offline.enums.PosIdempotencyStatus;
@@ -102,7 +103,7 @@ class OfflineOrderPostingProcessorTest {
         when(idempotencyService.requireMatchingRecord(anyLong(), anyLong(), anyLong(), anyString(), anyString()))
                 .thenReturn(createIdempotencyModel(null));
 
-        DbPosOrder.AddOrderResult result = new DbPosOrder.AddOrderResult(999, 1, new java.sql.Timestamp(System.currentTimeMillis()));
+        CreateOrderResult result = new CreateOrderResult(999, "REC999", false, 1, new java.sql.Timestamp(System.currentTimeMillis()));
         when(posSalePostingService.postSale(anyInt(), any(), any(), any())).thenReturn(result);
 
         boolean processed = postingProcessor.postNextValidatedImport(COMPANY_ID, BRANCH_ID, BATCH_ID);
