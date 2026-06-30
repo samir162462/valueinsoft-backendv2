@@ -187,14 +187,16 @@ public class DbPosProduct {
                     prod.product_type AS type,
                     prod.major AS major
                 FROM %s prod
+                INNER JOIN %s ibp ON ibp.product_id = prod.product_id AND ibp.branch_id = :branchId AND ibp.is_active = TRUE
                 WHERE prod.product_name ILIKE :searchText
                 ORDER BY prod.product_name
-                """.formatted(TenantSqlIdentifiers.inventoryProductTable(companyId));
+                """.formatted(TenantSqlIdentifiers.inventoryProductTable(companyId), TenantSqlIdentifiers.inventoryBranchProductTable(companyId));
 
         return jdbcTemplate.query(
                 sql,
                 new MapSqlParameterSource()
-                        .addValue("searchText", "%" + text.trim() + "%"),
+                        .addValue("searchText", "%" + text.trim() + "%")
+                        .addValue("branchId", branchId),
                 PRODUCT_NAME_ROW_MAPPER
         );
     }

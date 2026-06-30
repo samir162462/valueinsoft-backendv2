@@ -50,6 +50,7 @@ public class DbInventoryAnalysisQueryGateway implements InventoryAnalysisQueryGa
         
         String ledgerTable = TenantSqlIdentifiers.inventoryStockLedgerTable(companyId);
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
+        String branchProductTable = TenantSqlIdentifiers.inventoryBranchProductTable(companyId);
         String supplierTable = TenantSqlIdentifiers.supplierTable(companyId, branchId);
 
         StringBuilder sql = new StringBuilder();
@@ -63,7 +64,7 @@ public class DbInventoryAnalysisQueryGateway implements InventoryAnalysisQueryGa
            .append("p.serial AS serial, ")
            .append("p.template_key AS \"templateKey\", ")
            .append("p.business_line_key AS \"businessLineKey\", ")
-           .append("COALESCE(l.supplier_id, p.supplier_id) AS \"supplierId\", ")
+           .append("COALESCE(l.supplier_id, ibp.default_supplier_id) AS \"supplierId\", ")
            .append("s.\"SupplierName\" AS \"supplierName\", ")
            .append("l.quantity_delta AS \"quantityDelta\", ")
            .append("l.reference_type AS \"referenceType\", ")
@@ -72,7 +73,8 @@ public class DbInventoryAnalysisQueryGateway implements InventoryAnalysisQueryGa
            .append("SUM(l.quantity_delta) OVER (PARTITION BY l.product_id ORDER BY l.created_at ASC, l.stock_ledger_id ASC) AS \"runningBalance\" ")
            .append("FROM ").append(ledgerTable).append(" l ")
            .append("JOIN ").append(productTable).append(" p ON p.product_id = l.product_id ")
-           .append("LEFT JOIN ").append(supplierTable).append(" s ON s.\"supplierId\" = COALESCE(l.supplier_id, p.supplier_id) ");
+           .append("LEFT JOIN ").append(branchProductTable).append(" ibp ON ibp.product_id = l.product_id AND ibp.branch_id = l.branch_id ")
+           .append("LEFT JOIN ").append(supplierTable).append(" s ON s.\"supplierId\" = COALESCE(l.supplier_id, ibp.default_supplier_id) ");
 
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("branchId", branchId);

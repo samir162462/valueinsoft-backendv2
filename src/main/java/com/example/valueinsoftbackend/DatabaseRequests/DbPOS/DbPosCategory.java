@@ -40,4 +40,22 @@ public class DbPosCategory {
                 rs.getString(3)
         )));
     }
+
+    public java.util.Map<String, List<String>> getActiveProductsGroupedByBusinessLine(int companyId, int branchId) {
+        String sql = "SELECT p.product_name, p.business_line_key FROM " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " p " +
+                     "INNER JOIN " + TenantSqlIdentifiers.inventoryBranchProductTable(companyId) + " ibp " +
+                     "ON ibp.product_id = p.product_id AND ibp.branch_id = ? AND ibp.is_active = TRUE";
+
+        return jdbcTemplate.query(sql, rs -> {
+            java.util.Map<String, List<String>> map = new java.util.HashMap<>();
+            while (rs.next()) {
+                String name = rs.getString("product_name");
+                if (name != null && !name.isBlank()) {
+                    String blKey = rs.getString("business_line_key");
+                    map.computeIfAbsent(blKey == null ? "UNKNOWN" : blKey, k -> new ArrayList<>()).add(name.trim());
+                }
+            }
+            return map;
+        }, branchId);
+    }
 }

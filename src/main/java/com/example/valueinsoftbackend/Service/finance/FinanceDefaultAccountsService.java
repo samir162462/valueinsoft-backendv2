@@ -279,6 +279,8 @@ public class FinanceDefaultAccountsService {
                 true,  false, false, false, false));
         s.add(detail("6400", "Payment Provider Fees","expense", "debit",  "6000",
                 true,  false, false, false, false));
+        s.add(detail("6600", "Billing Credits Expense","expense", "debit", "6000",
+                true,  false, false, false, false));
         s.add(detail("6500", "Inventory Damage Expense",    "expense", "debit", "6000",
                 true,  false, false, false, false));
         s.add(detail("6510", "Inventory Write-Off Expense", "expense", "debit", "6000",
@@ -329,6 +331,8 @@ public class FinanceDefaultAccountsService {
         s.add(new MappingSeed("payment.cash_drawer",   "1011"));
         s.add(new MappingSeed("payment.cash_safe",     "1012"));
         s.add(new MappingSeed("payment.card_clearing", "1031"));
+        s.add(new MappingSeed("payment.customer_deposits", "2300"));
+        s.add(new MappingSeed("payment.billing_credit_expense", "6600"));
         s.add(new MappingSeed("payment.fee_expense",   "6400"));
 
         return s;

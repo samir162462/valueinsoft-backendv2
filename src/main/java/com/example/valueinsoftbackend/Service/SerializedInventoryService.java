@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.Service;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductTrackingRepository;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductUnitRepository;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryStockMovementRepository;
+import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.DbInventoryWorkspaceCommandGateway;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Inventory.InventoryMovementType;
 import com.example.valueinsoftbackend.Model.Inventory.InventoryStockMovement;
@@ -15,6 +16,8 @@ import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitInpu
 import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitStockInRequest;
 import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitTransferRequest;
 import com.example.valueinsoftbackend.Model.ResponseModel.Inventory.SerializedUnitScanResponse;
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -37,13 +40,20 @@ public class SerializedInventoryService {
     private final DbInventoryProductTrackingRepository productTrackingRepository;
     private final DbInventoryProductUnitRepository productUnitRepository;
     private final DbInventoryStockMovementRepository stockMovementRepository;
+    private final FinanceOperationalPostingService financeOperationalPostingService;
+    private final DbInventoryWorkspaceCommandGateway workspaceCommandGateway;
 
-    public SerializedInventoryService(DbInventoryProductTrackingRepository productTrackingRepository,
-                                      DbInventoryProductUnitRepository productUnitRepository,
-                                      DbInventoryStockMovementRepository stockMovementRepository) {
-        this.productTrackingRepository = productTrackingRepository;
+    @Autowired
+    public SerializedInventoryService(DbInventoryProductUnitRepository productUnitRepository,
+                                      DbInventoryProductTrackingRepository productTrackingRepository,
+                                      DbInventoryStockMovementRepository stockMovementRepository,
+                                      FinanceOperationalPostingService financeOperationalPostingService,
+                                      DbInventoryWorkspaceCommandGateway workspaceCommandGateway) {
         this.productUnitRepository = productUnitRepository;
+        this.productTrackingRepository = productTrackingRepository;
         this.stockMovementRepository = stockMovementRepository;
+        this.financeOperationalPostingService = financeOperationalPostingService;
+        this.workspaceCommandGateway = workspaceCommandGateway;
     }
 
     @Transactional
@@ -382,6 +392,15 @@ public class SerializedInventoryService {
         if (uniqueUnitIds.size() != request.getProductUnitIds().size()) {
             throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_DUPLICATE_IN_TRANSFER", "The same serialized unit appears more than once in the transfer");
         }
+
+        // Idempotent assignment on destination branch
+        workspaceCommandGateway.assignProductToBranch(
+                request.getActorName(),
+                (int) companyId,
+                (int) toBranchId,
+                productId,
+                null
+        );
 
         for (Long productUnitId : request.getProductUnitIds()) {
             ProductUnit unit = requireAvailableUnitForSale(companyId, fromBranchId, productId, productUnitId);

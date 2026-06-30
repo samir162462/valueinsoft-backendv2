@@ -63,7 +63,8 @@ public class CategoryService {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         businessPackageCatalogService.provisionBranchCategoriesIfMissing(companyId, branchId);
-        return parseCategoryPairs(dbPosCategory.getCategoryJson(branchId, companyId));
+        String payload = dbPosCategory.getCategoryJson(branchId, companyId);
+        return parseCategoryPairs(injectMissingProducts(companyId, branchId, payload));
     }
 
     @Cacheable(cacheNames = CacheConfig.CATEGORY_JSON_FLAT, key = "#companyId + ':' + #branchId")
@@ -72,7 +73,7 @@ public class CategoryService {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         businessPackageCatalogService.provisionBranchCategoriesIfMissing(companyId, branchId);
         String payload = dbPosCategory.getCategoryJson(branchId, companyId);
-        return payload == null ? "" : payload;
+        return injectMissingProducts(companyId, branchId, payload);
     }
 
     @Cacheable(cacheNames = CacheConfig.MAIN_MAJORS, key = "#companyId")
@@ -208,5 +209,137 @@ public class CategoryService {
             }
         }
         return values;
+    }
+
+    private String injectMissingProducts(int companyId, int branchId, String rawPayload) {
+        if (rawPayload == null || rawPayload.isBlank()) {
+            rawPayload = "{\"categoryData\":{\"categoryData\":[]}}";
+        }
+
+        try {
+            JsonNode rootNode = objectMapper.readTree(rawPayload);
+            ArrayList<CustomPair> existingPairs = parseCategoryPairs(rawPayload);
+            java.util.Set<String> existingNames = new java.util.HashSet<>();
+            for (CustomPair pair : existingPairs) {
+                if (pair.getValue() instanceof java.util.List) {
+                    ((java.util.List<?>) pair.getValue()).forEach(v -> existingNames.add(String.valueOf(v).trim()));
+                }
+            }
+
+            Map<String, java.util.List<String>> allProducts = dbPosCategory.getActiveProductsGroupedByBusinessLine(companyId, branchId);
+            Map<String, java.util.List<String>> toInject = new java.util.HashMap<>();
+            for (Map.Entry<String, java.util.List<String>> entry : allProducts.entrySet()) {
+                String blKey = entry.getKey();
+                for (String prodName : entry.getValue()) {
+                    if (!existingNames.contains(prodName)) {
+                        String targetCategory = findBestCategory(prodName, blKey, existingPairs, rootNode);
+                        toInject.computeIfAbsent(targetCategory, k -> new ArrayList<>()).add(prodName);
+                    }
+                }
+            }
+
+            if (!toInject.isEmpty()) {
+                com.fasterxml.jackson.databind.node.ObjectNode rootObj = (com.fasterxml.jackson.databind.node.ObjectNode) rootNode;
+                com.fasterxml.jackson.databind.node.ArrayNode catArray = null;
+
+                if (rootObj.has("categoryData") && rootObj.get("categoryData").isObject() && rootObj.get("categoryData").has("categoryData")) {
+                    catArray = (com.fasterxml.jackson.databind.node.ArrayNode) rootObj.get("categoryData").get("categoryData");
+                } else if (rootObj.has("categoryData") && rootObj.get("categoryData").isArray()) {
+                    catArray = (com.fasterxml.jackson.databind.node.ArrayNode) rootObj.get("categoryData");
+                } else {
+                    com.fasterxml.jackson.databind.node.ObjectNode inner = objectMapper.createObjectNode();
+                    catArray = objectMapper.createArrayNode();
+                    inner.set("categoryData", catArray);
+                    rootObj.set("categoryData", inner);
+                }
+
+                for (Map.Entry<String, java.util.List<String>> entry : toInject.entrySet()) {
+                    String catName = entry.getKey();
+                    com.fasterxml.jackson.databind.node.ObjectNode targetCat = null;
+                    for (JsonNode n : catArray) {
+                        if (n.has("key") && n.get("key").asText().equals(catName)) {
+                            targetCat = (com.fasterxml.jackson.databind.node.ObjectNode) n;
+                            break;
+                        }
+                    }
+
+                    if (targetCat == null) {
+                        targetCat = objectMapper.createObjectNode();
+                        targetCat.put("key", catName);
+                        targetCat.set("value", objectMapper.createArrayNode());
+                        catArray.add(targetCat);
+                    }
+
+                    com.fasterxml.jackson.databind.node.ArrayNode valArray = (com.fasterxml.jackson.databind.node.ArrayNode) targetCat.get("value");
+                    for (String prod : entry.getValue()) {
+                        valArray.add(prod);
+                    }
+                }
+                return objectMapper.writeValueAsString(rootObj);
+            }
+            return rawPayload;
+        } catch (Exception ex) {
+            log.error("Failed to inject missing products", ex);
+            return rawPayload;
+        }
+    }
+
+    private String findBestCategory(String productName, String businessLineKey, 
+                                    java.util.List<CustomPair> existingPairs, JsonNode rootNode) {
+        String nameLower = productName.toLowerCase();
+
+        // 1. Direct substring match with category names
+        for (CustomPair pair : existingPairs) {
+            String catKey = pair.getKey();
+            if (nameLower.contains(catKey.toLowerCase())) {
+                return catKey;
+            }
+        }
+
+        // 2. Substring match with words in existing values
+        String[] words = nameLower.split("\\s+");
+        for (CustomPair pair : existingPairs) {
+            if (pair.getValue() instanceof java.util.List) {
+                for (Object val : (java.util.List<?>) pair.getValue()) {
+                    String valStr = String.valueOf(val).toLowerCase();
+                    for (String word : words) {
+                        if (word.length() >= 3 && valStr.contains(word)) {
+                            return pair.getKey();
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback based on business_line_key and group mapping
+        String targetGroup = mapBusinessLineToGroup(businessLineKey);
+        if (rootNode.has("categoryData") && rootNode.get("categoryData").isObject() && 
+            rootNode.get("categoryData").has("branchGroups")) {
+            JsonNode groupsNode = rootNode.get("categoryData").get("branchGroups");
+            if (groupsNode.isArray()) {
+                for (JsonNode group : groupsNode) {
+                    if (group.has("key") && group.get("key").asText().equalsIgnoreCase(targetGroup)) {
+                        if (group.has("categories") && group.get("categories").isArray() && group.get("categories").size() > 0) {
+                            return group.get("categories").get(0).asText();
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Absolute fallback
+        if (!existingPairs.isEmpty()) {
+            return existingPairs.get(0).getKey();
+        }
+        return "Other";
+    }
+
+    private String mapBusinessLineToGroup(String blKey) {
+        if (blKey == null) return "mobile";
+        return switch (blKey) {
+            case "MOBILE" -> "mobile";
+            case "ACCESSORY", "SPARE_PART" -> "Ears";
+            default -> "mobile";
+        };
     }
 }

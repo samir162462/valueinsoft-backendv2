@@ -1,6 +1,9 @@
 package com.example.valueinsoftbackend.Service.payment;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBillingWriteModels;
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptStatus;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -30,7 +33,7 @@ public class PaymentAttemptService {
                 invoiceId,
                 providerCode,
                 externalOrderId,
-                "created",
+                BillingPaymentAttemptStatus.CREATED.legacyValue(),
                 requestedAmount,
                 currencyCode,
                 requestPayloadJson,
@@ -38,28 +41,40 @@ public class PaymentAttemptService {
         );
     }
 
-    public void markCheckoutRequested(String providerCode, String externalOrderId, String providerResponseJson) {
-        dbBillingWriteModels.updatePaymentAttemptCheckoutRequest(
+    public void markCheckoutPending(String providerCode, String externalOrderId, String providerResponseJson) {
+        int rows = dbBillingWriteModels.updatePaymentAttemptCheckoutRequest(
                 providerCode,
                 externalOrderId,
-                "checkout_requested",
+                BillingPaymentAttemptStatus.CHECKOUT_PENDING.legacyValue(),
                 providerResponseJson
         );
+        requireUpdated(rows);
+    }
+
+    public void markCheckoutRequested(String providerCode, String externalOrderId, String providerResponseJson) {
+        int rows = dbBillingWriteModels.updatePaymentAttemptCheckoutRequest(
+                providerCode,
+                externalOrderId,
+                BillingPaymentAttemptStatus.CHECKOUT_REQUESTED.legacyValue(),
+                providerResponseJson
+        );
+        requireUpdated(rows);
     }
 
     public void markSucceeded(String providerCode,
                               String externalOrderId,
                               String providerResponseJson,
                               String externalPaymentReference) {
-        dbBillingWriteModels.completePaymentAttempt(
+        int rows = dbBillingWriteModels.completePaymentAttempt(
                 providerCode,
                 externalOrderId,
-                "succeeded",
+                BillingPaymentAttemptStatus.SUCCEEDED.legacyValue(),
                 providerResponseJson,
                 externalPaymentReference,
                 null,
                 null
         );
+        requireUpdated(rows);
     }
 
     public void markFailed(String providerCode,
@@ -68,14 +83,26 @@ public class PaymentAttemptService {
                            String failureCode,
                            String failureMessage,
                            String externalPaymentReference) {
-        dbBillingWriteModels.completePaymentAttempt(
+        int rows = dbBillingWriteModels.completePaymentAttempt(
                 providerCode,
                 externalOrderId,
-                "failed",
+                BillingPaymentAttemptStatus.FAILED.legacyValue(),
                 providerResponseJson,
                 externalPaymentReference,
                 failureCode,
                 failureMessage
+        );
+        requireUpdated(rows);
+    }
+
+    private void requireUpdated(int rows) {
+        if (rows > 0) {
+            return;
+        }
+        throw new ApiException(
+                HttpStatus.CONFLICT,
+                "BILLING_PAYMENT_ATTEMPT_TERMINAL_OR_NOT_FOUND",
+                "Payment attempt is terminal or was not found"
         );
     }
 }

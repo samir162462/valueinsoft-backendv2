@@ -64,6 +64,14 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".inventory_product";
     }
 
+    public static String inventoryBranchProductTable(int companyId) {
+        return companySchema(companyId) + ".inventory_branch_product";
+    }
+
+    public static String inventoryBranchProductTable(long companyId) {
+        return companySchema(companyId) + ".inventory_branch_product";
+    }
+
     public static String inventoryProductTable(long companyId) {
         return companySchema(companyId) + ".inventory_product";
     }

@@ -63,7 +63,12 @@ public class DbPosProductCommandRepository {
         long productId = keyHolder.getKey().longValue();
         boolean serializedTracking = isSerializedTracking(product);
         int stockQuantity = serializedTracking ? 0 : product.getQuantity();
-        upsertBranchQuantity(companyId, numericBranchId, productId, stockQuantity);
+        insertBranchProductAssortment(companyId, numericBranchId, productId, product.getSupplierId());
+        // We no longer blindly create 0-stock rows if not needed, but since this relies on upsertBranchQuantity, we can keep the logic that checks if we need to insert stock balance.
+        // Wait, the plan explicitly said "Do not blindly create zero-stock rows; just create the inventory_branch_product row and let stock balance be absent if needed."
+        if (stockQuantity != 0) {
+            upsertBranchQuantity(companyId, numericBranchId, productId, stockQuantity);
+        }
         saveAttributeValues(companyId, productId, metadata.templateKey(), parseAttributes(product.getAttributes()));
         if (!serializedTracking && stockQuantity != 0) {
             insertLedgerEntry(companyId, numericBranchId, productId, stockQuantity, "OPENING_BALANCE", "PRODUCT_CREATE", String.valueOf(productId));
@@ -143,6 +148,27 @@ public class DbPosProductCommandRepository {
     private boolean isSerializedTracking(Product product) {
         TrackingType trackingType = TrackingType.defaultIfNull(product.getTrackingType());
         return trackingType == TrackingType.IMEI || trackingType == TrackingType.SERIAL;
+    }
+
+    private void insertBranchProductAssortment(int companyId, int branchId, long productId, Integer supplierId) {
+        String sql = """
+                INSERT INTO %s (
+                    branch_id, product_id, is_active, default_supplier_id, created_at, updated_at
+                ) VALUES (
+                    :branchId, :productId, TRUE, :supplierId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (branch_id, product_id) DO UPDATE
+                SET default_supplier_id = EXCLUDED.default_supplier_id,
+                    is_active = TRUE,
+                    updated_at = CURRENT_TIMESTAMP
+                """.formatted(TenantSqlIdentifiers.inventoryBranchProductTable(companyId));
+        
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("branchId", branchId)
+                .addValue("productId", productId)
+                .addValue("supplierId", supplierId != null && supplierId > 0 ? supplierId : null);
+                
+        jdbcTemplate.update(sql, params);
     }
 
     private void upsertBranchQuantity(int companyId, int branchId, long productId, int quantity) {

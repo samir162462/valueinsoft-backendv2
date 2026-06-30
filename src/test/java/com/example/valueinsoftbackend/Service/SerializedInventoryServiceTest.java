@@ -3,6 +3,8 @@ package com.example.valueinsoftbackend.Service;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductTrackingRepository;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductUnitRepository;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryStockMovementRepository;
+import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.DbInventoryWorkspaceCommandGateway;
+import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Inventory.InventoryMovementType;
 import com.example.valueinsoftbackend.Model.Inventory.InventoryStockMovement;
@@ -35,6 +37,8 @@ class SerializedInventoryServiceTest {
     private DbInventoryProductTrackingRepository productTrackingRepository;
     private DbInventoryProductUnitRepository productUnitRepository;
     private DbInventoryStockMovementRepository stockMovementRepository;
+    private FinanceOperationalPostingService financeOperationalPostingService;
+    private DbInventoryWorkspaceCommandGateway workspaceCommandGateway;
     private SerializedInventoryService service;
 
     @BeforeEach
@@ -42,7 +46,9 @@ class SerializedInventoryServiceTest {
         productTrackingRepository = Mockito.mock(DbInventoryProductTrackingRepository.class);
         productUnitRepository = Mockito.mock(DbInventoryProductUnitRepository.class);
         stockMovementRepository = Mockito.mock(DbInventoryStockMovementRepository.class);
-        service = new SerializedInventoryService(productTrackingRepository, productUnitRepository, stockMovementRepository);
+        financeOperationalPostingService = Mockito.mock(FinanceOperationalPostingService.class);
+        workspaceCommandGateway = Mockito.mock(DbInventoryWorkspaceCommandGateway.class);
+        service = new SerializedInventoryService(productUnitRepository, productTrackingRepository, stockMovementRepository, financeOperationalPostingService, workspaceCommandGateway);
     }
 
     @Test

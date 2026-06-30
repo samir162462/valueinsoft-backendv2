@@ -14,14 +14,12 @@ public class BillingAccountService {
     }
 
     public long ensureBillingAccount(Company company) {
-        Long existingId = dbBillingWriteModels.findBillingAccountIdByCompanyId(company.getCompanyId());
+        String currencyCode = normalizeCurrency(company.getCurrency());
+        Long existingId = dbBillingWriteModels.findBillingAccountIdByCompanyIdAndCurrency(company.getCompanyId(), currencyCode);
         if (existingId != null) {
             return existingId;
         }
 
-        String currencyCode = company.getCurrency() == null || company.getCurrency().isBlank()
-                ? "EGP"
-                : company.getCurrency().trim();
         return dbBillingWriteModels.createBillingAccount(
                 company.getCompanyId(),
                 company.getCompanyId(),
@@ -30,5 +28,16 @@ public class BillingAccountService {
                 company.getCompanyName(),
                 "{\"source\":\"legacy_company_subscription\"}"
         );
+    }
+
+    private String normalizeCurrency(String currencyCode) {
+        if (currencyCode == null || currencyCode.isBlank()) {
+            return "EGP";
+        }
+        String normalized = currencyCode.trim();
+        if ("le".equalsIgnoreCase(normalized) || "egp".equalsIgnoreCase(normalized)) {
+            return "EGP";
+        }
+        return normalized.toUpperCase();
     }
 }

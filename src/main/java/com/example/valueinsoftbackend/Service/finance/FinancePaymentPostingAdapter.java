@@ -36,6 +36,9 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
             "customer_receipt",
             "customer_payment",
             "client_receipt");
+    private static final Set<String> BILLING_BALANCE_SOURCE_TYPES = Set.of(
+            "billing_balance_settlement",
+            "billing_balance_credit");
     private static final Set<String> SUPPLIER_PAYMENT_SOURCE_TYPES = Set.of(
             "supplier_payment",
             "supplier_receipt",
@@ -62,9 +65,10 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
     public UUID post(FinancePostingRequestItem request) {
         if (!SETTLEMENT_SOURCE_TYPES.contains(request.getSourceType())
                 && !CUSTOMER_RECEIPT_SOURCE_TYPES.contains(request.getSourceType())
+                && !BILLING_BALANCE_SOURCE_TYPES.contains(request.getSourceType())
                 && !SUPPLIER_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PAYMENT_SOURCE_TYPE_UNSUPPORTED",
-                    "Payment posting adapter currently supports settlement, customer receipt, and supplier payment source types only");
+                    "Payment posting adapter currently supports settlement, customer receipt, billing balance settlement, and supplier payment source types only");
         }
 
         JsonNode payload = parsePayload(request);
@@ -76,6 +80,12 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
 
         if (CUSTOMER_RECEIPT_SOURCE_TYPES.contains(request.getSourceType())) {
             return postCustomerReceipt(request, payload, currencyCode);
+        }
+        if (BILLING_BALANCE_SOURCE_TYPES.contains(request.getSourceType())) {
+            if ("billing_balance_credit".equals(request.getSourceType())) {
+                return postBillingBalanceCredit(request, payload, currencyCode);
+            }
+            return postBillingBalanceSettlement(request, payload, currencyCode);
         }
         if (SUPPLIER_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())) {
             return postSupplierPayment(request, payload, currencyCode);
@@ -211,6 +221,79 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 "RC-",
                 "receipt",
                 "Customer receipt " + request.getSourceId(),
+                lines);
+    }
+
+    private UUID postBillingBalanceSettlement(FinancePostingRequestItem request, JsonNode payload, String currencyCode) {
+        BigDecimal amount = firstOptionalAmount(payload, "amount", "grossAmount", "netAmount");
+        if (amount.compareTo(ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_BILLING_BALANCE_AMOUNT_REQUIRED",
+                    "Billing balance settlement posting requires a positive amount");
+        }
+
+        String paymentId = firstText(payload, "paymentId", "billingPaymentId", "billingPaymentAllocationId");
+        ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
+        lines.add(debitLine(
+                resolveMapping(request, "payment.customer_deposits", null),
+                request,
+                amount,
+                "Billing balance liability consumed",
+                paymentId,
+                null,
+                null));
+        lines.add(creditLine(
+                resolveMapping(request, "pos.receivable", null),
+                request,
+                amount,
+                "Billing invoice receivable settled from company balance",
+                paymentId,
+                null,
+                null));
+
+        return createPostedPaymentJournal(
+                request,
+                currencyCode,
+                "payment.billing_balance_settlement",
+                "BB-",
+                "billing_balance_settlement",
+                "Billing balance settlement " + request.getSourceId(),
+                lines);
+    }
+
+    private UUID postBillingBalanceCredit(FinancePostingRequestItem request, JsonNode payload, String currencyCode) {
+        BigDecimal amount = firstOptionalAmount(payload, "amount", "grossAmount", "netAmount");
+        if (amount.compareTo(ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_BILLING_BALANCE_AMOUNT_REQUIRED",
+                    "Billing balance credit posting requires a positive amount");
+        }
+
+        String fundingSource = normalizeFundingSource(text(payload, "fundingSource", null));
+        String paymentId = firstText(payload, "paymentId", "billingAccountLedgerId", "reference");
+        ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
+        lines.add(debitLine(
+                resolveMapping(request, balanceCreditDebitMappingKey(fundingSource), null),
+                request,
+                amount,
+                "Billing balance credit funded by " + fundingSource,
+                paymentId,
+                null,
+                null));
+        lines.add(creditLine(
+                resolveMapping(request, "payment.customer_deposits", null),
+                request,
+                amount,
+                "Company billing balance liability credited",
+                paymentId,
+                null,
+                null));
+
+        return createPostedPaymentJournal(
+                request,
+                currencyCode,
+                "payment.billing_balance_credit",
+                "BC-",
+                "billing_balance_credit",
+                "Billing balance credit " + request.getSourceId(),
                 lines);
     }
 
@@ -391,6 +474,17 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         };
     }
 
+    private String balanceCreditDebitMappingKey(String fundingSource) {
+        return switch (fundingSource) {
+            case "BANK_TRANSFER_TOP_UP" -> "payment.bank";
+            case "CASH_TOP_UP" -> "payment.cash_safe";
+            case "PROMOTIONAL_CREDIT", "SUBSCRIPTION_CREDIT", "MANUAL_CORRECTION", "REFUND_CREDIT", "REVERSAL" ->
+                    "payment.billing_credit_expense";
+            default -> throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_BILLING_BALANCE_FUNDING_SOURCE_UNSUPPORTED",
+                    "Unsupported billing balance credit funding source for automatic posting");
+        };
+    }
+
     private String destinationMappingKey(String destination) {
         return switch (destination) {
             case "bank" -> "payment.bank";
@@ -438,6 +532,14 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
             return "bank";
         }
         return method;
+    }
+
+    private String normalizeFundingSource(String value) {
+        if (value == null || value.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_BILLING_BALANCE_FUNDING_SOURCE_REQUIRED",
+                    "Billing balance credit posting requires fundingSource");
+        }
+        return value.trim().toUpperCase();
     }
 
     private String methodFromSourceType(String sourceType) {

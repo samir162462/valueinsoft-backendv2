@@ -11,6 +11,8 @@ import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.Inventory
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryPresetCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryPresetUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryQuickFindRequest;
+import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryProductAssignRequest;
+import com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace.DbInventoryWorkspaceCommandGateway;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -21,13 +23,20 @@ public class InventoryWorkspaceService {
     private final InventoryProductQueryGateway inventoryProductQueryGateway;
     private final InventoryAnalysisQueryGateway inventoryAnalysisQueryGateway;
     private final InventoryPresetService inventoryPresetService;
+    private final DbInventoryWorkspaceCommandGateway commandGateway;
 
     public InventoryWorkspaceService(InventoryProductQueryGateway inventoryProductQueryGateway,
                                      InventoryAnalysisQueryGateway inventoryAnalysisQueryGateway,
-                                     InventoryPresetService inventoryPresetService) {
+                                     InventoryPresetService inventoryPresetService,
+                                     DbInventoryWorkspaceCommandGateway commandGateway) {
         this.inventoryProductQueryGateway = inventoryProductQueryGateway;
         this.inventoryAnalysisQueryGateway = inventoryAnalysisQueryGateway;
         this.inventoryPresetService = inventoryPresetService;
+        this.commandGateway = commandGateway;
+    }
+
+    public void assignExistingProductToBranch(String actorName, InventoryProductAssignRequest request) {
+        commandGateway.assignProductToBranch(actorName, request.getCompanyId(), request.getBranchId(), request.getProductId(), request.getDefaultSupplierId());
     }
 
     public InventoryQuickFindResponse quickFind(String actorName, InventoryQuickFindRequest request) {

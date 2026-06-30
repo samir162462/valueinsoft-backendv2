@@ -105,6 +105,84 @@ class FinanceOperationalPostingServiceTest {
     }
 
     @Test
+    void enqueueBillingBalanceSettlementBuildsPaymentPostingRequest() {
+        Timestamp settlementTime = Timestamp.valueOf(LocalDateTime.of(2026, 7, 7, 9, 30));
+        when(dbFinanceSetup.findPostingFiscalPeriodIdForDate(COMPANY_ID, settlementTime.toLocalDateTime().toLocalDate()))
+                .thenReturn(FISCAL_PERIOD_ID);
+
+        service.enqueueBillingBalanceSettlement(
+                COMPANY_ID,
+                BRANCH_ID,
+                3001L,
+                7001L,
+                8001L,
+                new BigDecimal("600.00"),
+                "EGP",
+                settlementTime,
+                "system");
+
+        ArgumentCaptor<FinancePostingRequestCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(FinancePostingRequestCreateRequest.class);
+        verify(financePostingRequestService).createPostingRequestFromSystem(
+                org.mockito.ArgumentMatchers.eq("system"),
+                requestCaptor.capture());
+
+        FinancePostingRequestCreateRequest request = requestCaptor.getValue();
+        assertEquals("payment", request.getSourceModule());
+        assertEquals("billing_balance_settlement", request.getSourceType());
+        assertEquals("billing-payment-7001", request.getSourceId());
+        assertEquals(FISCAL_PERIOD_ID, request.getFiscalPeriodId());
+
+        Map<String, Object> payload = request.getRequestPayload();
+        assertEquals("EGP", payload.get("currencyCode"));
+        assertEquals(new BigDecimal("600.0000"), payload.get("amount"));
+        assertEquals(3001L, payload.get("billingInvoiceId"));
+        assertEquals(7001L, payload.get("billingPaymentId"));
+        assertEquals(8001L, payload.get("billingPaymentAllocationId"));
+        assertEquals("COMPANY_BALANCE", payload.get("paymentSource"));
+    }
+
+    @Test
+    void enqueueBillingBalanceCreditBuildsPaymentPostingRequest() {
+        Timestamp creditTime = Timestamp.valueOf(LocalDateTime.of(2026, 7, 7, 10, 45));
+        when(dbFinanceSetup.findPostingFiscalPeriodIdForDate(COMPANY_ID, creditTime.toLocalDateTime().toLocalDate()))
+                .thenReturn(FISCAL_PERIOD_ID);
+
+        service.enqueueBillingBalanceCredit(
+                COMPANY_ID,
+                2001L,
+                9001L,
+                new BigDecimal("600.00"),
+                "EGP",
+                "BANK_TRANSFER_TOP_UP",
+                "CUSTOMER_PREPAYMENT",
+                "bank-transfer-123",
+                creditTime,
+                "admin");
+
+        ArgumentCaptor<FinancePostingRequestCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(FinancePostingRequestCreateRequest.class);
+        verify(financePostingRequestService).createPostingRequestFromSystem(
+                org.mockito.ArgumentMatchers.eq("admin"),
+                requestCaptor.capture());
+
+        FinancePostingRequestCreateRequest request = requestCaptor.getValue();
+        assertEquals("payment", request.getSourceModule());
+        assertEquals("billing_balance_credit", request.getSourceType());
+        assertEquals("billing-ledger-9001", request.getSourceId());
+        assertEquals(FISCAL_PERIOD_ID, request.getFiscalPeriodId());
+
+        Map<String, Object> payload = request.getRequestPayload();
+        assertEquals("EGP", payload.get("currencyCode"));
+        assertEquals(new BigDecimal("600.0000"), payload.get("amount"));
+        assertEquals(2001L, payload.get("billingAccountId"));
+        assertEquals(9001L, payload.get("billingAccountLedgerId"));
+        assertEquals("BANK_TRANSFER_TOP_UP", payload.get("fundingSource"));
+        assertEquals("CUSTOMER_PREPAYMENT", payload.get("creditReason"));
+        assertEquals("bank-transfer-123", payload.get("reference"));
+    }
+
+    @Test
     void enqueuePosSaleReturnBuildsPendingPostingRequestFromBounceBack() {
         Timestamp returnTime = Timestamp.valueOf(LocalDateTime.of(2026, 7, 5, 12, 15));
         when(dbFinanceSetup.findPostingFiscalPeriodIdForDate(COMPANY_ID, returnTime.toLocalDateTime().toLocalDate()))

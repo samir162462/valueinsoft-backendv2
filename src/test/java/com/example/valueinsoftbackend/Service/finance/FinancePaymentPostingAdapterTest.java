@@ -37,6 +37,8 @@ class FinancePaymentPostingAdapterTest {
     private static final UUID FEE_EXPENSE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004106");
     private static final UUID RECEIVABLE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004107");
     private static final UUID PAYABLE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004108");
+    private static final UUID CUSTOMER_DEPOSITS_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004109");
+    private static final UUID BILLING_CREDIT_EXPENSE_ACCOUNT_ID = UUID.fromString("00000000-0000-0000-0000-000000004110");
 
     private DbFinanceSetup dbFinanceSetup;
     private DbFinanceJournal dbFinanceJournal;
@@ -54,6 +56,8 @@ class FinancePaymentPostingAdapterTest {
         stubMapping("payment.wallet_clearing", WALLET_CLEARING_ACCOUNT_ID);
         stubMapping("payment.cash_drawer", CASH_DRAWER_ACCOUNT_ID);
         stubMapping("payment.fee_expense", FEE_EXPENSE_ACCOUNT_ID);
+        stubMapping("payment.customer_deposits", CUSTOMER_DEPOSITS_ACCOUNT_ID);
+        stubMapping("payment.billing_credit_expense", BILLING_CREDIT_EXPENSE_ACCOUNT_ID);
         stubMapping("pos.receivable", RECEIVABLE_ACCOUNT_ID);
         stubMapping("purchase.payable", PAYABLE_ACCOUNT_ID);
         when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "payment.settlement", "PM-"))
@@ -62,6 +66,10 @@ class FinancePaymentPostingAdapterTest {
                 .thenReturn("RC-000001");
         when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "payment.supplier_payment", "SP-"))
                 .thenReturn("SP-000001");
+        when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "payment.billing_balance_settlement", "BB-"))
+                .thenReturn("BB-000001");
+        when(dbFinanceJournal.allocateSourceJournalNumber(COMPANY_ID, "payment.billing_balance_credit", "BC-"))
+                .thenReturn("BC-000001");
         when(dbFinanceJournal.createPostedSourceJournal(any())).thenReturn(JOURNAL_ID);
     }
 
@@ -192,6 +200,78 @@ class FinancePaymentPostingAdapterTest {
         assertEquals(2, command.lines().size());
         assertLine(command.lines().get(0), CASH_DRAWER_ACCOUNT_ID, money("275.0000"), money("0.0000"), "client-receipt-81", 44, null);
         assertLine(command.lines().get(1), RECEIVABLE_ACCOUNT_ID, money("0.0000"), money("275.0000"), "client-receipt-81", 44, null);
+    }
+
+    @Test
+    void postBillingBalanceSettlementDebitsCustomerDepositsAndCreditsReceivable() {
+        adapter.post(request("billing_balance_settlement", """
+                {
+                  "currencyCode": "EGP",
+                  "amount": 600.0000,
+                  "billingInvoiceId": 3001,
+                  "billingPaymentId": 7001,
+                  "billingPaymentAllocationId": 8001,
+                  "paymentId": "billing-payment-7001"
+                }
+                """));
+
+        DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
+        assertEquals("billing_balance_settlement", command.journalType());
+        assertEquals("billing_balance_settlement", command.sourceType());
+        assertEquals("BB-000001", command.journalNumber());
+        assertEquals(money("600.0000"), command.totalDebit());
+        assertEquals(money("600.0000"), command.totalCredit());
+        assertEquals(2, command.lines().size());
+        assertLine(command.lines().get(0), CUSTOMER_DEPOSITS_ACCOUNT_ID, money("600.0000"), money("0.0000"), "billing-payment-7001", null, null);
+        assertLine(command.lines().get(1), RECEIVABLE_ACCOUNT_ID, money("0.0000"), money("600.0000"), "billing-payment-7001", null, null);
+    }
+
+    @Test
+    void postBillingBalanceCreditDebitsBankAndCreditsCustomerDeposits() {
+        adapter.post(request("billing_balance_credit", """
+                {
+                  "currencyCode": "EGP",
+                  "amount": 600.0000,
+                  "fundingSource": "BANK_TRANSFER_TOP_UP",
+                  "creditReason": "CUSTOMER_PREPAYMENT",
+                  "reference": "bank-transfer-123",
+                  "paymentId": "billing-ledger-9001"
+                }
+                """));
+
+        DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
+        assertEquals("billing_balance_credit", command.journalType());
+        assertEquals("billing_balance_credit", command.sourceType());
+        assertEquals("BC-000001", command.journalNumber());
+        assertEquals(money("600.0000"), command.totalDebit());
+        assertEquals(money("600.0000"), command.totalCredit());
+        assertEquals(2, command.lines().size());
+        assertLine(command.lines().get(0), BANK_ACCOUNT_ID, money("600.0000"), money("0.0000"), "billing-ledger-9001", null, null);
+        assertLine(command.lines().get(1), CUSTOMER_DEPOSITS_ACCOUNT_ID, money("0.0000"), money("600.0000"), "billing-ledger-9001", null, null);
+    }
+
+    @Test
+    void postPromotionalBillingBalanceCreditDebitsCreditExpenseAndCreditsCustomerDeposits() {
+        adapter.post(request("billing_balance_credit", """
+                {
+                  "currencyCode": "EGP",
+                  "amount": 125.0000,
+                  "fundingSource": "PROMOTIONAL_CREDIT",
+                  "creditReason": "RETENTION_CREDIT",
+                  "reference": "promo-2026-05",
+                  "paymentId": "billing-ledger-9002"
+                }
+                """));
+
+        DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
+        assertEquals("billing_balance_credit", command.journalType());
+        assertEquals("billing_balance_credit", command.sourceType());
+        assertEquals("BC-000001", command.journalNumber());
+        assertEquals(money("125.0000"), command.totalDebit());
+        assertEquals(money("125.0000"), command.totalCredit());
+        assertEquals(2, command.lines().size());
+        assertLine(command.lines().get(0), BILLING_CREDIT_EXPENSE_ACCOUNT_ID, money("125.0000"), money("0.0000"), "billing-ledger-9002", null, null);
+        assertLine(command.lines().get(1), CUSTOMER_DEPOSITS_ACCOUNT_ID, money("0.0000"), money("125.0000"), "billing-ledger-9002", null, null);
     }
 
     @Test

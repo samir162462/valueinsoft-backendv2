@@ -1,7 +1,12 @@
 package com.example.valueinsoftbackend.DatabaseRequests;
 
+import com.example.valueinsoftbackend.Model.Billing.BillingBalanceSettlementSnapshot;
+import com.example.valueinsoftbackend.Model.Billing.BillingAccountBalanceResponse;
+import com.example.valueinsoftbackend.Model.Billing.BillingAccountLedgerItem;
 import com.example.valueinsoftbackend.Model.Billing.BillingOverdueInvoiceCandidate;
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceMutationContext;
+import com.example.valueinsoftbackend.Model.Billing.BillingInvoicePaymentContext;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptSnapshot;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptValidationContext;
 import com.example.valueinsoftbackend.Model.Billing.BillingRenewalCandidate;
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceRetryCandidate;
@@ -90,6 +95,73 @@ public class DbBillingWriteModels {
                     rs.getString("latest_external_order_id")
             );
 
+    private static final RowMapper<BillingInvoicePaymentContext> INVOICE_PAYMENT_CONTEXT_ROW_MAPPER = (rs, rowNum) ->
+            new BillingInvoicePaymentContext(
+                    rs.getLong("billing_invoice_id"),
+                    rs.getLong("billing_account_id"),
+                    (Integer) rs.getObject("tenant_id"),
+                    rs.getInt("company_id"),
+                    (Long) rs.getObject("branch_subscription_id"),
+                    (Integer) rs.getObject("branch_id"),
+                    rs.getString("invoice_status"),
+                    rs.getString("currency_code"),
+                    rs.getBigDecimal("total_amount"),
+                    rs.getBigDecimal("paid_amount"),
+                    rs.getBigDecimal("due_amount"),
+                    rs.getBigDecimal("available_balance")
+            );
+
+    private static final RowMapper<BillingBalanceSettlementSnapshot> BALANCE_SETTLEMENT_SNAPSHOT_ROW_MAPPER = (rs, rowNum) ->
+            new BillingBalanceSettlementSnapshot(
+                    rs.getLong("billing_payment_id"),
+                    (Long) rs.getObject("billing_payment_allocation_id"),
+                    (Long) rs.getObject("billing_account_ledger_id"),
+                    rs.getBigDecimal("amount"),
+                    rs.getString("currency_code")
+            );
+
+    private static final RowMapper<BillingPaymentAttemptSnapshot> PAYMENT_ATTEMPT_SNAPSHOT_ROW_MAPPER = (rs, rowNum) ->
+            new BillingPaymentAttemptSnapshot(
+                    rs.getLong("billing_payment_attempt_id"),
+                    rs.getString("provider_code"),
+                    rs.getString("external_order_id"),
+                    rs.getString("status"),
+                    rs.getBigDecimal("requested_amount"),
+                    rs.getString("currency_code"),
+                    rs.getString("checkout_url")
+            );
+
+    private static final RowMapper<BillingAccountBalanceResponse> BILLING_ACCOUNT_BALANCE_ROW_MAPPER = (rs, rowNum) ->
+            new BillingAccountBalanceResponse(
+                    rs.getInt("company_id"),
+                    rs.getLong("billing_account_id"),
+                    rs.getString("currency_code"),
+                    rs.getBigDecimal("available_balance"),
+                    rs.getString("status"),
+                    rs.getLong("version"),
+                    rs.getTimestamp("updated_at")
+            );
+
+    private static final RowMapper<BillingAccountLedgerItem> BILLING_ACCOUNT_LEDGER_ROW_MAPPER = (rs, rowNum) ->
+            new BillingAccountLedgerItem(
+                    rs.getLong("billing_account_ledger_id"),
+                    rs.getLong("billing_account_id"),
+                    rs.getInt("company_id"),
+                    rs.getString("transaction_type"),
+                    rs.getBigDecimal("amount"),
+                    rs.getString("currency_code"),
+                    rs.getString("direction"),
+                    rs.getBigDecimal("balance_before"),
+                    rs.getBigDecimal("balance_after"),
+                    rs.getString("reference_type"),
+                    rs.getString("reference_id"),
+                    rs.getString("funding_source"),
+                    rs.getString("credit_reason"),
+                    rs.getString("approval_status"),
+                    rs.getString("description"),
+                    rs.getTimestamp("created_at")
+            );
+
     private final JdbcTemplate jdbcTemplate;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
@@ -99,11 +171,12 @@ public class DbBillingWriteModels {
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
-    public Long findBillingAccountIdByCompanyId(int companyId) {
+    public Long findBillingAccountIdByCompanyIdAndCurrency(int companyId, String currencyCode) {
         List<Long> ids = jdbcTemplate.query(
-                "SELECT billing_account_id FROM public.billing_accounts WHERE company_id = ?",
+                "SELECT billing_account_id FROM public.billing_accounts WHERE company_id = ? AND UPPER(currency_code) = UPPER(?)",
                 (rs, rowNum) -> rs.getLong("billing_account_id"),
-                companyId
+                companyId,
+                currencyCode
         );
         return ids.isEmpty() ? null : ids.get(0);
     }
@@ -131,6 +204,265 @@ public class DbBillingWriteModels {
                 new String[]{"billing_account_id"}
         );
         return keyHolder.getKey().longValue();
+    }
+
+    public BillingAccountBalanceResponse findBillingAccountBalance(int companyId, String currencyCode) {
+        return findBillingAccountBalance(companyId, currencyCode, false);
+    }
+
+    public BillingAccountBalanceResponse lockBillingAccountBalance(int companyId, String currencyCode) {
+        return findBillingAccountBalance(companyId, currencyCode, true);
+    }
+
+    private BillingAccountBalanceResponse findBillingAccountBalance(int companyId, String currencyCode, boolean lockRow) {
+        String sql = "SELECT company_id, billing_account_id, currency_code, available_balance, status, version, updated_at " +
+                "FROM public.billing_accounts " +
+                "WHERE company_id = :companyId AND UPPER(currency_code) = UPPER(:currencyCode)";
+        if (lockRow) {
+            sql = sql + " FOR UPDATE";
+        }
+
+        List<BillingAccountBalanceResponse> items = namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("currencyCode", currencyCode),
+                BILLING_ACCOUNT_BALANCE_ROW_MAPPER
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public List<BillingAccountLedgerItem> findBillingAccountLedger(int companyId,
+                                                                   String currencyCode,
+                                                                   String transactionType,
+                                                                   int limit,
+                                                                   int offset) {
+        String sql = "SELECT billing_account_ledger_id, billing_account_id, company_id, transaction_type, amount, currency_code, " +
+                "direction, balance_before, balance_after, reference_type, reference_id, funding_source, credit_reason, " +
+                "approval_status, description, created_at " +
+                "FROM public.billing_account_ledger " +
+                "WHERE company_id = :companyId AND UPPER(currency_code) = UPPER(:currencyCode) " +
+                "AND (:transactionType IS NULL OR transaction_type = :transactionType) " +
+                "ORDER BY created_at DESC, billing_account_ledger_id DESC " +
+                "LIMIT :limit OFFSET :offset";
+        return namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("currencyCode", currencyCode)
+                        .addValue("transactionType", transactionType)
+                        .addValue("limit", limit)
+                        .addValue("offset", offset),
+                BILLING_ACCOUNT_LEDGER_ROW_MAPPER
+        );
+    }
+
+    public BillingAccountLedgerItem findBillingAccountLedgerByIdempotencyKey(int companyId, String idempotencyKey) {
+        List<BillingAccountLedgerItem> items = namedParameterJdbcTemplate.query(
+                "SELECT billing_account_ledger_id, billing_account_id, company_id, transaction_type, amount, currency_code, " +
+                        "direction, balance_before, balance_after, reference_type, reference_id, funding_source, credit_reason, " +
+                        "approval_status, description, created_at " +
+                        "FROM public.billing_account_ledger " +
+                        "WHERE company_id = :companyId AND idempotency_key = :idempotencyKey " +
+                        "ORDER BY billing_account_ledger_id DESC " +
+                        "LIMIT 1",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("idempotencyKey", idempotencyKey),
+                BILLING_ACCOUNT_LEDGER_ROW_MAPPER
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public BillingInvoicePaymentContext findInvoicePaymentContext(long billingInvoiceId) {
+        return findInvoicePaymentContext(billingInvoiceId, false);
+    }
+
+    public BillingInvoicePaymentContext lockInvoicePaymentContext(long billingInvoiceId) {
+        return findInvoicePaymentContext(billingInvoiceId, true);
+    }
+
+    private BillingInvoicePaymentContext findInvoicePaymentContext(long billingInvoiceId, boolean lockRows) {
+        String sql = "SELECT bi.billing_invoice_id, bi.billing_account_id, ba.tenant_id, ba.company_id, " +
+                "bs.branch_subscription_id, bs.branch_id, bi.status AS invoice_status, bi.currency_code, " +
+                "COALESCE(bi.total_amount, 0) AS total_amount, " +
+                "COALESCE(bi.paid_amount, GREATEST(COALESCE(bi.total_amount, 0) - COALESCE(bi.due_amount, 0), 0)) AS paid_amount, " +
+                "COALESCE(bi.due_amount, 0) AS due_amount, COALESCE(ba.available_balance, 0) AS available_balance " +
+                "FROM public.billing_invoices bi " +
+                "JOIN public.billing_accounts ba ON ba.billing_account_id = bi.billing_account_id " +
+                "LEFT JOIN public.branch_subscriptions bs ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
+                "WHERE bi.billing_invoice_id = :billingInvoiceId";
+        if (lockRows) {
+            sql = sql + " FOR UPDATE OF bi, ba";
+        }
+
+        List<BillingInvoicePaymentContext> items = namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource().addValue("billingInvoiceId", billingInvoiceId),
+                INVOICE_PAYMENT_CONTEXT_ROW_MAPPER
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public int updateBillingAccountAvailableBalance(long billingAccountId, BigDecimal availableBalance) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_accounts " +
+                        "SET available_balance = :availableBalance, version = version + 1, updated_at = NOW() " +
+                        "WHERE billing_account_id = :billingAccountId",
+                new MapSqlParameterSource()
+                        .addValue("billingAccountId", billingAccountId)
+                        .addValue("availableBalance", availableBalance)
+        );
+    }
+
+    public long createBillingAccountLedgerEntry(long billingAccountId,
+                                                int companyId,
+                                                String transactionType,
+                                                BigDecimal amount,
+                                                String currencyCode,
+                                                String direction,
+                                                BigDecimal balanceBefore,
+                                                BigDecimal balanceAfter,
+                                                String referenceType,
+                                                String referenceId,
+                                                String idempotencyKey,
+                                                String fundingSource,
+                                                String creditReason,
+                                                String approvalStatus,
+                                                String description,
+                                                String metadataJson) {
+        String sql = "INSERT INTO public.billing_account_ledger " +
+                "(billing_account_id, company_id, transaction_type, amount, currency_code, direction, balance_before, balance_after, " +
+                "reference_type, reference_id, idempotency_key, funding_source, credit_reason, approval_status, description, metadata_json) " +
+                "VALUES (:billingAccountId, :companyId, :transactionType, :amount, :currencyCode, :direction, :balanceBefore, :balanceAfter, " +
+                ":referenceType, :referenceId, :idempotencyKey, :fundingSource, :creditReason, :approvalStatus, :description, CAST(:metadataJson AS jsonb))";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("billingAccountId", billingAccountId)
+                        .addValue("companyId", companyId)
+                        .addValue("transactionType", transactionType)
+                        .addValue("amount", amount)
+                        .addValue("currencyCode", currencyCode)
+                        .addValue("direction", direction)
+                        .addValue("balanceBefore", balanceBefore)
+                        .addValue("balanceAfter", balanceAfter)
+                        .addValue("referenceType", referenceType)
+                        .addValue("referenceId", referenceId)
+                        .addValue("idempotencyKey", idempotencyKey)
+                        .addValue("fundingSource", fundingSource)
+                        .addValue("creditReason", creditReason)
+                        .addValue("approvalStatus", approvalStatus)
+                        .addValue("description", description)
+                        .addValue("metadataJson", metadataJson),
+                keyHolder,
+                new String[]{"billing_account_ledger_id"}
+        );
+        return keyHolder.getKey().longValue();
+    }
+
+    public long createBillingPayment(int companyId,
+                                     Long billingAccountId,
+                                     String paymentSource,
+                                     String providerCode,
+                                     BigDecimal amount,
+                                     String currencyCode,
+                                     String status,
+                                     String providerReference,
+                                     String idempotencyKey,
+                                     String metadataJson) {
+        String sql = "INSERT INTO public.billing_payments " +
+                "(company_id, billing_account_id, payment_source, provider_code, amount, currency_code, status, provider_reference, idempotency_key, metadata_json) " +
+                "VALUES (:companyId, :billingAccountId, :paymentSource, :providerCode, :amount, :currencyCode, :status, :providerReference, :idempotencyKey, CAST(:metadataJson AS jsonb))";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("billingAccountId", billingAccountId)
+                        .addValue("paymentSource", paymentSource)
+                        .addValue("providerCode", providerCode)
+                        .addValue("amount", amount)
+                        .addValue("currencyCode", currencyCode)
+                        .addValue("status", status)
+                        .addValue("providerReference", providerReference)
+                        .addValue("idempotencyKey", idempotencyKey)
+                        .addValue("metadataJson", metadataJson),
+                keyHolder,
+                new String[]{"billing_payment_id"}
+        );
+        return keyHolder.getKey().longValue();
+    }
+
+    public long createBillingPaymentAllocation(long billingPaymentId,
+                                               long billingInvoiceId,
+                                               BigDecimal allocatedAmount,
+                                               String currencyCode) {
+        String sql = "INSERT INTO public.billing_payment_allocations " +
+                "(billing_payment_id, billing_invoice_id, allocated_amount, currency_code) " +
+                "VALUES (:billingPaymentId, :billingInvoiceId, :allocatedAmount, :currencyCode)";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("billingPaymentId", billingPaymentId)
+                        .addValue("billingInvoiceId", billingInvoiceId)
+                        .addValue("allocatedAmount", allocatedAmount)
+                        .addValue("currencyCode", currencyCode),
+                keyHolder,
+                new String[]{"billing_payment_allocation_id"}
+        );
+        return keyHolder.getKey().longValue();
+    }
+
+    public int updateInvoicePaymentProjection(long billingInvoiceId,
+                                              String status,
+                                              BigDecimal paidAmount,
+                                              BigDecimal dueAmount,
+                                              Instant paidAt,
+                                              String metadataJson) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_invoices " +
+                        "SET status = :status, paid_amount = :paidAmount, due_amount = :dueAmount, paid_at = :paidAt, " +
+                        "metadata_json = metadata_json || CAST(:metadataJson AS jsonb), version = version + 1, updated_at = NOW() " +
+                        "WHERE billing_invoice_id = :billingInvoiceId",
+                new MapSqlParameterSource()
+                        .addValue("billingInvoiceId", billingInvoiceId)
+                        .addValue("status", status)
+                        .addValue("paidAmount", paidAmount)
+                        .addValue("dueAmount", dueAmount)
+                        .addValue("paidAt", paidAt == null ? null : Timestamp.from(paidAt))
+                        .addValue("metadataJson", metadataJson)
+        );
+    }
+
+    public BillingBalanceSettlementSnapshot findBalanceSettlementByIdempotencyKey(int companyId,
+                                                                                  long billingInvoiceId,
+                                                                                  String idempotencyKey) {
+        List<BillingBalanceSettlementSnapshot> items = namedParameterJdbcTemplate.query(
+                "SELECT bp.billing_payment_id, bpa.billing_payment_allocation_id, bal.billing_account_ledger_id, " +
+                        "bp.amount, bp.currency_code " +
+                        "FROM public.billing_payments bp " +
+                        "LEFT JOIN public.billing_payment_allocations bpa ON bpa.billing_payment_id = bp.billing_payment_id " +
+                        "LEFT JOIN public.billing_account_ledger bal ON bal.company_id = bp.company_id " +
+                        "AND bal.idempotency_key = bp.idempotency_key " +
+                        "AND bal.reference_type = 'billing_invoice' " +
+                        "AND bal.reference_id = :billingInvoiceReferenceId " +
+                        "WHERE bp.company_id = :companyId " +
+                        "AND bp.idempotency_key = :idempotencyKey " +
+                        "AND bp.payment_source = 'COMPANY_BALANCE' " +
+                        "AND (bpa.billing_invoice_id = :billingInvoiceId OR bpa.billing_invoice_id IS NULL) " +
+                        "ORDER BY bp.billing_payment_id DESC " +
+                        "LIMIT 1",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("billingInvoiceId", billingInvoiceId)
+                        .addValue("billingInvoiceReferenceId", String.valueOf(billingInvoiceId))
+                        .addValue("idempotencyKey", idempotencyKey),
+                BALANCE_SETTLEMENT_SNAPSHOT_ROW_MAPPER
+        );
+        return items.isEmpty() ? null : items.get(0);
     }
 
     public Long findBranchSubscriptionIdByLegacySubscriptionId(int legacySubscriptionId) {
@@ -397,6 +729,77 @@ public class DbBillingWriteModels {
         return keyHolder.getKey().longValue();
     }
 
+    public int supersedeActivePaymentAttempts(long invoiceId, String providerCode) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_payment_attempts " +
+                        "SET status = 'SUPERSEDED', terminal_at = COALESCE(terminal_at, NOW()) " +
+                        "WHERE billing_invoice_id = :invoiceId " +
+                        "AND LOWER(provider_code) = LOWER(:providerCode) " +
+                        "AND UPPER(status) IN ('CREATED', 'CHECKOUT_PENDING', 'CHECKOUT_REQUESTED', 'PENDING_PROVIDER')",
+                new MapSqlParameterSource()
+                        .addValue("invoiceId", invoiceId)
+                        .addValue("providerCode", providerCode)
+        );
+    }
+
+    public BillingPaymentAttemptSnapshot findPaymentAttemptByCompanyIdempotency(int companyId, String idempotencyKey) {
+        List<BillingPaymentAttemptSnapshot> items = namedParameterJdbcTemplate.query(
+                "SELECT billing_payment_attempt_id, provider_code, external_order_id, status, requested_amount, currency_code, " +
+                        "provider_response_json ->> 'checkoutUrl' AS checkout_url " +
+                        "FROM public.billing_payment_attempts " +
+                        "WHERE company_id = :companyId " +
+                        "AND idempotency_key = :idempotencyKey " +
+                        "ORDER BY billing_payment_attempt_id DESC " +
+                        "LIMIT 1",
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("idempotencyKey", idempotencyKey),
+                PAYMENT_ATTEMPT_SNAPSHOT_ROW_MAPPER
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public long createPaymentAttempt(long invoiceId,
+                                     Integer companyId,
+                                     Integer branchId,
+                                     String idempotencyKey,
+                                     String providerCode,
+                                     String externalOrderId,
+                                     String status,
+                                     BigDecimal requestedAmount,
+                                     String currencyCode,
+                                     String checkoutReference,
+                                     String requestPayloadJson,
+                                     String providerResponseJson,
+                                     String metadataJson) {
+        String sql = "INSERT INTO public.billing_payment_attempts " +
+                "(billing_invoice_id, company_id, branch_id, idempotency_key, provider_code, external_order_id, status, requested_amount, currency_code, " +
+                "checkout_reference, checkout_requested_at, request_payload_json, provider_response_json, metadata_json) " +
+                "VALUES (:invoiceId, :companyId, :branchId, :idempotencyKey, :providerCode, :externalOrderId, :status, :requestedAmount, :currencyCode, " +
+                ":checkoutReference, NOW(), CAST(:requestPayloadJson AS jsonb), CAST(:providerResponseJson AS jsonb), CAST(:metadataJson AS jsonb))";
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        namedParameterJdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("invoiceId", invoiceId)
+                        .addValue("companyId", companyId)
+                        .addValue("branchId", branchId)
+                        .addValue("idempotencyKey", idempotencyKey)
+                        .addValue("providerCode", providerCode)
+                        .addValue("externalOrderId", externalOrderId)
+                        .addValue("status", status)
+                        .addValue("requestedAmount", requestedAmount)
+                        .addValue("currencyCode", currencyCode)
+                        .addValue("checkoutReference", checkoutReference)
+                        .addValue("requestPayloadJson", requestPayloadJson)
+                        .addValue("providerResponseJson", providerResponseJson)
+                        .addValue("metadataJson", metadataJson),
+                keyHolder,
+                new String[]{"billing_payment_attempt_id"}
+        );
+        return keyHolder.getKey().longValue();
+    }
+
     public BillingInvoiceMutationContext findInvoiceMutationContext(long billingInvoiceId) {
         List<BillingInvoiceMutationContext> items = namedParameterJdbcTemplate.query(
                 "SELECT bi.billing_invoice_id, bs.branch_subscription_id, ba.tenant_id, ba.company_id, bs.branch_id, " +
@@ -491,7 +894,9 @@ public class DbBillingWriteModels {
         return namedParameterJdbcTemplate.update(
                 "UPDATE public.billing_payment_attempts " +
                         "SET status = :status, provider_response_json = CAST(:providerResponseJson AS jsonb) " +
-                        "WHERE LOWER(provider_code) = LOWER(:providerCode) AND external_order_id = :externalOrderId",
+                        "WHERE LOWER(provider_code) = LOWER(:providerCode) " +
+                        "AND external_order_id = :externalOrderId " +
+                        "AND UPPER(status) NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED', 'EXPIRED', 'SUPERSEDED')",
                 new MapSqlParameterSource()
                         .addValue("status", status)
                         .addValue("providerResponseJson", providerResponseJson)
@@ -511,7 +916,9 @@ public class DbBillingWriteModels {
                 "UPDATE public.billing_payment_attempts " +
                         "SET status = :status, provider_response_json = CAST(:providerResponseJson AS jsonb), " +
                         "external_payment_reference = :externalPaymentReference, failure_code = :failureCode, failure_message = :failureMessage, completed_at = NOW() " +
-                        "WHERE LOWER(provider_code) = LOWER(:providerCode) AND external_order_id = :externalOrderId",
+                        "WHERE LOWER(provider_code) = LOWER(:providerCode) " +
+                        "AND external_order_id = :externalOrderId " +
+                        "AND UPPER(status) NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED', 'EXPIRED', 'SUPERSEDED')",
                 new MapSqlParameterSource()
                         .addValue("status", status)
                         .addValue("providerResponseJson", providerResponseJson)

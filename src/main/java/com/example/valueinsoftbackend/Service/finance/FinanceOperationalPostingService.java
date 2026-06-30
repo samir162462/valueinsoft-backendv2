@@ -430,6 +430,89 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(actorName, request);
     }
 
+    public void enqueueBillingBalanceSettlement(int companyId,
+                                                Integer branchId,
+                                                long billingInvoiceId,
+                                                long billingPaymentId,
+                                                long billingPaymentAllocationId,
+                                                BigDecimal amount,
+                                                String currencyCode,
+                                                Timestamp settlementTime,
+                                                String actorName) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        LocalDate postingDate = settlementTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for billing balance settlement posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "payment",
+                "billing_balance_settlement",
+                "billing-payment-" + billingPaymentId,
+                postingDate,
+                fiscalPeriodId,
+                buildBillingBalanceSettlementPayload(
+                        billingInvoiceId,
+                        billingPaymentId,
+                        billingPaymentAllocationId,
+                        amount,
+                        currencyCode));
+
+        financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
+    public void enqueueBillingBalanceCredit(int companyId,
+                                            long billingAccountId,
+                                            long billingAccountLedgerId,
+                                            BigDecimal amount,
+                                            String currencyCode,
+                                            String fundingSource,
+                                            String creditReason,
+                                            String reference,
+                                            Timestamp creditTime,
+                                            String actorName) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        LocalDate postingDate = creditTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for billing balance credit posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                null,
+                "payment",
+                "billing_balance_credit",
+                "billing-ledger-" + billingAccountLedgerId,
+                postingDate,
+                fiscalPeriodId,
+                buildBillingBalanceCreditPayload(
+                        billingAccountId,
+                        billingAccountLedgerId,
+                        amount,
+                        currencyCode,
+                        fundingSource,
+                        creditReason,
+                        reference));
+
+        financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
     public void enqueueClientReceipt(int companyId, ClientReceipt receipt) {
         if (receipt == null || receipt.getAmount() == null || receipt.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             return;
@@ -858,6 +941,41 @@ public class FinanceOperationalPostingService {
         if (extraPayload != null) {
             payload.putAll(extraPayload);
         }
+        return payload;
+    }
+
+    private Map<String, Object> buildBillingBalanceSettlementPayload(long billingInvoiceId,
+                                                                     long billingPaymentId,
+                                                                     long billingPaymentAllocationId,
+                                                                     BigDecimal amount,
+                                                                     String currencyCode) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", currencyCode == null || currencyCode.isBlank() ? DEFAULT_CURRENCY_CODE : currencyCode.trim().toUpperCase());
+        payload.put("amount", money(amount));
+        payload.put("billingInvoiceId", billingInvoiceId);
+        payload.put("billingPaymentId", billingPaymentId);
+        payload.put("billingPaymentAllocationId", billingPaymentAllocationId);
+        payload.put("paymentId", "billing-payment-" + billingPaymentId);
+        payload.put("paymentSource", "COMPANY_BALANCE");
+        return payload;
+    }
+
+    private Map<String, Object> buildBillingBalanceCreditPayload(long billingAccountId,
+                                                                 long billingAccountLedgerId,
+                                                                 BigDecimal amount,
+                                                                 String currencyCode,
+                                                                 String fundingSource,
+                                                                 String creditReason,
+                                                                 String reference) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", currencyCode == null || currencyCode.isBlank() ? DEFAULT_CURRENCY_CODE : currencyCode.trim().toUpperCase());
+        payload.put("amount", money(amount));
+        payload.put("billingAccountId", billingAccountId);
+        payload.put("billingAccountLedgerId", billingAccountLedgerId);
+        payload.put("fundingSource", fundingSource);
+        payload.put("creditReason", creditReason);
+        payload.put("reference", reference);
+        payload.put("paymentId", "billing-ledger-" + billingAccountLedgerId);
         return payload;
     }
 

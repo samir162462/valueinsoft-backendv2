@@ -40,7 +40,7 @@ final class ProductQueryBuilder {
                     "prod.owner_ni AS \"ownerNI\", " +
                     EFFECTIVE_QUANTITY_SQL + " AS quantity, " +
                     "prod.product_state AS \"pState\", " +
-                    "prod.supplier_id AS \"supplierId\", " +
+                    "ibp.default_supplier_id AS \"supplierId\", " +
                     "prod.major AS major, " +
                     "prod.img_file AS \"imgFile\", " +
                     "prod.business_line_key AS \"businessLineKey\", " +
@@ -121,6 +121,8 @@ final class ProductQueryBuilder {
 
     static String productFromClause(int companyId) {
         return " FROM " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " prod " +
+                "INNER JOIN " + TenantSqlIdentifiers.inventoryBranchProductTable(companyId) + " ibp " +
+                "ON ibp.product_id = prod.product_id AND ibp.branch_id = :branchId AND ibp.is_active = TRUE " +
                 "LEFT JOIN " + TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId) + " stock " +
                 "ON stock.product_id = prod.product_id " +
                 "AND stock.branch_id = :branchId " +
@@ -208,8 +210,27 @@ final class ProductQueryBuilder {
         }
 
         if (productFilter.getMajor() != null && !productFilter.getMajor().isBlank()) {
-            conditions.add("prod.major = :major");
-            params.addValue("major", productFilter.getMajor().trim());
+            String majorFilter = productFilter.getMajor().trim();
+            String mappedBusinessLine = null;
+            if (majorFilter.equalsIgnoreCase("الموبايلات") || majorFilter.equalsIgnoreCase("Mobile") || majorFilter.equalsIgnoreCase("Mobiles")) {
+                mappedBusinessLine = "MOBILE";
+            } else if (majorFilter.equalsIgnoreCase("الاكسسوارات") || majorFilter.equalsIgnoreCase("Accessories")) {
+                mappedBusinessLine = "ACCESSORY";
+            } else if (majorFilter.equalsIgnoreCase("قطع غيار") || majorFilter.equalsIgnoreCase("Spare Parts")) {
+                mappedBusinessLine = "SPARE_PART";
+            } else if (majorFilter.equalsIgnoreCase("صيانة") || majorFilter.equalsIgnoreCase("Maintenance")) {
+                mappedBusinessLine = "SERVICE";
+            } else if (majorFilter.equalsIgnoreCase("خدمات") || majorFilter.equalsIgnoreCase("Services")) {
+                mappedBusinessLine = "SERVICE";
+            }
+
+            if (mappedBusinessLine != null) {
+                conditions.add("(prod.major = :major OR prod.business_line_key = :mappedBusinessLine)");
+                params.addValue("mappedBusinessLine", mappedBusinessLine);
+            } else {
+                conditions.add("prod.major = :major");
+            }
+            params.addValue("major", majorFilter);
         }
 
         addDateRangeCondition(productFilter.getDates(), conditions, params);

@@ -211,4 +211,82 @@ class FlywayMigrationInventoryTest {
         assertTrue(sql.contains("UNIQUE INDEX"));
         assertTrue(sql.contains("INVENTORY_STOCK_LEDGER"));
     }
+
+    @Test
+    void billingBalanceFirstFoundationMigrationExistsAndUsesAllocationModel() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V113__billing_balance_first_foundation.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing billing balance-first foundation migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        String billingPaymentsDefinition = sql.substring(
+                sql.indexOf("CREATE TABLE IF NOT EXISTS PUBLIC.BILLING_PAYMENTS"),
+                sql.indexOf("CREATE INDEX IF NOT EXISTS IDX_BILLING_PAYMENTS_COMPANY_SOURCE_CREATED")
+        );
+
+        assertTrue(sql.contains("BILLING_ACCOUNT_LEDGER"));
+        assertTrue(sql.contains("BILLING_PAYMENTS"));
+        assertTrue(sql.contains("BILLING_PAYMENT_ALLOCATIONS"));
+        assertTrue(sql.contains("BILLING_PROVIDER_CHECKOUT_OUTBOX"));
+        assertTrue(sql.contains("UQ_BILLING_ACCOUNTS_COMPANY_CURRENCY"));
+        assertTrue(sql.contains("AVAILABLE_BALANCE NUMERIC(12, 2)"));
+        assertTrue(sql.contains("PAID_AMOUNT NUMERIC(12, 2)"));
+        assertTrue(sql.contains("CHECKOUT_PENDING"));
+        assertTrue(sql.contains("FUNDING_SOURCE"));
+        assertTrue(sql.contains("CREDIT_REASON"));
+        assertTrue(sql.contains("UX_BILLING_PAYMENT_ATTEMPTS_ACTIVE_INVOICE_PROVIDER"));
+        assertFalse(
+                billingPaymentsDefinition.contains("BILLING_INVOICE_ID"),
+                "billing_payments must not directly link to invoices; allocations are the source of truth"
+        );
+        assertFalse(sql.contains(" FLOAT"), "Billing balance-first migration must not use FLOAT for money");
+        assertFalse(sql.contains(" REAL"), "Billing balance-first migration must not use REAL for money");
+    }
+
+    @Test
+    void billingBalanceFinanceMappingMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V114__billing_balance_finance_mapping.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing billing balance finance mapping migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("PAYMENT.CUSTOMER_DEPOSITS"));
+        assertTrue(sql.contains("FINANCE_ACCOUNT_MAPPING"));
+        assertTrue(sql.contains("ACCOUNT_CODE = '2300'"));
+        assertTrue(sql.contains("NOT EXISTS"));
+    }
+
+    @Test
+    void billingBalancePlatformCapabilityMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V115__billing_balance_platform_capabilities.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing billing balance platform capability migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("PLATFORM.BILLING.BALANCE.WRITE"));
+        assertTrue(sql.contains("SUPPORTADMIN"));
+        assertTrue(sql.contains("ROLE_GRANTS"));
+    }
+
+    @Test
+    void billingCreditExpenseFinanceMappingMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V116__billing_credit_expense_finance_mapping.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing billing credit expense finance mapping migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("BILLING CREDITS EXPENSE"));
+        assertTrue(sql.contains("PAYMENT.BILLING_CREDIT_EXPENSE"));
+        assertTrue(sql.contains("ACCOUNT_CODE = '6600'"));
+        assertTrue(sql.contains("FINANCE_ACCOUNT_MAPPING"));
+        assertTrue(sql.contains("NOT EXISTS"));
+    }
 }

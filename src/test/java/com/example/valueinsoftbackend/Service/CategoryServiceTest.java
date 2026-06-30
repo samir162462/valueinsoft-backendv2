@@ -66,4 +66,21 @@ class CategoryServiceTest {
         assertEquals("Accessories", result.get(1).getKey());
         assertEquals("Charger", result.get(1).getValue().get(1));
     }
+
+    @Test
+    void getCategoriesJsonFlatInjectsMissingProducts() {
+        when(dbPosCategory.getCategoryJson(eq(1074), eq(1095)))
+                .thenReturn("{\"categoryData\":{\"categoryData\":[{\"key\":\"Iphone\",\"value\":[\"Iphone 17\"]}]}}");
+
+        java.util.Map<String, java.util.List<String>> activeProducts = new java.util.HashMap<>();
+        activeProducts.put("MOBILE", java.util.List.of("Iphone 17", "Iphone 17 Blue 256"));
+        when(dbPosCategory.getActiveProductsGroupedByBusinessLine(eq(1095), eq(1074)))
+                .thenReturn(activeProducts);
+
+        String resultJson = categoryService.getCategoriesJsonFlat(1095, 1074);
+
+        // Result should contain "Iphone 17 Blue 256" under "Iphone"
+        org.junit.jupiter.api.Assertions.assertTrue(resultJson.contains("Iphone 17 Blue 256"));
+        org.junit.jupiter.api.Assertions.assertTrue(resultJson.contains("Iphone"));
+    }
 }

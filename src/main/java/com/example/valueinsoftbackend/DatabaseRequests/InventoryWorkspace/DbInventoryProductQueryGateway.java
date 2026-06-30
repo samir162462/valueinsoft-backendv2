@@ -157,6 +157,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         int branchId = request.getBranchId();
         
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
+        String branchProductTable = TenantSqlIdentifiers.inventoryBranchProductTable(companyId);
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
         String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String supplierTable = TenantSqlIdentifiers.supplierTable(companyId, branchId);
@@ -175,7 +176,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
            .append("COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", ")
            .append("p.business_line_key AS \"businessLineKey\", ")
            .append("p.template_key AS \"templateKey\", ")
-           .append("p.supplier_id AS \"supplierId\", ")
+           .append("ibp.default_supplier_id AS \"supplierId\", ")
            .append("s.\"SupplierName\" AS \"supplierName\", ")
            .append(effectiveQuantitySql).append(" AS quantity, ")
            .append("p.product_state AS \"pState\", ")
@@ -183,9 +184,10 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
            .append("p.buying_price AS \"buyPrice\", ")
            .append("p.updated_at ")
            .append("FROM ").append(productTable).append(" p ")
+           .append("INNER JOIN ").append(branchProductTable).append(" ibp ON ibp.product_id = p.product_id AND ibp.branch_id = :branchId AND ibp.is_active = TRUE ")
            .append("LEFT JOIN ").append(stockTable).append(" st ON st.product_id = p.product_id AND st.branch_id = :branchId ")
            .append(serializedStockJoin(unitTable, supplierTable))
-           .append("LEFT JOIN ").append(supplierTable).append(" s ON s.\"supplierId\" = p.supplier_id ");
+           .append("LEFT JOIN ").append(supplierTable).append(" s ON s.\"supplierId\" = ibp.default_supplier_id ");
 
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("branchId", branchId);
@@ -209,7 +211,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
 
         if (filters != null) {
             if (filters.getSupplierId() != null) {
-                conditions.add("p.supplier_id = :supplierId");
+                conditions.add("ibp.default_supplier_id = :supplierId");
                 params.addValue("supplierId", filters.getSupplierId());
             }
             if (filters.getMajor() != null && !filters.getMajor().isBlank()) {
@@ -281,6 +283,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
 
         // Total count for pagination
         StringBuilder countSql = new StringBuilder("SELECT COUNT(*) FROM ").append(productTable).append(" p ");
+        countSql.append("INNER JOIN ").append(branchProductTable).append(" ibp ON ibp.product_id = p.product_id AND ibp.branch_id = :branchId AND ibp.is_active = TRUE ");
         countSql.append("LEFT JOIN ").append(stockTable).append(" st ON st.product_id = p.product_id AND st.branch_id = :branchId ");
         countSql.append(serializedStockJoin(unitTable, supplierTable));
         if (!conditions.isEmpty()) {
@@ -340,6 +343,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
 
     private String getBaseSelect(int companyId, int branchId) {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
+        String branchProductTable = TenantSqlIdentifiers.inventoryBranchProductTable(companyId);
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
         String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String supplierTable = TenantSqlIdentifiers.supplierTable(companyId, branchId);
@@ -352,13 +356,14 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                "COALESCE(serialized_stock.unit_supplier_ids, ARRAY[]::bigint[]) AS \"unitSupplierIds\", " +
                "COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", " +
                "p.business_line_key AS \"businessLineKey\", p.template_key AS \"templateKey\", " +
-               "p.supplier_id AS \"supplierId\", s.\"SupplierName\" AS \"supplierName\", " +
+               "ibp.default_supplier_id AS \"supplierId\", s.\"SupplierName\" AS \"supplierName\", " +
                effectiveQuantitySql + " AS quantity, p.product_state AS \"pState\", " +
                "p.retail_price AS \"sellPrice\", p.buying_price AS \"buyPrice\", p.updated_at " +
                "FROM " + productTable + " p " +
+               "INNER JOIN " + branchProductTable + " ibp ON ibp.product_id = p.product_id AND ibp.branch_id = :branchId AND ibp.is_active = TRUE " +
                "LEFT JOIN " + stockTable + " st ON st.product_id = p.product_id AND st.branch_id = :branchId " +
                serializedStockJoin(unitTable, supplierTable) +
-               "LEFT JOIN " + supplierTable + " s ON s.\"supplierId\" = p.supplier_id";
+               "LEFT JOIN " + supplierTable + " s ON s.\"supplierId\" = ibp.default_supplier_id";
     }
 
     private static String effectiveQuantitySql(String productAlias, String stockAlias, String serializedAlias) {
