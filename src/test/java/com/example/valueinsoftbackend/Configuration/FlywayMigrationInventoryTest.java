@@ -343,6 +343,22 @@ class FlywayMigrationInventoryTest {
     }
 
     @Test
+    void tenantInventoryProductBusinessLineRepairMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V122__repair_tenant_inventory_product_business_line_columns.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing tenant inventory product business-line repair migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("ADD COLUMN IF NOT EXISTS BUSINESS_LINE_KEY"));
+        assertTrue(sql.contains("ADD COLUMN IF NOT EXISTS TEMPLATE_KEY"));
+        assertTrue(sql.contains("Nspname ~ '^c_[0-9]+$'".toUpperCase()));
+        assertTrue(sql.contains("TO_REGCLASS(FORMAT('%I.INVENTORY_PRODUCT'"));
+        assertTrue(sql.contains("CREATE INDEX IF NOT EXISTS"));
+    }
+
+    @Test
     void billingCreditExpenseFinanceMappingMigrationExists() throws IOException {
         ClassPathResource migration = new ClassPathResource(
                 "db/migration/V116__billing_credit_expense_finance_mapping.sql"
