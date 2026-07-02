@@ -29,6 +29,7 @@ public class BootstrapDataRepository {
     public BootstrapPage<OfflineBootstrapProductItem> findProducts(Long companyId, Long branchId,
                                                                    Long afterProductId, int pageSize) {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId.intValue());
+        String branchProductTable = TenantSqlIdentifiers.inventoryBranchProductTable(companyId.intValue());
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId.intValue());
         String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String sql = """
@@ -50,6 +51,7 @@ public class BootstrapDataRepository {
                     COALESCE(serialized.serialized_units, '[]'::json) AS serialized_units,
                     COALESCE(p.updated_at, p.created_at, p.buying_day) AS updated_at
                 FROM %s p
+                INNER JOIN %s ibp ON ibp.product_id = p.product_id AND ibp.branch_id = ? AND ibp.is_active = TRUE
                 LEFT JOIN %s s ON s.product_id = p.product_id AND s.branch_id = ?
                 LEFT JOIN LATERAL (
                     SELECT COUNT(*) AS available_quantity,
@@ -70,7 +72,7 @@ public class BootstrapDataRepository {
                 WHERE p.product_id > ?
                 ORDER BY p.product_id ASC
                 LIMIT ?
-                """.formatted(productTable, stockTable, unitTable);
+                """.formatted(productTable, branchProductTable, stockTable, unitTable);
 
         List<OfflineBootstrapProductItem> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineBootstrapProductItem(
                 rs.getLong("product_id"),
@@ -86,7 +88,7 @@ public class BootstrapDataRepository {
                 rs.getString("tracking_type"),
                 readSerializedUnits(rs.getString("serialized_units")),
                 toInstant(rs.getTimestamp("updated_at"))
-        ), branchId, branchId, afterProductId, pageSize + 1);
+        ), branchId, branchId, branchId, afterProductId, pageSize + 1);
 
         return toPage(rows, pageSize, OfflineBootstrapProductItem::productId, this::productUpdatedAt);
     }
@@ -94,6 +96,7 @@ public class BootstrapDataRepository {
     public BootstrapPage<OfflineBootstrapPriceItem> findPrices(Long companyId, Long branchId,
                                                                Long afterProductId, int pageSize) {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId.intValue());
+        String branchProductTable = TenantSqlIdentifiers.inventoryBranchProductTable(companyId.intValue());
         String sql = """
                 SELECT
                     p.product_id    AS product_id,
@@ -105,10 +108,11 @@ public class BootstrapDataRepository {
                     NULL            AS config_json,
                     COALESCE(p.updated_at, p.created_at, p.buying_day) AS updated_at
                 FROM %s p
+                INNER JOIN %s ibp ON ibp.product_id = p.product_id AND ibp.branch_id = ? AND ibp.is_active = TRUE
                 WHERE p.product_id > ?
                 ORDER BY p.product_id ASC
                 LIMIT ?
-                """.formatted(productTable);
+                """.formatted(productTable, branchProductTable);
 
         List<OfflineBootstrapPriceItem> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new OfflineBootstrapPriceItem(
                 rs.getLong("product_id"),
@@ -119,7 +123,7 @@ public class BootstrapDataRepository {
                 rs.getString("strategy_type"),
                 rs.getString("config_json"),
                 toInstant(rs.getTimestamp("updated_at"))
-        ), afterProductId, pageSize + 1);
+        ), branchId, afterProductId, pageSize + 1);
 
         return toPage(rows, pageSize, OfflineBootstrapPriceItem::productId, OfflineBootstrapPriceItem::updatedAt);
     }

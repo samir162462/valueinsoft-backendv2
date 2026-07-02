@@ -103,6 +103,28 @@ public class SupplierController {
         return ResponseEntity.status(HttpStatus.CREATED).body(answer);
     }
 
+    @PostMapping("{companyId}/{branchId}/copyFrom/{sourceBranchId}")
+    public Map<String, Object> copySuppliersFromBranch(
+            @PathVariable @Positive int companyId,
+            @PathVariable @Positive int branchId,
+            @PathVariable @Positive int sourceBranchId,
+            Principal principal
+    ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "suppliers.account.create"
+        );
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                sourceBranchId,
+                "suppliers.account.read"
+        );
+        return supplierService.copySuppliersFromBranch(companyId, branchId, sourceBranchId);
+    }
+
     @PutMapping("{companyId}/{branchId}/update/{id}")
     public Map<String, String> updateSupplier(
             @Valid @RequestBody SupplierUpdateRequest supplier,

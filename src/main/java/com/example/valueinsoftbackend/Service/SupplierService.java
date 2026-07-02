@@ -30,8 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -102,6 +105,72 @@ public class SupplierService {
 
         log.info("Created supplier for company {} branch {}", request.getCompanyId(), request.getBranchId());
         return "the supplier added! ok 200";
+    }
+
+    @Transactional
+    public Map<String, Object> copySuppliersFromBranch(int companyId, int targetBranchId, int sourceBranchId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(targetBranchId, "targetBranchId");
+        TenantSqlIdentifiers.requirePositive(sourceBranchId, "sourceBranchId");
+
+        if (targetBranchId == sourceBranchId) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "SUPPLIER_COPY_SAME_BRANCH", "Source and target branch must be different");
+        }
+
+        List<Supplier> sourceSuppliers = dbSupplier.getSuppliers(sourceBranchId, companyId);
+
+        int copied = 0;
+        List<String> skipped = new ArrayList<>();
+
+        for (Supplier supplier : sourceSuppliers) {
+            String supplierName = normalizeNullable(supplier.getSupplierName());
+            String supplierPhone1 = normalizeNullable(supplier.getSupplierPhone1());
+
+            if (supplierName == null || supplierName.isBlank()) {
+                continue;
+            }
+
+            String normalizedName = normalizeSupplierNameKey(supplierName);
+            String normalizedPhone = supplierPhone1 == null ? "" : normalizeSupplierPhoneKey(supplierPhone1);
+
+            boolean duplicate = dbSupplier.supplierNameExists(normalizedName, 0, targetBranchId, companyId)
+                    || (!normalizedPhone.isBlank()
+                        && dbSupplier.supplierPrimaryPhoneExists(normalizedPhone, 0, targetBranchId, companyId));
+
+            if (duplicate) {
+                skipped.add(supplierName);
+                continue;
+            }
+
+            String supplierLocation = normalizeNullable(supplier.getSupplierLocation());
+            String supplierMajor = normalizeNullable(supplier.getSupplierMajor());
+
+            int rows = dbSupplier.addSupplier(
+                    supplierName,
+                    supplierPhone1 == null ? "" : supplierPhone1,
+                    normalizeNullable(supplier.getSupplierPhone2()),
+                    supplierLocation == null ? "" : supplierLocation,
+                    supplierMajor == null ? "" : supplierMajor,
+                    targetBranchId,
+                    companyId
+            );
+
+            if (rows == 1) {
+                copied++;
+            } else {
+                skipped.add(supplierName);
+            }
+        }
+
+        log.info("Copied {} suppliers (skipped {}) from branch {} to branch {} for company {}",
+                copied, skipped.size(), sourceBranchId, targetBranchId, companyId);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("copied", copied);
+        result.put("skippedCount", skipped.size());
+        result.put("skipped", skipped);
+        result.put("sourceTotal", sourceSuppliers.size());
+        return result;
     }
 
     @Transactional

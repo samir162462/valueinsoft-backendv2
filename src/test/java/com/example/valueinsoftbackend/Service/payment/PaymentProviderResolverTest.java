@@ -25,6 +25,16 @@ class PaymentProviderResolverTest {
     }
 
     @Test
+    void activeProviderResolvesAliasCode() {
+        BillingProperties properties = new BillingProperties();
+        properties.setPaymentProvider("fawry");
+        PaymentProvider fawryProvider = provider("fawrypay", List.of("fawry", "fawry_pay"));
+        PaymentProviderResolver resolver = new PaymentProviderResolver(properties, List.of(fawryProvider));
+
+        assertSame(fawryProvider, resolver.getActiveProvider());
+    }
+
+    @Test
     void unsupportedProviderRaisesConfigurationError() {
         BillingProperties properties = new BillingProperties();
         properties.setPaymentProvider("missing_provider");
