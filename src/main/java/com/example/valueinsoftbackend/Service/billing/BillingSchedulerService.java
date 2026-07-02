@@ -350,7 +350,6 @@ public class BillingSchedulerService {
                 candidate.getBillingAccountId(),
                 candidate.getBranchId(),
                 candidate.getTenantId(),
-                0,
                 candidate.getPriceCode(),
                 "pending_payment",
                 candidate.getUnitAmount(),

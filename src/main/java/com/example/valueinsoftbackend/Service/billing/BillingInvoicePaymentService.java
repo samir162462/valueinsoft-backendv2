@@ -8,7 +8,6 @@ import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptSnapsho
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationRequest;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationResponse;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentPreviewResponse;
-import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
 import com.example.valueinsoftbackend.Service.payment.PaymentProvider;
 import com.example.valueinsoftbackend.Service.payment.PaymentProviderResolver;
@@ -55,21 +54,34 @@ public class BillingInvoicePaymentService {
         return requirePaymentContext(billingInvoiceId, false);
     }
 
+    public BillingPaymentAttemptSnapshot latestPaymentAttempt(long billingInvoiceId) {
+        requirePaymentContext(billingInvoiceId, false);
+        return dbBillingWriteModels.findLatestPaymentAttemptByInvoiceId(billingInvoiceId);
+    }
+
     @Transactional
     public BillingPaymentInitiationResponse initiatePayment(long billingInvoiceId,
                                                             BillingPaymentInitiationRequest request) {
-        return initiatePayment(billingInvoiceId, request, true);
+        return initiatePayment(billingInvoiceId, request, true, "System");
+    }
+
+    @Transactional
+    public BillingPaymentInitiationResponse initiatePayment(long billingInvoiceId,
+                                                            BillingPaymentInitiationRequest request,
+                                                            String actorUserName) {
+        return initiatePayment(billingInvoiceId, request, true, actorUserName);
     }
 
     @Transactional
     public BillingPaymentInitiationResponse settleFromBalance(long billingInvoiceId,
                                                               BillingPaymentInitiationRequest request) {
-        return initiatePayment(billingInvoiceId, request, false);
+        return initiatePayment(billingInvoiceId, request, false, "System");
     }
 
     private BillingPaymentInitiationResponse initiatePayment(long billingInvoiceId,
                                                              BillingPaymentInitiationRequest request,
-                                                             boolean allowCheckoutFallback) {
+                                                             boolean allowCheckoutFallback,
+                                                             String actorUserName) {
         BillingInvoicePaymentContext context = requirePaymentContext(billingInvoiceId, true);
         String idempotencyKey = requireIdempotencyKey(request);
         BillingBalanceSettlementSnapshot existingSettlement =
@@ -90,6 +102,7 @@ public class BillingInvoicePaymentService {
                     ZERO,
                     ZERO,
                     amount(context.getAvailableBalance()),
+                    null,
                     null,
                     null,
                     null,
@@ -134,6 +147,7 @@ public class BillingInvoicePaymentService {
                     null,
                     null,
                     null,
+                    null,
                     null
             );
         }
@@ -153,11 +167,12 @@ public class BillingInvoicePaymentService {
                     null,
                     null,
                     null,
+                    null,
                     null
             );
         }
 
-        ProviderCheckout providerCheckout = createProviderCheckout(context, remainingDueAmount, idempotencyKey);
+            ProviderCheckout providerCheckout = createProviderCheckout(context, remainingDueAmount, idempotencyKey, actorUserName);
         return response(
                 context,
                 balanceAppliedAmount.compareTo(ZERO) > 0 ? "PARTIAL_BALANCE_CHECKOUT_REQUIRED" : "CHECKOUT_REQUIRED",
@@ -172,6 +187,7 @@ public class BillingInvoicePaymentService {
                 providerCheckout.paymentAttemptId(),
                 providerCheckout.providerCode(),
                 providerCheckout.externalOrderId(),
+                providerCheckout.paymentAttemptStatus(),
                 providerCheckout.checkoutUrl()
         );
     }
@@ -259,7 +275,8 @@ public class BillingInvoicePaymentService {
 
     private ProviderCheckout createProviderCheckout(BillingInvoicePaymentContext context,
                                                     BigDecimal providerAmountDue,
-                                                    String idempotencyKey) {
+                                                    String idempotencyKey,
+                                                    String actorUserName) {
         if (context.getBranchId() == null) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
@@ -271,36 +288,34 @@ public class BillingInvoicePaymentService {
         PaymentProvider paymentProvider = paymentProviderResolver.getActiveProvider();
         dbBillingWriteModels.supersedeActivePaymentAttempts(context.getBillingInvoiceId(), paymentProvider.getProviderCode());
 
-        int providerOrderId = paymentProvider.createProviderOrder(
-                generateMerchantOrderId(context),
-                context.getBranchId(),
-                providerAmountDue
-        );
-        String externalOrderId = String.valueOf(providerOrderId);
-        PaymentTokenRequest tokenRequest = new PaymentTokenRequest();
-        tokenRequest.setOrderId(providerOrderId);
-        tokenRequest.setBranchId(context.getBranchId());
-        tokenRequest.setCompanyId(context.getCompanyId());
-        tokenRequest.setCurrency(normalizeCurrency(context.getCurrencyCode()));
-        tokenRequest.setAmountCents(providerAmountDue.multiply(BigDecimal.valueOf(100L)).longValue());
-        String checkoutUrl = paymentProvider.createPaymentKeyUrl(tokenRequest);
+        String checkoutReference = checkoutReference(context, idempotencyKey);
+        String providerCode = paymentProvider.getProviderCode();
 
         long attemptId = dbBillingWriteModels.createPaymentAttempt(
                 context.getBillingInvoiceId(),
                 context.getCompanyId(),
                 context.getBranchId(),
                 idempotencyKey,
-                paymentProvider.getProviderCode(),
-                externalOrderId,
-                "CHECKOUT_REQUESTED",
+                providerCode,
+                null,
+                "CHECKOUT_PENDING",
                 providerAmountDue,
                 normalizeCurrency(context.getCurrencyCode()),
-                externalOrderId,
-                "{\"source\":\"billing_initiate_payment\",\"billingInvoiceId\":" + context.getBillingInvoiceId() + "}",
-                "{\"checkoutUrl\":\"" + escapeJson(checkoutUrl) + "\",\"source\":\"billing_initiate_payment\"}",
-                "{\"source\":\"billing_initiate_payment\",\"fallback\":\"provider_checkout\"}"
+                checkoutReference,
+                "{\"source\":\"billing_initiate_payment\",\"billingInvoiceId\":" + context.getBillingInvoiceId() +
+                        ",\"checkoutReference\":\"" + escapeJson(checkoutReference) + "\",\"actorUserName\":\"" + escapeJson(actorUserName) + "\"}",
+                "{\"source\":\"billing_initiate_payment\",\"status\":\"CHECKOUT_PENDING\"}",
+                "{\"source\":\"billing_initiate_payment\",\"fallback\":\"provider_checkout_outbox\",\"actorUserName\":\"" + escapeJson(actorUserName) + "\"}"
         );
-        return new ProviderCheckout(attemptId, paymentProvider.getProviderCode(), externalOrderId, checkoutUrl);
+        dbBillingWriteModels.createProviderCheckoutOutbox(
+                attemptId,
+                providerCode,
+                "CREATE_CHECKOUT",
+                idempotencyKey,
+                "{\"source\":\"billing_initiate_payment\",\"billingInvoiceId\":" + context.getBillingInvoiceId() +
+                        ",\"checkoutReference\":\"" + escapeJson(checkoutReference) + "\"}"
+        );
+        return new ProviderCheckout(attemptId, providerCode, null, "CHECKOUT_PENDING", null);
     }
 
     private void activateBranchSubscriptionIfNeeded(BillingInvoicePaymentContext context, String reference) {
@@ -365,6 +380,7 @@ public class BillingInvoicePaymentService {
                                                       Long billingPaymentAttemptId,
                                                       String providerCode,
                                                       String externalOrderId,
+                                                      String paymentAttemptStatus,
                                                       String checkoutUrl) {
         return new BillingPaymentInitiationResponse(
                 context.getBillingInvoiceId(),
@@ -383,6 +399,7 @@ public class BillingInvoicePaymentService {
                 billingPaymentAttemptId,
                 providerCode,
                 externalOrderId,
+                paymentAttemptStatus,
                 checkoutUrl
         );
     }
@@ -418,6 +435,7 @@ public class BillingInvoicePaymentService {
                 existingAttempt == null ? null : existingAttempt.getBillingPaymentAttemptId(),
                 existingAttempt == null ? null : existingAttempt.getProviderCode(),
                 existingAttempt == null ? null : existingAttempt.getExternalOrderId(),
+                existingAttempt == null ? null : existingAttempt.getStatus(),
                 existingAttempt == null ? null : existingAttempt.getCheckoutUrl()
         );
     }
@@ -444,14 +462,8 @@ public class BillingInvoicePaymentService {
         throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_IDEMPOTENCY_KEY_REQUIRED", "idempotencyKey is required");
     }
 
-    private int generateMerchantOrderId(BillingInvoicePaymentContext context) {
-        long suffix = System.currentTimeMillis() % 1_000_000L;
-        int branchId = context.getBranchId() == null ? context.getCompanyId() : context.getBranchId();
-        long merchantOrderId = (long) branchId * 1_000_000L + suffix;
-        if (merchantOrderId <= Integer.MAX_VALUE) {
-            return (int) merchantOrderId;
-        }
-        return (int) ((merchantOrderId % 1_000_000_000L) + 100_000_000L);
+    private String checkoutReference(BillingInvoicePaymentContext context, String idempotencyKey) {
+        return "billing-invoice-" + context.getBillingInvoiceId() + "-" + Integer.toUnsignedString(idempotencyKey.hashCode());
     }
 
     private BigDecimal min(BigDecimal left, BigDecimal right) {
@@ -480,6 +492,10 @@ public class BillingInvoicePaymentService {
         }
     }
 
-    private record ProviderCheckout(Long paymentAttemptId, String providerCode, String externalOrderId, String checkoutUrl) {
+    private record ProviderCheckout(Long paymentAttemptId,
+                                    String providerCode,
+                                    String externalOrderId,
+                                    String paymentAttemptStatus,
+                                    String checkoutUrl) {
     }
 }

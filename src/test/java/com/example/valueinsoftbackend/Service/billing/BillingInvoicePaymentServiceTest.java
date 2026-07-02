@@ -7,7 +7,6 @@ import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptSnapsho
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationRequest;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationResponse;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentPreviewResponse;
-import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
 import com.example.valueinsoftbackend.Service.payment.PaymentProvider;
 import com.example.valueinsoftbackend.Service.payment.PaymentProviderResolver;
@@ -112,10 +111,8 @@ class BillingInvoicePaymentServiceTest {
         PaymentProvider paymentProvider = Mockito.mock(PaymentProvider.class);
         when(paymentProviderResolver.getActiveProvider()).thenReturn(paymentProvider);
         when(paymentProvider.getProviderCode()).thenReturn("mock");
-        when(paymentProvider.createProviderOrder(anyInt(), eq(55), eq(new BigDecimal("300.00")))).thenReturn(123456);
-        when(paymentProvider.createPaymentKeyUrl(any(PaymentTokenRequest.class))).thenReturn("https://checkout.example/pay");
         when(dbBillingWriteModels.createPaymentAttempt(
-                anyLong(), anyInt(), anyInt(), anyString(), anyString(), anyString(), anyString(), any(), anyString(),
+                anyLong(), anyInt(), anyInt(), anyString(), anyString(), isNull(), anyString(), any(), anyString(),
                 anyString(), anyString(), anyString(), anyString()
         )).thenReturn(31L);
 
@@ -129,7 +126,7 @@ class BillingInvoicePaymentServiceTest {
         assertEquals(new BigDecimal("300.00"), response.getProviderAmountDue());
         assertEquals(31L, response.getBillingPaymentAttemptId());
         assertEquals("mock", response.getProviderCode());
-        assertEquals("123456", response.getExternalOrderId());
+        assertEquals("CHECKOUT_PENDING", response.getPaymentAttemptStatus());
 
         verify(dbBillingWriteModels).updateInvoicePaymentProjection(
                 eq(900L),
@@ -140,6 +137,8 @@ class BillingInvoicePaymentServiceTest {
                 anyString()
         );
         verify(dbBillingWriteModels).supersedeActivePaymentAttempts(900L, "mock");
+        verify(dbBillingWriteModels).createProviderCheckoutOutbox(eq(31L), eq("mock"), eq("CREATE_CHECKOUT"), eq("key-900"), anyString());
+        verify(paymentProvider, never()).createProviderOrder(anyInt(), eq(55), eq(new BigDecimal("300.00")));
     }
 
     @Test
@@ -174,6 +173,7 @@ class BillingInvoicePaymentServiceTest {
         assertEquals(new BigDecimal("300.00"), response.getProviderAmountDue());
         assertEquals(21L, response.getBillingPaymentId());
         assertEquals(31L, response.getBillingPaymentAttemptId());
+        assertEquals("CHECKOUT_REQUESTED", response.getPaymentAttemptStatus());
         assertEquals("https://checkout.example/pay", response.getCheckoutUrl());
 
         verify(dbBillingWriteModels, never()).createBillingPayment(

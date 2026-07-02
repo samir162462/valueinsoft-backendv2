@@ -35,26 +35,6 @@ public class InvoiceService {
         );
     }
 
-    public long ensureLegacyMirroredInvoice(long billingAccountId,
-                                            long branchSubscriptionId,
-                                            int legacySubscriptionId,
-                                            String currencyCode,
-                                            BigDecimal amountToPay,
-                                            BigDecimal amountPaid,
-                                            String lineDescription) {
-        return ensureInvoice(
-                billingAccountId,
-                branchSubscriptionId,
-                "LEGACY-SUB-" + legacySubscriptionId,
-                currencyCode,
-                amountToPay,
-                amountPaid,
-                lineDescription,
-                "{\"source\":\"legacy_company_subscription\",\"legacySubscriptionId\":" + legacySubscriptionId + "}",
-                "{\"source\":\"legacy_company_subscription\"}"
-        );
-    }
-
     private long ensureInvoice(long billingAccountId,
                                long branchSubscriptionId,
                                String invoiceNumber,
@@ -108,18 +88,7 @@ public class InvoiceService {
                 "paid",
                 BigDecimal.ZERO,
                 Instant.now(),
-                "{\"legacyStatus\":\"PD\"}"
-        );
-    }
-
-    public void markPaidByBranchSubscriptionId(long branchSubscriptionId) {
-        dbBillingWriteModels.updateInvoiceStatusBySource(
-                "branch_subscription",
-                String.valueOf(branchSubscriptionId),
-                "paid",
-                BigDecimal.ZERO,
-                Instant.now(),
-                "{\"legacyStatus\":\"PD\"}"
+                "{\"source\":\"provider_payment\",\"status\":\"paid\"}"
         );
     }
 }

@@ -10,6 +10,10 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingInvoice
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPackageSummary;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentAttemptItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentAttemptsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingProviderEventItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingProviderEventsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSubscriptionItem;
@@ -68,8 +72,51 @@ public class DbBillingAdminReadModels {
                     rs.getString("status"),
                     getBigDecimal(rs.getObject("requested_amount")),
                     rs.getString("currency_code"),
+                    rs.getString("actor_user_name"),
                     rs.getTimestamp("attempted_at"),
                     rs.getTimestamp("completed_at")
+            );
+
+    private static final RowMapper<PlatformBillingPaymentItem> PAYMENT_ROW_MAPPER = (rs, rowNum) ->
+            new PlatformBillingPaymentItem(
+                    rs.getLong("billing_payment_id"),
+                    rs.getInt("tenant_id"),
+                    rs.getInt("company_id"),
+                    rs.getString("company_name"),
+                    (Long) rs.getObject("billing_account_id"),
+                    rs.getString("payment_source"),
+                    rs.getString("provider_code"),
+                    getBigDecimal(rs.getObject("amount")),
+                    rs.getString("currency_code"),
+                    rs.getString("status"),
+                    rs.getString("provider_reference"),
+                    (Long) rs.getObject("billing_invoice_id"),
+                    getBigDecimal(rs.getObject("allocated_amount")),
+                    getBigDecimal(rs.getObject("provider_gross_amount")),
+                    getBigDecimal(rs.getObject("provider_fee_amount")),
+                    getBigDecimal(rs.getObject("provider_net_amount")),
+                    rs.getString("settlement_currency_code"),
+                    rs.getString("settlement_destination"),
+                    rs.getString("provider_settlement_reference"),
+                    rs.getString("reconciliation_status"),
+                    rs.getTimestamp("reconciled_at"),
+                    rs.getTimestamp("created_at")
+            );
+
+    private static final RowMapper<PlatformBillingProviderEventItem> PROVIDER_EVENT_ROW_MAPPER = (rs, rowNum) ->
+            new PlatformBillingProviderEventItem(
+                    rs.getLong("billing_provider_event_id"),
+                    rs.getString("provider_code"),
+                    rs.getString("provider_event_id"),
+                    rs.getString("event_type"),
+                    rs.getString("external_reference"),
+                    rs.getString("processing_status"),
+                    (Long) rs.getObject("attempt_id"),
+                    (Long) rs.getObject("billing_invoice_id"),
+                    (Integer) rs.getObject("company_id"),
+                    rs.getString("error_message"),
+                    rs.getTimestamp("received_at"),
+                    rs.getTimestamp("processed_at")
             );
 
     private static final RowMapper<PlatformBillingReconciliationItem> RECONCILIATION_ROW_MAPPER = (rs, rowNum) ->
@@ -79,20 +126,20 @@ public class DbBillingAdminReadModels {
                     rs.getString("company_name"),
                     rs.getInt("branch_id"),
                     rs.getString("branch_name"),
-                    rs.getInt("legacy_subscription_id"),
-                    rs.getDate("start_time"),
-                    rs.getDate("end_time"),
-                    getBigDecimal(rs.getObject("amount_to_pay")),
+                    (Long) rs.getObject("branch_subscription_id"),
+                    (Long) rs.getObject("billing_invoice_id"),
+                    rs.getString("invoice_number"),
+                    rs.getDate("current_period_start"),
+                    rs.getDate("current_period_end"),
+                    rs.getString("subscription_status"),
+                    rs.getString("invoice_status"),
+                    (Long) rs.getObject("latest_payment_attempt_id"),
+                    rs.getString("latest_payment_attempt_status"),
+                    rs.getString("provider_code"),
+                    getBigDecimal(rs.getObject("total_amount")),
                     getBigDecimal(rs.getObject("amount_paid")),
-                    (Integer) rs.getObject("legacy_order_id"),
-                    rs.getString("legacy_status"),
-                    (Long) rs.getObject("mirrored_branch_subscription_id"),
-                    rs.getString("mirrored_branch_subscription_status"),
-                    (Long) rs.getObject("mirrored_invoice_id"),
-                    rs.getString("mirrored_invoice_status"),
-                    (Long) rs.getObject("mirrored_payment_attempt_id"),
-                    rs.getString("mirrored_payment_attempt_status"),
-                    rs.getString("mirrored_provider_code"),
+                    getBigDecimal(rs.getObject("due_amount")),
+                    getBigDecimal(rs.getObject("allocated_amount")),
                     rs.getString("reconciliation_status")
             );
 
@@ -386,6 +433,71 @@ public class DbBillingAdminReadModels {
         return new PlatformBillingPaymentAttemptsPageResponse(items, page, size, totalItems, computeTotalPages(totalItems, size));
     }
 
+    public PlatformBillingPaymentsPageResponse getPayments(String search,
+                                                           String status,
+                                                           String paymentSource,
+                                                           Integer tenantId,
+                                                           int page,
+                                                           int size) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("limit", size)
+                .addValue("offset", (page - 1) * size);
+
+        String whereClause = buildPaymentsWhereClause(search, status, paymentSource, tenantId, params);
+        String baseSql = paymentContextSql();
+
+        Integer total = namedParameterJdbcTemplate.queryForObject(
+                baseSql + "SELECT COUNT(*) FROM payment_context pc " + whereClause,
+                params,
+                Integer.class
+        );
+        long totalItems = total == null ? 0L : total.longValue();
+
+        ArrayList<PlatformBillingPaymentItem> items = new ArrayList<>(
+                namedParameterJdbcTemplate.query(
+                        baseSql +
+                                "SELECT pc.* FROM payment_context pc " + whereClause +
+                                " ORDER BY pc.created_at DESC NULLS LAST, pc.billing_payment_id DESC LIMIT :limit OFFSET :offset",
+                        params,
+                        PAYMENT_ROW_MAPPER
+                )
+        );
+        return new PlatformBillingPaymentsPageResponse(items, page, size, totalItems, computeTotalPages(totalItems, size));
+    }
+
+    public PlatformBillingProviderEventsPageResponse getProviderEvents(String search,
+                                                                       String processingStatus,
+                                                                       String providerCode,
+                                                                       Integer tenantId,
+                                                                       Long billingInvoiceId,
+                                                                       int page,
+                                                                       int size) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("limit", size)
+                .addValue("offset", (page - 1) * size);
+
+        String whereClause = buildProviderEventsWhereClause(search, processingStatus, providerCode, tenantId, billingInvoiceId, params);
+        String baseSql = providerEventContextSql();
+
+        Integer total = namedParameterJdbcTemplate.queryForObject(
+                baseSql + "SELECT COUNT(*) FROM provider_event_context pec " + whereClause,
+                params,
+                Integer.class
+        );
+        long totalItems = total == null ? 0L : total.longValue();
+
+        ArrayList<PlatformBillingProviderEventItem> items = new ArrayList<>(
+                namedParameterJdbcTemplate.query(
+                        baseSql +
+                                "SELECT pec.* FROM provider_event_context pec " + whereClause +
+                                " ORDER BY pec.received_at DESC NULLS LAST, pec.billing_provider_event_id DESC LIMIT :limit OFFSET :offset",
+                        params,
+                        PROVIDER_EVENT_ROW_MAPPER
+                )
+        );
+        return new PlatformBillingProviderEventsPageResponse(items, page, size, totalItems, computeTotalPages(totalItems, size));
+    }
+
     public PlatformBillingDunningRunsPageResponse getDunningRuns(String status,
                                                                  Integer tenantId,
                                                                  int page,
@@ -506,21 +618,6 @@ public class DbBillingAdminReadModels {
         return new PlatformBillingReconciliationPageResponse(items, page, size, totalItems, computeTotalPages(totalItems, size));
     }
 
-    public ArrayList<PlatformBillingReconciliationItem> getReconciliationCandidates(Integer tenantId, int limit) {
-        MapSqlParameterSource params = new MapSqlParameterSource().addValue("limit", limit);
-        String whereClause = buildReconciliationWhereClause(null, tenantId, params) +
-                " AND rc.reconciliation_status <> 'synced' ";
-        return new ArrayList<>(
-                namedParameterJdbcTemplate.query(
-                        reconciliationContextSql() +
-                                "SELECT rc.* FROM reconciliation_context rc " + whereClause +
-                                " ORDER BY rc.company_name ASC, rc.branch_name ASC LIMIT :limit",
-                        params,
-                        RECONCILIATION_ROW_MAPPER
-                )
-        );
-    }
-
     private String latestBranchSubscriptionContextSql() {
         return "WITH latest_payment_attempts AS (" +
                 " SELECT DISTINCT ON (bpa.billing_invoice_id) " +
@@ -601,13 +698,40 @@ public class DbBillingAdminReadModels {
         return "WITH payment_attempt_context AS (" +
                 " SELECT bpa.billing_payment_attempt_id, bpa.billing_invoice_id, ba.tenant_id, ba.company_id, c.\"companyName\" AS company_name, " +
                 " bs.branch_id, b.\"branchName\" AS branch_name, bpa.provider_code, bpa.external_order_id, bpa.external_payment_reference, " +
-                " bpa.status, bpa.requested_amount, bpa.currency_code, bpa.attempted_at, bpa.completed_at " +
+                " bpa.status, bpa.requested_amount, bpa.currency_code, " +
+                " COALESCE(NULLIF(bpa.metadata_json ->> 'actorUserName', ''), NULLIF(bpa.metadata_json ->> 'createdBy', ''), " +
+                " NULLIF(bpa.request_payload_json ->> 'actorUserName', ''), NULLIF(bpa.request_payload_json ->> 'userName', ''), 'System') AS actor_user_name, " +
+                " bpa.attempted_at, bpa.completed_at " +
                 " FROM public.billing_payment_attempts bpa " +
                 " JOIN public.billing_invoices bi ON bi.billing_invoice_id = bpa.billing_invoice_id " +
                 " JOIN public.billing_accounts ba ON ba.billing_account_id = bi.billing_account_id " +
                 " JOIN public.\"Company\" c ON c.id = ba.company_id " +
                 " LEFT JOIN public.branch_subscriptions bs ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
                 " LEFT JOIN public.\"Branch\" b ON b.\"branchId\" = bs.branch_id " +
+                ") ";
+    }
+
+    private String paymentContextSql() {
+        return "WITH payment_context AS (" +
+                " SELECT bp.billing_payment_id, COALESCE(ba.tenant_id, bp.company_id) AS tenant_id, bp.company_id, c.\"companyName\" AS company_name, bp.billing_account_id, " +
+                " bp.payment_source, bp.provider_code, bp.amount, bp.currency_code, bp.status, bp.provider_reference, " +
+                " bpa.billing_invoice_id, bpa.allocated_amount, bp.provider_gross_amount, bp.provider_fee_amount, bp.provider_net_amount, " +
+                " bp.settlement_currency_code, bp.settlement_destination, bp.provider_settlement_reference, bp.reconciliation_status, bp.reconciled_at, bp.created_at " +
+                " FROM public.billing_payments bp " +
+                " LEFT JOIN public.billing_accounts ba ON ba.billing_account_id = bp.billing_account_id " +
+                " LEFT JOIN public.\"Company\" c ON c.id = bp.company_id " +
+                " LEFT JOIN public.billing_payment_allocations bpa ON bpa.billing_payment_id = bp.billing_payment_id " +
+                ") ";
+    }
+
+    private String providerEventContextSql() {
+        return "WITH provider_event_context AS (" +
+                " SELECT bpe.billing_provider_event_id, bpe.provider_code, bpe.provider_event_id, bpe.event_type, bpe.external_reference, " +
+                " bpe.processing_status, bpe.attempt_id, bpe.billing_invoice_id, COALESCE(bpe.company_id, ba.company_id) AS company_id, " +
+                " ba.tenant_id, bpe.error_message, bpe.received_at, bpe.processed_at " +
+                " FROM public.billing_provider_events bpe " +
+                " LEFT JOIN public.billing_invoices bi ON bi.billing_invoice_id = bpe.billing_invoice_id " +
+                " LEFT JOIN public.billing_accounts ba ON ba.billing_account_id = bi.billing_account_id " +
                 ") ";
     }
 
@@ -665,42 +789,40 @@ public class DbBillingAdminReadModels {
     }
 
     private String reconciliationContextSql() {
-        return "WITH latest_legacy AS (" +
-                " SELECT DISTINCT ON (cs.\"branchId\") " +
-                " b.\"companyId\" AS tenant_id, c.id AS company_id, c.\"companyName\" AS company_name, " +
-                " b.\"branchId\" AS branch_id, b.\"branchName\" AS branch_name, cs.\"sId\" AS legacy_subscription_id, " +
-                " cs.\"startTime\" AS start_time, cs.\"endTime\" AS end_time, " +
-                " cs.\"amountToPay\"::money::numeric AS amount_to_pay, cs.\"amountPaid\"::money::numeric AS amount_paid, " +
-                " cs.order_id AS legacy_order_id, cs.status AS legacy_status " +
-                " FROM public.\"CompanySubscription\" cs " +
-                " JOIN public.\"Branch\" b ON b.\"branchId\" = cs.\"branchId\" " +
-                " JOIN public.\"Company\" c ON c.id = b.\"companyId\" " +
-                " ORDER BY cs.\"branchId\", cs.\"sId\" DESC" +
-                "), latest_attempts AS (" +
+        return "WITH latest_attempts AS (" +
                 " SELECT DISTINCT ON (bi.source_id) bi.source_id, bpa.billing_payment_attempt_id, bpa.status, bpa.provider_code " +
                 " FROM public.billing_invoices bi " +
                 " LEFT JOIN public.billing_payment_attempts bpa ON bpa.billing_invoice_id = bi.billing_invoice_id " +
                 " WHERE bi.source_type = 'branch_subscription' " +
                 " ORDER BY bi.source_id, bpa.billing_payment_attempt_id DESC" +
+                "), invoice_allocations AS (" +
+                " SELECT billing_invoice_id, COALESCE(SUM(allocated_amount), 0) AS allocated_amount " +
+                " FROM public.billing_payment_allocations " +
+                " GROUP BY billing_invoice_id" +
                 "), reconciliation_context AS (" +
-                " SELECT ll.tenant_id, ll.company_id, ll.company_name, ll.branch_id, ll.branch_name, ll.legacy_subscription_id, ll.start_time, ll.end_time, " +
-                " ll.amount_to_pay, ll.amount_paid, ll.legacy_order_id, ll.legacy_status, " +
-                " bs.branch_subscription_id AS mirrored_branch_subscription_id, bs.status AS mirrored_branch_subscription_status, " +
-                " bi.billing_invoice_id AS mirrored_invoice_id, bi.status AS mirrored_invoice_status, " +
-                " la.billing_payment_attempt_id AS mirrored_payment_attempt_id, la.status AS mirrored_payment_attempt_status, la.provider_code AS mirrored_provider_code, " +
+                " SELECT ba.tenant_id, ba.company_id, c.\"companyName\" AS company_name, bs.branch_id, b.\"branchName\" AS branch_name, " +
+                " bs.branch_subscription_id, bi.billing_invoice_id, bi.invoice_number, bs.current_period_start, bs.current_period_end, " +
+                " bs.status AS subscription_status, bi.status AS invoice_status, " +
+                " la.billing_payment_attempt_id AS latest_payment_attempt_id, la.status AS latest_payment_attempt_status, la.provider_code, " +
+                " COALESCE(bi.total_amount, 0) AS total_amount, " +
+                " GREATEST(COALESCE(bi.total_amount, 0) - COALESCE(bi.due_amount, 0), 0) AS amount_paid, " +
+                " COALESCE(bi.due_amount, 0) AS due_amount, COALESCE(ia.allocated_amount, 0) AS allocated_amount, " +
                 " CASE " +
-                "   WHEN bs.branch_subscription_id IS NULL THEN 'missing_branch_subscription' " +
                 "   WHEN bi.billing_invoice_id IS NULL THEN 'missing_invoice' " +
-                "   WHEN COALESCE(ll.legacy_order_id, 0) > 0 AND la.billing_payment_attempt_id IS NULL THEN 'missing_payment_attempt' " +
-                "   WHEN ll.legacy_status = 'PD' AND (COALESCE(bs.status, '') <> 'active' OR COALESCE(bi.status, '') <> 'paid' OR COALESCE(la.status, '') <> 'succeeded') THEN 'status_mismatch' " +
-                "   WHEN ll.legacy_status <> 'PD' AND (COALESCE(bs.status, '') = 'active' OR COALESCE(bi.status, '') = 'paid') THEN 'status_mismatch' " +
-                "   WHEN COALESCE(ll.amount_to_pay, 0) <> COALESCE(bi.total_amount, 0) OR COALESCE(ll.amount_paid, 0) <> (COALESCE(bi.total_amount, 0) - COALESCE(bi.due_amount, 0)) THEN 'amount_mismatch' " +
+                "   WHEN LOWER(COALESCE(bs.status, '')) = 'active' AND LOWER(COALESCE(bi.status, '')) <> 'paid' THEN 'subscription_invoice_status_mismatch' " +
+                "   WHEN LOWER(COALESCE(bi.status, '')) = 'paid' AND LOWER(COALESCE(bs.status, '')) <> 'active' THEN 'invoice_subscription_status_mismatch' " +
+                "   WHEN LOWER(COALESCE(bi.status, '')) = 'open' AND COALESCE(bi.due_amount, 0) <= 0 THEN 'invoice_projection_mismatch' " +
+                "   WHEN ABS((COALESCE(bi.total_amount, 0) - COALESCE(bi.due_amount, 0)) - COALESCE(ia.allocated_amount, 0)) > 0.01 THEN 'allocation_mismatch' " +
+                "   WHEN LOWER(COALESCE(bi.status, '')) = 'open' AND COALESCE(bi.due_amount, 0) > 0 AND la.billing_payment_attempt_id IS NULL THEN 'missing_payment_attempt' " +
                 "   ELSE 'synced' " +
                 " END AS reconciliation_status " +
-                " FROM latest_legacy ll " +
-                " LEFT JOIN public.branch_subscriptions bs ON bs.legacy_subscription_id = ll.legacy_subscription_id " +
+                " FROM public.branch_subscriptions bs " +
+                " JOIN public.billing_accounts ba ON ba.billing_account_id = bs.billing_account_id " +
+                " JOIN public.\"Company\" c ON c.id = ba.company_id " +
+                " JOIN public.\"Branch\" b ON b.\"branchId\" = bs.branch_id " +
                 " LEFT JOIN public.billing_invoices bi ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
                 " LEFT JOIN latest_attempts la ON la.source_id = bs.branch_subscription_id::text " +
+                " LEFT JOIN invoice_allocations ia ON ia.billing_invoice_id = bi.billing_invoice_id " +
                 ") ";
     }
 
@@ -817,6 +939,61 @@ public class DbBillingAdminReadModels {
         if (tenantId != null) {
             params.addValue("tenantId", tenantId);
             whereClause.append(" AND pac.tenant_id = :tenantId ");
+        }
+        return whereClause.toString();
+    }
+
+    private String buildPaymentsWhereClause(String search,
+                                            String status,
+                                            String paymentSource,
+                                            Integer tenantId,
+                                            MapSqlParameterSource params) {
+        StringBuilder whereClause = new StringBuilder(" WHERE 1=1 ");
+        if (search != null && !search.trim().isEmpty()) {
+            params.addValue("search", "%" + search.trim() + "%");
+            whereClause.append(" AND (pc.company_name ILIKE :search OR pc.provider_reference ILIKE :search) ");
+        }
+        if (status != null && !status.trim().isEmpty()) {
+            params.addValue("status", status.trim());
+            whereClause.append(" AND pc.status = :status ");
+        }
+        if (paymentSource != null && !paymentSource.trim().isEmpty()) {
+            params.addValue("paymentSource", paymentSource.trim());
+            whereClause.append(" AND pc.payment_source = :paymentSource ");
+        }
+        if (tenantId != null) {
+            params.addValue("tenantId", tenantId);
+            whereClause.append(" AND pc.tenant_id = :tenantId ");
+        }
+        return whereClause.toString();
+    }
+
+    private String buildProviderEventsWhereClause(String search,
+                                                  String processingStatus,
+                                                  String providerCode,
+                                                  Integer tenantId,
+                                                  Long billingInvoiceId,
+                                                  MapSqlParameterSource params) {
+        StringBuilder whereClause = new StringBuilder(" WHERE 1=1 ");
+        if (search != null && !search.trim().isEmpty()) {
+            params.addValue("search", "%" + search.trim() + "%");
+            whereClause.append(" AND (pec.provider_event_id ILIKE :search OR pec.event_type ILIKE :search OR pec.external_reference ILIKE :search) ");
+        }
+        if (processingStatus != null && !processingStatus.trim().isEmpty()) {
+            params.addValue("processingStatus", processingStatus.trim());
+            whereClause.append(" AND pec.processing_status = :processingStatus ");
+        }
+        if (providerCode != null && !providerCode.trim().isEmpty()) {
+            params.addValue("providerCode", providerCode.trim());
+            whereClause.append(" AND LOWER(pec.provider_code) = LOWER(:providerCode) ");
+        }
+        if (tenantId != null) {
+            params.addValue("tenantId", tenantId);
+            whereClause.append(" AND pec.tenant_id = :tenantId ");
+        }
+        if (billingInvoiceId != null) {
+            params.addValue("billingInvoiceId", billingInvoiceId);
+            whereClause.append(" AND pec.billing_invoice_id = :billingInvoiceId ");
         }
         return whereClause.toString();
     }

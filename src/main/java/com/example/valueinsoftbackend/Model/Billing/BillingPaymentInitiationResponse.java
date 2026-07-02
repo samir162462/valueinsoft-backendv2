@@ -26,5 +26,6 @@ public class BillingPaymentInitiationResponse {
     private Long billingPaymentAttemptId;
     private String providerCode;
     private String externalOrderId;
+    private String paymentAttemptStatus;
     private String checkoutUrl;
 }

@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.Service.billing.BillingAccountService;
 import com.example.valueinsoftbackend.Service.billing.BillingEntitlementService;
+import com.example.valueinsoftbackend.Service.billing.BillingInvoicePaymentService;
 import com.example.valueinsoftbackend.Service.branch.BranchSubscriptionService;
 import com.example.valueinsoftbackend.Service.payment.PaymentAttemptService;
 import com.example.valueinsoftbackend.Service.payment.PaymentProvider;
@@ -15,12 +16,12 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbModernSubscription;
 import com.example.valueinsoftbackend.DatabaseRequests.DbTenants;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.AppModel.AppModelSubscription;
-import com.example.valueinsoftbackend.Model.AppModel.BranchBillingCheckoutResponse;
 import com.example.valueinsoftbackend.Model.Billing.BranchBillingCheckoutCandidate;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationRequest;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationResponse;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Configuration.TenantConfig;
-import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Model.Request.CreateSubscriptionRequest;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
@@ -48,6 +49,7 @@ public class SubscriptionService {
     private final BranchSubscriptionService branchSubscriptionService;
     private final BillingEntitlementService billingEntitlementService;
     private final PaymentProviderResolver paymentProviderResolver;
+    private final BillingInvoicePaymentService billingInvoicePaymentService;
 
     public SubscriptionService(DbModernSubscription dbModernSubscription,
                                DbBillingWriteModels dbBillingWriteModels,
@@ -59,7 +61,8 @@ public class SubscriptionService {
                                PaymentAttemptService paymentAttemptService,
                                BranchSubscriptionService branchSubscriptionService,
                                BillingEntitlementService billingEntitlementService,
-                               PaymentProviderResolver paymentProviderResolver) {
+                               PaymentProviderResolver paymentProviderResolver,
+                               BillingInvoicePaymentService billingInvoicePaymentService) {
         this.dbModernSubscription = dbModernSubscription;
         this.dbBillingWriteModels = dbBillingWriteModels;
         this.dbCompany = dbCompany;
@@ -71,6 +74,7 @@ public class SubscriptionService {
         this.branchSubscriptionService = branchSubscriptionService;
         this.billingEntitlementService = billingEntitlementService;
         this.paymentProviderResolver = paymentProviderResolver;
+        this.billingInvoicePaymentService = billingInvoicePaymentService;
     }
 
     public List<AppModelSubscription> getBranchSubscription(int branchId) {
@@ -78,7 +82,7 @@ public class SubscriptionService {
     }
 
     @Transactional
-    public String addBranchSubscription(CreateSubscriptionRequest request) {
+    public String addBranchSubscription(CreateSubscriptionRequest request, String actorUserName) {
         validateSubscription(request);
         PaymentProvider paymentProvider = paymentProviderResolver.getActiveProvider();
         Branch branch = dbBranch.getBranchById(request.getBranchId());
@@ -92,7 +96,8 @@ public class SubscriptionService {
                 company.getPlan(),
                 request.getAmountToPay(),
                 Date.valueOf(request.getStartTime()),
-                Date.valueOf(request.getEndTime())
+                Date.valueOf(request.getEndTime()),
+                actorUserName
         );
         long invoiceId = invoiceService.ensureBranchSubscriptionInvoice(
                 billingAccountId,
@@ -112,7 +117,7 @@ public class SubscriptionService {
                 "{\"branchSubscriptionId\":" + branchSubscriptionId + ",\"branchId\":" + request.getBranchId() + "}",
                 "{\"providerOrderId\":" + providerOrderId + "}"
         );
-        billingEntitlementService.recordPendingPayment(request.getBranchId(), branchSubscriptionId, invoiceId, 0);
+        billingEntitlementService.recordPendingPayment(request.getBranchId(), branchSubscriptionId, invoiceId);
 
         log.info(
                 "Created modern branch subscription {} for branch {} with provider {} order {}",
@@ -168,7 +173,14 @@ public class SubscriptionService {
     }
 
     @Transactional
-    public BranchBillingCheckoutResponse createBranchCheckout(int branchId) {
+    public BillingPaymentInitiationResponse initiateBranchPayment(int branchId,
+                                                                  BillingPaymentInitiationRequest request,
+                                                                  String actorUserName) {
+        BranchBillingCheckoutCandidate candidate = requireBranchCheckoutCandidate(branchId);
+        return billingInvoicePaymentService.initiatePayment(candidate.getBillingInvoiceId(), request, actorUserName);
+    }
+
+    private BranchBillingCheckoutCandidate requireBranchCheckoutCandidate(int branchId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         BranchBillingCheckoutCandidate candidate = dbBillingWriteModels.findBranchCheckoutCandidate(branchId);
         if (candidate == null && shouldCreateCheckoutRecoverySubscription(branchId)) {
@@ -196,50 +208,7 @@ public class SubscriptionService {
                     "No unpaid branch billing amount is available for checkout"
             );
         }
-
-        PaymentProvider paymentProvider = paymentProviderResolver.getActiveProvider();
-        String externalOrderId = candidate.getLatestExternalOrderId();
-        if (shouldCreateNewProviderOrder(candidate, externalOrderId)) {
-            int providerOrderId = paymentProvider.createProviderOrder(
-                    generateCheckoutMerchantOrderId(candidate),
-                    candidate.getBranchId(),
-                    candidate.getDueAmount()
-            );
-            externalOrderId = String.valueOf(providerOrderId);
-            paymentAttemptService.ensureCreatedAttempt(
-                    candidate.getBillingInvoiceId(),
-                    paymentProvider.getProviderCode(),
-                    externalOrderId,
-                    candidate.getDueAmount(),
-                    normalizeCurrency(candidate.getCurrencyCode()),
-                    "{\"branchSubscriptionId\":" + candidate.getBranchSubscriptionId() + ",\"branchId\":" + candidate.getBranchId() + ",\"source\":\"branch_checkout\"}",
-                    "{\"providerOrderId\":" + externalOrderId + ",\"source\":\"branch_checkout\"}"
-            );
-        }
-
-        PaymentTokenRequest request = new PaymentTokenRequest();
-        request.setOrderId(Long.parseLong(externalOrderId));
-        request.setBranchId(candidate.getBranchId());
-        request.setCompanyId(candidate.getCompanyId());
-        request.setCurrency(normalizeCurrency(candidate.getCurrencyCode()));
-        request.setAmountCents(candidate.getDueAmount().multiply(BigDecimal.valueOf(100L)).longValue());
-
-        String checkoutUrl = paymentProvider.createPaymentKeyUrl(request);
-        paymentAttemptService.markCheckoutRequested(
-                paymentProvider.getProviderCode(),
-                externalOrderId,
-                "{\"checkoutUrl\":\"" + checkoutUrl + "\",\"source\":\"branch_checkout\"}"
-        );
-
-        return new BranchBillingCheckoutResponse(
-                candidate.getBillingInvoiceId(),
-                candidate.getBranchSubscriptionId(),
-                paymentProvider.getProviderCode(),
-                externalOrderId,
-                checkoutUrl,
-                candidate.getDueAmount(),
-                normalizeCurrency(candidate.getCurrencyCode())
-        );
+        return candidate;
     }
 
     private boolean shouldCreateCheckoutRecoverySubscription(int branchId) {
@@ -266,7 +235,8 @@ public class SubscriptionService {
                 company.getPlan(),
                 amountToPay,
                 Date.valueOf(startDate),
-                Date.valueOf(endDate)
+                Date.valueOf(endDate),
+                "System"
         );
         long invoiceId = invoiceService.ensureBranchSubscriptionInvoice(
                 billingAccountId,
@@ -276,7 +246,7 @@ public class SubscriptionService {
                 BigDecimal.ZERO,
                 "Branch subscription for " + branch.getBranchName()
         );
-        billingEntitlementService.recordPendingPayment(branchId, branchSubscriptionId, invoiceId, 0);
+        billingEntitlementService.recordPendingPayment(branchId, branchSubscriptionId, invoiceId);
 
         log.info(
                 "Created default payable branch subscription {} for branch {} during checkout recovery",
@@ -291,27 +261,6 @@ public class SubscriptionService {
             return BigDecimal.valueOf(company.getEstablishPrice());
         }
         return BigDecimal.valueOf(500L);
-    }
-
-    private boolean shouldCreateNewProviderOrder(BranchBillingCheckoutCandidate candidate, String externalOrderId) {
-        if (externalOrderId == null || externalOrderId.isBlank() || "0".equals(externalOrderId.trim())) {
-            return true;
-        }
-
-        String latestStatus = candidate.getLatestAttemptStatus();
-        return latestStatus == null
-                || latestStatus.isBlank()
-                || "failed".equalsIgnoreCase(latestStatus);
-    }
-
-    private int generateCheckoutMerchantOrderId(BranchBillingCheckoutCandidate candidate) {
-        long suffix = System.currentTimeMillis() % 1_000_000L;
-        long merchantOrderId = (long) candidate.getBranchId() * 1_000_000L + suffix;
-        if (merchantOrderId <= Integer.MAX_VALUE) {
-            return (int) merchantOrderId;
-        }
-
-        return (int) ((merchantOrderId % 1_000_000_000L) + 100_000_000L);
     }
 
     private void validateSubscription(CreateSubscriptionRequest request) {

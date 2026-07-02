@@ -275,6 +275,37 @@ class FlywayMigrationInventoryTest {
     }
 
     @Test
+    void billingReconciliationAndRefundsMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V118__billing_reconciliation_and_refunds.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing billing reconciliation and refunds migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("PROVIDER_GROSS_AMOUNT NUMERIC(12, 2)"));
+        assertTrue(sql.contains("PROVIDER_FEE_AMOUNT NUMERIC(12, 2)"));
+        assertTrue(sql.contains("PROVIDER_NET_AMOUNT NUMERIC(12, 2)"));
+        assertTrue(sql.contains("SETTLEMENT_DESTINATION"));
+        assertTrue(sql.contains("RECONCILIATION_STATUS"));
+        assertFalse(sql.contains(" FLOAT"), "Billing reconciliation migration must not use FLOAT for money");
+        assertFalse(sql.contains(" REAL"), "Billing reconciliation migration must not use REAL for money");
+    }
+
+    @Test
+    void legacyBillingSubscriptionRetirementMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V119__retire_legacy_billing_subscription_artifacts.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing legacy billing subscription retirement migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("DROP TABLE IF EXISTS PUBLIC.\"COMPANYSUBSCRIPTION\""));
+        assertTrue(sql.contains("DROP COLUMN IF EXISTS LEGACY_SUBSCRIPTION_ID"));
+    }
+
+    @Test
     void billingCreditExpenseFinanceMappingMigrationExists() throws IOException {
         ClassPathResource migration = new ClassPathResource(
                 "db/migration/V116__billing_credit_expense_finance_mapping.sql"

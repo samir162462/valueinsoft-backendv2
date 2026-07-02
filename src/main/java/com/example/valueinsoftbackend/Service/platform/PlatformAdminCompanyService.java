@@ -14,7 +14,7 @@ import com.example.valueinsoftbackend.Model.ProductFilter;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingHealthSnapshotResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformTenantBillingWorkflowSummaryResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchSummary;
-import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanySubscriptionItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchSubscriptionItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAuditEventItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformSupportNoteItem;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminReadModels;
@@ -172,11 +172,11 @@ public class PlatformAdminCompanyService {
         return dbUsers.adminResetUserPassword(userName, 0, password, passwordResetRequired);
     }
 
-    public ArrayList<PlatformCompanySubscriptionItem> getCompanySubscriptionsForAuthenticatedUser(String authenticatedName,
-                                                                                                   int tenantId) {
+    public ArrayList<PlatformCompanyBranchSubscriptionItem> getCompanyBranchSubscriptionsForAuthenticatedUser(String authenticatedName,
+                                                                                                             int tenantId) {
         platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.company.read");
         requireCompany(tenantId);
-        return dbPlatformAdminReadModels.getCompanySubscriptions(tenantId);
+        return dbPlatformAdminReadModels.getCompanyBranchSubscriptions(tenantId);
     }
 
     public PlatformTenantBillingWorkflowSummaryResponse getTenantBillingWorkflowSummaryForAuthenticatedUser(String authenticatedName,

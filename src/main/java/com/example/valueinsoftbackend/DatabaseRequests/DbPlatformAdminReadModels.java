@@ -2,7 +2,7 @@ package com.example.valueinsoftbackend.DatabaseRequests;
 
 import com.example.valueinsoftbackend.Config.BillingProperties;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
-import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanySubscriptionItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchSubscriptionItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompaniesPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompany360Response;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchSummary;
@@ -65,8 +65,8 @@ public class DbPlatformAdminReadModels {
                     rs.getBoolean("retry_blocked")
             );
 
-    private static final RowMapper<PlatformCompanySubscriptionItem> COMPANY_SUBSCRIPTION_ROW_MAPPER = (rs, rowNum) ->
-            new PlatformCompanySubscriptionItem(
+    private static final RowMapper<PlatformCompanyBranchSubscriptionItem> COMPANY_BRANCH_SUBSCRIPTION_ROW_MAPPER = (rs, rowNum) ->
+            new PlatformCompanyBranchSubscriptionItem(
                     rs.getInt("subscription_id"),
                     rs.getInt("branch_id"),
                     rs.getString("branch_name"),
@@ -290,7 +290,7 @@ public class DbPlatformAdminReadModels {
         return new ArrayList<>(namedParameterJdbcTemplate.query(sql, params, COMPANY_BRANCH_ROW_MAPPER));
     }
 
-    public ArrayList<PlatformCompanySubscriptionItem> getCompanySubscriptions(int tenantId) {
+    public ArrayList<PlatformCompanyBranchSubscriptionItem> getCompanyBranchSubscriptions(int tenantId) {
         String sql = latestBranchSubscriptionContextSql() +
                 "SELECT bbc.subscription_id, bbc.branch_id, bbc.branch_name, bbc.start_time, bbc.end_time, " +
                 "bbc.amount_to_pay, bbc.amount_paid, " +
@@ -303,7 +303,7 @@ public class DbPlatformAdminReadModels {
                 "FROM branch_billing_context bbc " +
                 "WHERE bbc.tenant_id = ? " +
                 "ORDER BY bbc.branch_name ASC";
-        return new ArrayList<>(jdbcTemplate.query(sql, COMPANY_SUBSCRIPTION_ROW_MAPPER, tenantId));
+        return new ArrayList<>(jdbcTemplate.query(sql, COMPANY_BRANCH_SUBSCRIPTION_ROW_MAPPER, tenantId));
     }
 
     public boolean tenantExists(int tenantId) {

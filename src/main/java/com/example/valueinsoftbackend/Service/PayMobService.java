@@ -128,7 +128,24 @@ public class PayMobService {
         validateCallbackConfiguration();
         verifyCallbackHmac(request);
         validateCallbackTransaction(request);
+        return buildTransactionProcessedCallback(request);
+    }
 
+    public TransactionProcessedCallback parseVerifiedCallbackWithoutAttemptValidation(PayMobTransactionCallbackRequest request) {
+        validateCallbackConfiguration();
+        verifyCallbackHmac(request);
+        return buildTransactionProcessedCallback(request);
+    }
+
+    public void validateCallbackAgainstAttempt(PayMobTransactionCallbackRequest request,
+                                               BillingPaymentAttemptValidationContext context) {
+        if (context == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "PAYMOB_ORDER_NOT_FOUND", "No payment attempt matches the callback order reference");
+        }
+        validateCallbackTransaction(request, context);
+    }
+
+    private TransactionProcessedCallback buildTransactionProcessedCallback(PayMobTransactionCallbackRequest request) {
         PayMobTransactionCallbackRequest.TransactionPayload transaction = request.getTransaction();
         TransactionProcessedCallback callback = new TransactionProcessedCallback(
                 transaction.getId(),
@@ -211,7 +228,12 @@ public class PayMobService {
         if (context == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "PAYMOB_ORDER_NOT_FOUND", "No payment attempt matches the callback order reference");
         }
+        validateCallbackTransaction(request, context);
+    }
 
+    private void validateCallbackTransaction(PayMobTransactionCallbackRequest request,
+                                             BillingPaymentAttemptValidationContext context) {
+        String externalOrderId = getExternalOrderId(request);
         String expectedAmountCents = toAmountCents(context.getRequestedAmount());
         if (!expectedAmountCents.equals(String.valueOf(request.getTransaction().getAmountCents()))) {
             log.warn(

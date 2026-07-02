@@ -12,7 +12,7 @@ public class BillingEntitlementService {
         this.dbBillingWriteModels = dbBillingWriteModels;
     }
 
-    public void recordPendingPayment(int branchId, long branchSubscriptionId, long billingInvoiceId, int legacySubscriptionId) {
+    public void recordPendingPayment(int branchId, long branchSubscriptionId, long billingInvoiceId) {
         dbBillingWriteModels.createEntitlementEvent(
                 branchId,
                 branchSubscriptionId,
@@ -20,8 +20,8 @@ public class BillingEntitlementService {
                 "subscription_pending_payment",
                 null,
                 "pending_payment",
-                "legacy_subscription_created",
-                "{\"legacySubscriptionId\":" + legacySubscriptionId + "}"
+                "branch_subscription_created",
+                "{\"branchSubscriptionId\":" + branchSubscriptionId + ",\"billingInvoiceId\":" + billingInvoiceId + "}"
         );
     }
 

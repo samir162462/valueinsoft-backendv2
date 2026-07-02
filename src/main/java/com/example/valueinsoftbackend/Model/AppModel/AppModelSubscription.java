@@ -6,6 +6,7 @@ package com.example.valueinsoftbackend.Model.AppModel;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.Timestamp;
 
 public class AppModelSubscription {
 
@@ -17,9 +18,21 @@ public class AppModelSubscription {
     BigDecimal amountPaid;
     int order_id;
     String status;
+    long billingInvoiceId;
+    String createdBy;
+    Timestamp createdAt;
+    Timestamp updatedAt;
 
 
     public AppModelSubscription(int sId, Date startTime, Date endTime, int branchId, BigDecimal amountToPay, BigDecimal amountPaid, int order_id, String status) {
+        this(sId, startTime, endTime, branchId, amountToPay, amountPaid, order_id, status, 0L);
+    }
+
+    public AppModelSubscription(int sId, Date startTime, Date endTime, int branchId, BigDecimal amountToPay, BigDecimal amountPaid, int order_id, String status, long billingInvoiceId) {
+        this(sId, startTime, endTime, branchId, amountToPay, amountPaid, order_id, status, billingInvoiceId, null, null, null);
+    }
+
+    public AppModelSubscription(int sId, Date startTime, Date endTime, int branchId, BigDecimal amountToPay, BigDecimal amountPaid, int order_id, String status, long billingInvoiceId, String createdBy, Timestamp createdAt, Timestamp updatedAt) {
         this.sId = sId;
         this.startTime = startTime;
         this.endTime = endTime;
@@ -28,6 +41,10 @@ public class AppModelSubscription {
         this.amountPaid = amountPaid;
         this.order_id = order_id;
         this.status = status;
+        this.billingInvoiceId = billingInvoiceId;
+        this.createdBy = createdBy;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
     }
 
     public int getsId() {
@@ -92,5 +109,37 @@ public class AppModelSubscription {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public long getBillingInvoiceId() {
+        return billingInvoiceId;
+    }
+
+    public void setBillingInvoiceId(long billingInvoiceId) {
+        this.billingInvoiceId = billingInvoiceId;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public Timestamp getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Timestamp createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Timestamp getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(Timestamp updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

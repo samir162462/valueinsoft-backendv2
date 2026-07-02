@@ -8,21 +8,17 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingInvoice
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingManualActionResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingOperationResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentAttemptsPageResponse;
-import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingProviderEventsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationPageResponse;
-import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationRepairResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRenewalBacklogPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingRetryInvoiceResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSubscriptionsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSummaryResponse;
 import com.example.valueinsoftbackend.Model.Request.PlatformAdmin.ManualBillingActionRequest;
-import com.example.valueinsoftbackend.Service.LegacyBillingBridgeService;
 import com.example.valueinsoftbackend.Service.ManualBillingAdjustmentService;
 import com.example.valueinsoftbackend.Service.billing.BillingSchedulerService;
 import org.springframework.stereotype.Service;
-
-import java.sql.Timestamp;
-import java.util.ArrayList;
 
 @Service
 public class PlatformAdminBillingService {
@@ -32,18 +28,15 @@ public class PlatformAdminBillingService {
 
     private final DbBillingAdminReadModels dbBillingAdminReadModels;
     private final PlatformAuthorizationService platformAuthorizationService;
-    private final LegacyBillingBridgeService legacyBillingBridgeService;
     private final BillingSchedulerService billingSchedulerService;
     private final ManualBillingAdjustmentService manualBillingAdjustmentService;
 
     public PlatformAdminBillingService(DbBillingAdminReadModels dbBillingAdminReadModels,
                                        PlatformAuthorizationService platformAuthorizationService,
-                                       LegacyBillingBridgeService legacyBillingBridgeService,
                                        BillingSchedulerService billingSchedulerService,
                                        ManualBillingAdjustmentService manualBillingAdjustmentService) {
         this.dbBillingAdminReadModels = dbBillingAdminReadModels;
         this.platformAuthorizationService = platformAuthorizationService;
-        this.legacyBillingBridgeService = legacyBillingBridgeService;
         this.billingSchedulerService = billingSchedulerService;
         this.manualBillingAdjustmentService = manualBillingAdjustmentService;
     }
@@ -101,6 +94,44 @@ public class PlatformAdminBillingService {
                 search,
                 status,
                 providerCode,
+                tenantId,
+                sanitizePage(page),
+                sanitizeSize(size)
+        );
+    }
+
+    public PlatformBillingProviderEventsPageResponse getProviderEventsForAuthenticatedUser(String authenticatedName,
+                                                                                           String search,
+                                                                                           String processingStatus,
+                                                                                           String providerCode,
+                                                                                           Integer tenantId,
+                                                                                           Long billingInvoiceId,
+                                                                                           int page,
+                                                                                           int size) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.billing.read");
+        return dbBillingAdminReadModels.getProviderEvents(
+                search,
+                processingStatus,
+                providerCode,
+                tenantId,
+                billingInvoiceId,
+                sanitizePage(page),
+                sanitizeSize(size)
+        );
+    }
+
+    public PlatformBillingPaymentsPageResponse getPaymentsForAuthenticatedUser(String authenticatedName,
+                                                                               String search,
+                                                                               String status,
+                                                                               String paymentSource,
+                                                                               Integer tenantId,
+                                                                               int page,
+                                                                               int size) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.billing.read");
+        return dbBillingAdminReadModels.getPayments(
+                search,
+                status,
+                paymentSource,
                 tenantId,
                 sanitizePage(page),
                 sanitizeSize(size)
@@ -169,46 +200,6 @@ public class PlatformAdminBillingService {
         );
     }
 
-    public PlatformBillingReconciliationRepairResponse repairReconciliationForAuthenticatedUser(String authenticatedName,
-                                                                                                Integer tenantId,
-                                                                                                int limit) {
-        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.billing.read");
-        ArrayList<PlatformBillingReconciliationItem> candidates = dbBillingAdminReadModels.getReconciliationCandidates(
-                tenantId,
-                sanitizeRepairLimit(limit)
-        );
-
-        int repairedItems = 0;
-        int skippedItems = 0;
-        for (PlatformBillingReconciliationItem item : candidates) {
-            boolean repaired = legacyBillingBridgeService.repairLegacyMirror(
-                    item.getTenantId(),
-                    item.getBranchId(),
-                    item.getLegacySubscriptionId(),
-                    item.getStartTime(),
-                    item.getEndTime(),
-                    item.getAmountToPay(),
-                    item.getAmountPaid(),
-                    item.getLegacyOrderId(),
-                    item.getLegacyStatus(),
-                    item.getMirroredProviderCode()
-            );
-            if (repaired) {
-                repairedItems++;
-            } else {
-                skippedItems++;
-            }
-        }
-
-        return new PlatformBillingReconciliationRepairResponse(
-                tenantId,
-                candidates.size(),
-                repairedItems,
-                skippedItems,
-                new Timestamp(System.currentTimeMillis())
-        );
-    }
-
     public PlatformBillingOperationResponse runRenewalCycleForAuthenticatedUser(String authenticatedName) {
         platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.admin.write");
         return billingSchedulerService.runRenewalCycle(authenticatedName);
@@ -257,10 +248,4 @@ public class PlatformAdminBillingService {
         return Math.min(size, MAX_PAGE_SIZE);
     }
 
-    private int sanitizeRepairLimit(int limit) {
-        if (limit <= 0) {
-            return 50;
-        }
-        return Math.min(limit, 500);
-    }
 }

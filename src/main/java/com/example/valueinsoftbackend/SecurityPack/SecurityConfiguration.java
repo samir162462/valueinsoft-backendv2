@@ -64,7 +64,7 @@ public class SecurityConfiguration {
                                 AntPathRequestMatcher.antMatcher("/public/package-plans"),
                                 AntPathRequestMatcher.antMatcher("/public/business-packages"),
                                 AntPathRequestMatcher.antMatcher("/appSubscription/Res"),
-                                AntPathRequestMatcher.antMatcher("/OP/TPC"),
+                                AntPathRequestMatcher.antMatcher("/api/billing/paymob/webhook"),
                                 AntPathRequestMatcher.antMatcher("/error"),
                                 AntPathRequestMatcher.antMatcher("/users/checkUserEmail/**"),
                                 AntPathRequestMatcher.antMatcher("/users/checkUserUserName/**"),

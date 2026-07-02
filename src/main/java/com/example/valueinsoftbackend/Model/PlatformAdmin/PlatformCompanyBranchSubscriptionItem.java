@@ -10,7 +10,7 @@ import java.sql.Date;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class PlatformCompanySubscriptionItem {
+public class PlatformCompanyBranchSubscriptionItem {
     private int subscriptionId;
     private int branchId;
     private String branchName;

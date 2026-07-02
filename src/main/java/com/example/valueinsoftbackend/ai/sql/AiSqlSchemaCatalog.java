@@ -126,7 +126,6 @@ public class AiSqlSchemaCatalog {
                 Public company/finance tables. Always filter public company-scoped tables with company_id = :companyId:
                 - public."Company" pub_company: company master data.
                 - public."Branch" pub_branch: branch master data. Filter "companyId" = :companyId and "branchId" = :branchId when branch-specific.
-                - public."CompanySubscription" pub_sub: subscriptions.
                 - public.finance_fiscal_year, public.finance_fiscal_period: finance periods.
                 - public.finance_cost_center: finance cost centers.
                 - public.finance_account: chart of accounts.
@@ -226,7 +225,7 @@ public class AiSqlSchemaCatalog {
 
     private void addPublicTables(Set<String> tables) {
         String[] names = {
-                "\"Company\"", "\"Branch\"", "\"CompanySubscription\"", "finance_fiscal_year",
+                "\"Company\"", "\"Branch\"", "finance_fiscal_year",
                 "finance_fiscal_period", "finance_cost_center", "finance_account_mapping",
                 "finance_journal_sequence", "finance_posting_batch", "finance_posting_request",
                 "finance_account", "finance_journal_line", "finance_journal_entry", "finance_tax_code",

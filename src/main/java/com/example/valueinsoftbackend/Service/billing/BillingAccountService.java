@@ -26,7 +26,7 @@ public class BillingAccountService {
                 "TENANT-" + company.getCompanyId(),
                 currencyCode,
                 company.getCompanyName(),
-                "{\"source\":\"legacy_company_subscription\"}"
+                "{\"source\":\"billing_account_service\"}"
         );
     }
 

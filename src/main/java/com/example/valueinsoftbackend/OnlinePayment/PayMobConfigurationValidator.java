@@ -28,6 +28,11 @@ public class PayMobConfigurationValidator {
                 ? ""
                 : billingProperties.getPaymentProvider().trim().toLowerCase(Locale.ROOT);
 
+        if ("paymob_intention".equals(providerCode)) {
+            log.warn("Paymob Payment Intention provider mode is configured but remains blocked until official payload, webhook, and HMAC details are confirmed.");
+            return;
+        }
+
         if (!"paymob".equals(providerCode)) {
             return;
         }

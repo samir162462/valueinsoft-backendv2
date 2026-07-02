@@ -24,6 +24,7 @@ public class PlatformBillingPaymentAttemptItem {
     private String status;
     private BigDecimal requestedAmount;
     private String currencyCode;
+    private String actorUserName;
     private Timestamp attemptedAt;
     private Timestamp completedAt;
 }

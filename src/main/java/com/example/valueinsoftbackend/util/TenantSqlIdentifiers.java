@@ -272,10 +272,6 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".hr_attendance_day";
     }
 
-    public static String companySubscriptionTable() {
-        return "public.\"CompanySubscription\"";
-    }
-
     public static String supplierTable(int companyId, int branchId) {
         requirePositive(branchId, "branchId");
         return companySchema(companyId) + ".supplier_" + branchId;

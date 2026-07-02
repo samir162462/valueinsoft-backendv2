@@ -30,7 +30,11 @@ public class DbModernSubscription {
                     getBigDecimal(rs.getObject("amount_to_pay")),
                     getBigDecimal(rs.getObject("amount_paid")),
                     rs.getInt("order_id"),
-                    rs.getString("legacy_status")
+                    rs.getString("subscription_status"),
+                    rs.getLong("billing_invoice_id"),
+                    rs.getString("created_by"),
+                    rs.getTimestamp("created_at"),
+                    rs.getTimestamp("updated_at")
             );
 
     private final JdbcTemplate jdbcTemplate;
@@ -45,7 +49,8 @@ public class DbModernSubscription {
     public List<AppModelSubscription> getBranchSubscriptions(int branchId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         String sql = modernSubscriptionContextSql() +
-                "SELECT mc.subscription_id, mc.start_time, mc.end_time, mc.branch_id, mc.amount_to_pay, mc.amount_paid, mc.order_id, mc.legacy_status " +
+                "SELECT mc.subscription_id, mc.start_time, mc.end_time, mc.branch_id, mc.amount_to_pay, mc.amount_paid, " +
+                "mc.order_id, mc.subscription_status, mc.billing_invoice_id, mc.created_by, mc.created_at, mc.updated_at " +
                 "FROM modern_context mc WHERE mc.branch_id = :branchId ORDER BY mc.subscription_id DESC";
         return namedParameterJdbcTemplate.query(
                 sql,
@@ -67,7 +72,7 @@ public class DbModernSubscription {
     public Map<String, Object> getBranchActiveState(int branchId) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         String sql = modernSubscriptionContextSql() +
-                "SELECT mc.subscription_id, mc.start_time, mc.end_time, mc.amount_to_pay, mc.amount_paid, mc.order_id, mc.legacy_status " +
+                "SELECT mc.subscription_id, mc.start_time, mc.end_time, mc.amount_to_pay, mc.amount_paid, mc.order_id, mc.subscription_status " +
                 "FROM modern_context mc WHERE mc.branch_id = :branchId " +
                 "ORDER BY mc.subscription_id DESC LIMIT 1";
         List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(
@@ -84,7 +89,7 @@ public class DbModernSubscription {
         LocalDate currentDate = LocalDate.now();
         long allTime = ChronoUnit.DAYS.between(startTime.toLocalDate(), endTime.toLocalDate());
         long remaining = ChronoUnit.DAYS.between(currentDate, endTime.toLocalDate());
-        boolean active = remaining > 0 && "PD".equals(row.get("legacy_status"));
+        boolean active = remaining > 0 && "PD".equals(row.get("subscription_status"));
 
         Map<String, Object> details = new HashMap<>();
         details.put("sDate", startTime);
@@ -92,7 +97,7 @@ public class DbModernSubscription {
         details.put("cDate", Date.valueOf(currentDate));
         details.put("allTime", (int) allTime);
         details.put("remainingTime", (int) remaining);
-        details.put("status", row.get("legacy_status"));
+        details.put("status", row.get("subscription_status"));
         details.put("active", active);
         return details;
     }
@@ -119,7 +124,8 @@ public class DbModernSubscription {
                                          String priceCode,
                                          BigDecimal unitAmount,
                                          Date startDate,
-                                         Date endDate) {
+                                         Date endDate,
+                                         String createdBy) {
         String sql = "INSERT INTO public.branch_subscriptions " +
                 "(billing_account_id, branch_id, tenant_id, price_code, status, unit_amount, start_date, current_period_start, current_period_end, metadata_json) " +
                 "VALUES (:billingAccountId, :branchId, :tenantId, :priceCode, :status, :unitAmount, :startDate, :currentPeriodStart, :currentPeriodEnd, CAST(:metadataJson AS jsonb))";
@@ -136,7 +142,7 @@ public class DbModernSubscription {
                         .addValue("startDate", startDate)
                         .addValue("currentPeriodStart", startDate)
                         .addValue("currentPeriodEnd", endDate)
-                        .addValue("metadataJson", "{\"source\":\"modern_subscription_service\"}"),
+                        .addValue("metadataJson", buildSubscriptionMetadataJson(createdBy)),
                 keyHolder,
                 new String[]{"branch_subscription_id"}
         );
@@ -156,17 +162,31 @@ public class DbModernSubscription {
                 " ORDER BY bi.source_id, bpa.billing_payment_attempt_id DESC" +
                 "), modern_context AS (" +
                 " SELECT bs.branch_subscription_id AS subscription_id, bs.branch_id, bs.current_period_start AS start_time, bs.current_period_end AS end_time, " +
+                " COALESCE(bi.billing_invoice_id, 0) AS billing_invoice_id, " +
                 " bi.total_amount AS amount_to_pay, (bi.total_amount - bi.due_amount) AS amount_paid, " +
+                " COALESCE(NULLIF(bs.metadata_json ->> 'createdBy', ''), NULLIF(bs.metadata_json ->> 'created_by', ''), 'System') AS created_by, " +
+                " bs.created_at, bs.updated_at, " +
                 " CASE " +
                 "   WHEN la.external_order_id ~ '^[0-9]{1,9}$' THEN CAST(la.external_order_id AS INTEGER) " +
                 "   WHEN la.external_order_id ~ '^[0-9]{10}$' AND la.external_order_id <= '2147483647' THEN CAST(la.external_order_id AS INTEGER) " +
                 "   ELSE 0 " +
                 " END AS order_id, " +
-                " CASE WHEN bi.status = 'paid' AND bs.status = 'active' THEN 'PD' ELSE 'NP' END AS legacy_status " +
+                " CASE WHEN bi.status = 'paid' AND bs.status = 'active' THEN 'PD' ELSE 'NP' END AS subscription_status " +
                 " FROM public.branch_subscriptions bs " +
                 " LEFT JOIN public.billing_invoices bi ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
                 " LEFT JOIN latest_attempts la ON la.source_id = bs.branch_subscription_id::text" +
                 ") ";
+    }
+
+    private String buildSubscriptionMetadataJson(String createdBy) {
+        String actor = createdBy == null || createdBy.isBlank() ? "System" : createdBy.trim();
+        return "{\"source\":\"modern_subscription_service\",\"createdBy\":\"" + escapeJson(actor) + "\"}";
+    }
+
+    private String escapeJson(String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
     }
 
     private static BigDecimal getBigDecimal(Object value) {

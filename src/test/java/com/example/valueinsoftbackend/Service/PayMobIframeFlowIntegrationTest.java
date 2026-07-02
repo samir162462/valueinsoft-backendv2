@@ -1,7 +1,6 @@
 package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBillingWriteModels;
-import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptValidationContext;
 import com.example.valueinsoftbackend.Model.Request.PaymentTokenRequest;
 import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackRequest;
@@ -25,6 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -50,8 +50,8 @@ class PayMobIframeFlowIntegrationTest {
     void iframeAcceptFlowCreatesProviderOrderPaymentKeyUrlAndValidatesCallback() throws Exception {
         assertConfigured(payMobProperties.getAuthToken(), "vls.paymob.auth-token");
         assertConfigured(payMobProperties.getHmacSecret(), "vls.paymob.hmac-secret");
-        assertTrue(payMobProperties.getCardIntegrationId() > 0, "vls.paymob.card-integration-id must be configured");
-        assertTrue(payMobProperties.getCardIFrameId() > 0, "vls.paymob.card-iframe-id must be configured");
+        assumeTrue(payMobProperties.getCardIntegrationId() > 0, "vls.paymob.card-integration-id must be configured");
+        assumeTrue(payMobProperties.getCardIFrameId() > 0, "vls.paymob.card-iframe-id must be configured");
 
         DbBillingWriteModels dbBillingWriteModels = mock(DbBillingWriteModels.class);
         PayMobService payMobService = new PayMobService(payMobProperties, dbBillingWriteModels, new ObjectMapper());
@@ -84,6 +84,8 @@ class PayMobIframeFlowIntegrationTest {
                 .thenReturn(new BillingPaymentAttemptValidationContext(
                         7L,
                         8L,
+                        companyId,
+                        branchId,
                         amount,
                         "EGP",
                         "checkout_requested",
@@ -98,13 +100,7 @@ class PayMobIframeFlowIntegrationTest {
     }
 
     private void assertConfigured(String value, String propertyName) {
-        if (value == null || value.isBlank()) {
-            throw new ApiException(
-                    org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
-                    "PAYMOB_TEST_NOT_CONFIGURED",
-                    propertyName + " must be configured for PayMob iframe integration test"
-            );
-        }
+        assumeTrue(value != null && !value.isBlank(), propertyName + " must be configured for PayMob iframe integration test");
     }
 
     private PayMobTransactionCallbackRequest buildValidCallbackRequest(int providerOrderId) {

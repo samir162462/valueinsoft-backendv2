@@ -14,7 +14,7 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAlertSettingsR
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompaniesPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompany360Response;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchSummary;
-import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanySubscriptionItem;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformCompanyBranchSubscriptionItem;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformConfigAssignmentsResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformAuditEventsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformTenantBillingWorkflowSummaryResponse;
@@ -29,8 +29,9 @@ import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSubscri
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingSummaryResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingInvoicesPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentAttemptsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingPaymentsPageResponse;
+import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingProviderEventsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationPageResponse;
-import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingReconciliationRepairResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformClientReceiptsPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformExpensesPageResponse;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformLifecycleActionResponse;
@@ -281,9 +282,9 @@ public class PlatformAdminController {
     }
 
     @GetMapping("/companies/{tenantId}/subscriptions")
-    public ArrayList<PlatformCompanySubscriptionItem> getCompanySubscriptions(Principal principal,
-                                                                              @PathVariable int tenantId) {
-        return platformAdminCompanyService.getCompanySubscriptionsForAuthenticatedUser(principal.getName(), tenantId);
+    public ArrayList<PlatformCompanyBranchSubscriptionItem> getCompanyBranchSubscriptions(Principal principal,
+                                                                                         @PathVariable int tenantId) {
+        return platformAdminCompanyService.getCompanyBranchSubscriptionsForAuthenticatedUser(principal.getName(), tenantId);
     }
 
     @GetMapping("/companies/{tenantId}/clients")
@@ -389,6 +390,46 @@ public class PlatformAdminController {
         );
     }
 
+    @GetMapping("/billing/payments")
+    public PlatformBillingPaymentsPageResponse getBillingPayments(Principal principal,
+                                                                  @RequestParam(value = "search", required = false) String search,
+                                                                  @RequestParam(value = "status", required = false) String status,
+                                                                  @RequestParam(value = "paymentSource", required = false) String paymentSource,
+                                                                  @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                  @RequestParam(defaultValue = "1") int page,
+                                                                  @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getPaymentsForAuthenticatedUser(
+                principal.getName(),
+                search,
+                status,
+                paymentSource,
+                tenantId,
+                page,
+                size
+        );
+    }
+
+    @GetMapping("/billing/provider-events")
+    public PlatformBillingProviderEventsPageResponse getBillingProviderEvents(Principal principal,
+                                                                              @RequestParam(value = "search", required = false) String search,
+                                                                              @RequestParam(value = "status", required = false) String status,
+                                                                              @RequestParam(value = "providerCode", required = false) String providerCode,
+                                                                              @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                                              @RequestParam(value = "billingInvoiceId", required = false) Long billingInvoiceId,
+                                                                              @RequestParam(defaultValue = "1") int page,
+                                                                              @RequestParam(defaultValue = "20") int size) {
+        return platformAdminBillingService.getProviderEventsForAuthenticatedUser(
+                principal.getName(),
+                search,
+                status,
+                providerCode,
+                tenantId,
+                billingInvoiceId,
+                page,
+                size
+        );
+    }
+
     @GetMapping("/billing/dunning-runs")
     public PlatformBillingDunningRunsPageResponse getBillingDunningRuns(Principal principal,
                                                                         @RequestParam(value = "status", required = false) String status,
@@ -455,17 +496,6 @@ public class PlatformAdminController {
                 tenantId,
                 page,
                 size
-        );
-    }
-
-    @PostMapping("/billing/reconciliation/repair")
-    public PlatformBillingReconciliationRepairResponse repairBillingReconciliation(Principal principal,
-                                                                                   @RequestParam(value = "tenantId", required = false) Integer tenantId,
-                                                                                   @RequestParam(value = "limit", defaultValue = "50") int limit) {
-        return platformAdminBillingService.repairReconciliationForAuthenticatedUser(
-                principal.getName(),
-                tenantId,
-                limit
         );
     }
 

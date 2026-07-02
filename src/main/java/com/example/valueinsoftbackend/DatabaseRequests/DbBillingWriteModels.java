@@ -8,6 +8,8 @@ import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceMutationContex
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoicePaymentContext;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptSnapshot;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptValidationContext;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAllocationReversalCandidate;
+import com.example.valueinsoftbackend.Model.Billing.BillingProviderCheckoutOutboxItem;
 import com.example.valueinsoftbackend.Model.Billing.BillingRenewalCandidate;
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceRetryCandidate;
 import com.example.valueinsoftbackend.Model.Billing.BranchBillingCheckoutCandidate;
@@ -129,6 +131,37 @@ public class DbBillingWriteModels {
                     rs.getBigDecimal("requested_amount"),
                     rs.getString("currency_code"),
                     rs.getString("checkout_url")
+            );
+
+    private static final RowMapper<BillingPaymentAllocationReversalCandidate> PAYMENT_ALLOCATION_REVERSAL_ROW_MAPPER = (rs, rowNum) ->
+            new BillingPaymentAllocationReversalCandidate(
+                    rs.getLong("billing_payment_id"),
+                    rs.getLong("billing_payment_allocation_id"),
+                    rs.getLong("billing_invoice_id"),
+                    rs.getLong("billing_account_id"),
+                    rs.getString("payment_source"),
+                    rs.getString("provider_code"),
+                    rs.getString("provider_reference"),
+                    rs.getBigDecimal("allocated_amount"),
+                    rs.getBigDecimal("reversible_amount"),
+                    rs.getString("currency_code")
+            );
+
+    private static final RowMapper<BillingProviderCheckoutOutboxItem> PROVIDER_CHECKOUT_OUTBOX_ROW_MAPPER = (rs, rowNum) ->
+            new BillingProviderCheckoutOutboxItem(
+                    rs.getLong("checkout_outbox_id"),
+                    rs.getLong("billing_payment_attempt_id"),
+                    rs.getLong("billing_invoice_id"),
+                    rs.getInt("company_id"),
+                    (Integer) rs.getObject("branch_id"),
+                    rs.getString("provider_code"),
+                    rs.getString("operation_type"),
+                    rs.getString("idempotency_key"),
+                    rs.getBigDecimal("requested_amount"),
+                    rs.getString("currency_code"),
+                    rs.getString("checkout_reference"),
+                    rs.getString("request_payload_json"),
+                    rs.getInt("attempt_count")
             );
 
     private static final RowMapper<BillingAccountBalanceResponse> BILLING_ACCOUNT_BALANCE_ROW_MAPPER = (rs, rowNum) ->
@@ -437,6 +470,67 @@ public class DbBillingWriteModels {
         );
     }
 
+    public List<BillingPaymentAllocationReversalCandidate> findInvoicePaymentAllocationsForReversal(long billingInvoiceId) {
+        String sql = "WITH original_allocations AS (" +
+                " SELECT bp.billing_payment_id, bpa.billing_payment_allocation_id, bpa.billing_invoice_id, bp.billing_account_id, " +
+                " bp.payment_source, bp.provider_code, bp.provider_reference, bpa.allocated_amount, bpa.currency_code, bpa.created_at " +
+                " FROM public.billing_payment_allocations bpa " +
+                " JOIN public.billing_payments bp ON bp.billing_payment_id = bpa.billing_payment_id " +
+                " WHERE bpa.billing_invoice_id = :billingInvoiceId " +
+                " AND UPPER(bp.status) = 'ALLOCATED' " +
+                " AND UPPER(bp.payment_source) NOT LIKE '%REVERSAL%' " +
+                " AND UPPER(bp.payment_source) NOT LIKE '%REFUND%' " +
+                "), reversed_allocations AS (" +
+                " SELECT (rbp.metadata_json ->> 'reversalOfAllocationId')::bigint AS original_allocation_id, " +
+                " COALESCE(SUM(rbpa.allocated_amount), 0) AS reversed_amount " +
+                " FROM public.billing_payments rbp " +
+                " JOIN public.billing_payment_allocations rbpa ON rbpa.billing_payment_id = rbp.billing_payment_id " +
+                " WHERE rbpa.billing_invoice_id = :billingInvoiceId " +
+                " AND UPPER(rbp.status) = 'REVERSED' " +
+                " AND jsonb_exists(rbp.metadata_json, 'reversalOfAllocationId') " +
+                " GROUP BY (rbp.metadata_json ->> 'reversalOfAllocationId')::bigint" +
+                ") " +
+                "SELECT oa.*, GREATEST(oa.allocated_amount - COALESCE(ra.reversed_amount, 0), 0) AS reversible_amount " +
+                "FROM original_allocations oa " +
+                "LEFT JOIN reversed_allocations ra ON ra.original_allocation_id = oa.billing_payment_allocation_id " +
+                "WHERE GREATEST(oa.allocated_amount - COALESCE(ra.reversed_amount, 0), 0) > 0 " +
+                "ORDER BY oa.created_at DESC, oa.billing_payment_allocation_id DESC";
+        return namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource().addValue("billingInvoiceId", billingInvoiceId),
+                PAYMENT_ALLOCATION_REVERSAL_ROW_MAPPER
+        );
+    }
+
+    public int updateBillingPaymentReconciliationFields(long billingPaymentId,
+                                                        BigDecimal providerGrossAmount,
+                                                        BigDecimal providerFeeAmount,
+                                                        BigDecimal providerNetAmount,
+                                                        String settlementCurrencyCode,
+                                                        String settlementDestination,
+                                                        String providerSettlementReference,
+                                                        String reconciliationStatus,
+                                                        String metadataJson) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_payments " +
+                        "SET provider_gross_amount = :providerGrossAmount, provider_fee_amount = :providerFeeAmount, " +
+                        "provider_net_amount = :providerNetAmount, settlement_currency_code = :settlementCurrencyCode, " +
+                        "settlement_destination = :settlementDestination, provider_settlement_reference = :providerSettlementReference, " +
+                        "reconciliation_status = :reconciliationStatus, metadata_json = metadata_json || CAST(:metadataJson AS jsonb) " +
+                        "WHERE billing_payment_id = :billingPaymentId",
+                new MapSqlParameterSource()
+                        .addValue("billingPaymentId", billingPaymentId)
+                        .addValue("providerGrossAmount", providerGrossAmount)
+                        .addValue("providerFeeAmount", providerFeeAmount)
+                        .addValue("providerNetAmount", providerNetAmount)
+                        .addValue("settlementCurrencyCode", settlementCurrencyCode)
+                        .addValue("settlementDestination", settlementDestination)
+                        .addValue("providerSettlementReference", providerSettlementReference)
+                        .addValue("reconciliationStatus", reconciliationStatus)
+                        .addValue("metadataJson", metadataJson)
+        );
+    }
+
     public BillingBalanceSettlementSnapshot findBalanceSettlementByIdempotencyKey(int companyId,
                                                                                   long billingInvoiceId,
                                                                                   String idempotencyKey) {
@@ -465,19 +559,9 @@ public class DbBillingWriteModels {
         return items.isEmpty() ? null : items.get(0);
     }
 
-    public Long findBranchSubscriptionIdByLegacySubscriptionId(int legacySubscriptionId) {
-        List<Long> ids = jdbcTemplate.query(
-                "SELECT branch_subscription_id FROM public.branch_subscriptions WHERE legacy_subscription_id = ? ORDER BY branch_subscription_id ASC",
-                (rs, rowNum) -> rs.getLong("branch_subscription_id"),
-                legacySubscriptionId
-        );
-        return ids.isEmpty() ? null : ids.get(0);
-    }
-
     public long createBranchSubscription(long billingAccountId,
                                          int branchId,
                                          Integer tenantId,
-                                         int legacySubscriptionId,
                                          String priceCode,
                                          String status,
                                          BigDecimal unitAmount,
@@ -486,8 +570,8 @@ public class DbBillingWriteModels {
                                          Date currentPeriodEnd,
                                          String metadataJson) {
         String sql = "INSERT INTO public.branch_subscriptions " +
-                "(billing_account_id, branch_id, tenant_id, legacy_subscription_id, price_code, status, unit_amount, start_date, current_period_start, current_period_end, metadata_json) " +
-                "VALUES (:billingAccountId, :branchId, :tenantId, :legacySubscriptionId, :priceCode, :status, :unitAmount, :startDate, :currentPeriodStart, :currentPeriodEnd, CAST(:metadataJson AS jsonb))";
+                "(billing_account_id, branch_id, tenant_id, price_code, status, unit_amount, start_date, current_period_start, current_period_end, metadata_json) " +
+                "VALUES (:billingAccountId, :branchId, :tenantId, :priceCode, :status, :unitAmount, :startDate, :currentPeriodStart, :currentPeriodEnd, CAST(:metadataJson AS jsonb))";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         namedParameterJdbcTemplate.update(
                 sql,
@@ -495,7 +579,6 @@ public class DbBillingWriteModels {
                         .addValue("billingAccountId", billingAccountId)
                         .addValue("branchId", branchId)
                         .addValue("tenantId", tenantId)
-                        .addValue("legacySubscriptionId", legacySubscriptionId)
                         .addValue("priceCode", priceCode)
                         .addValue("status", status)
                         .addValue("unitAmount", unitAmount)
@@ -569,20 +652,6 @@ public class DbBillingWriteModels {
                         .addValue("metadataJson", metadataJson)
                         .addValue("providerCode", providerCode)
                         .addValue("externalOrderId", externalOrderId)
-        );
-    }
-
-    public int updateBranchSubscriptionStatusByLegacySubscriptionId(int legacySubscriptionId,
-                                                                    String status,
-                                                                    String metadataJson) {
-        return namedParameterJdbcTemplate.update(
-                "UPDATE public.branch_subscriptions " +
-                        "SET status = :status, metadata_json = CAST(:metadataJson AS jsonb), updated_at = NOW() " +
-                        "WHERE legacy_subscription_id = :legacySubscriptionId",
-                new MapSqlParameterSource()
-                        .addValue("status", status)
-                        .addValue("metadataJson", metadataJson)
-                        .addValue("legacySubscriptionId", legacySubscriptionId)
         );
     }
 
@@ -680,17 +749,33 @@ public class DbBillingWriteModels {
     }
 
     public BillingPaymentAttemptValidationContext findPaymentAttemptValidationContext(String providerCode, String externalOrderId) {
+        return findPaymentAttemptValidationContext(providerCode, externalOrderId, false);
+    }
+
+    public BillingPaymentAttemptValidationContext lockPaymentAttemptValidationContext(String providerCode, String externalOrderId) {
+        return findPaymentAttemptValidationContext(providerCode, externalOrderId, true);
+    }
+
+    private BillingPaymentAttemptValidationContext findPaymentAttemptValidationContext(String providerCode,
+                                                                                      String externalOrderId,
+                                                                                      boolean lockRow) {
+        String sql = "SELECT billing_payment_attempt_id, billing_invoice_id, company_id, branch_id, requested_amount, currency_code, status, external_payment_reference " +
+                "FROM public.billing_payment_attempts " +
+                "WHERE LOWER(provider_code) = LOWER(:providerCode) AND external_order_id = :externalOrderId " +
+                "ORDER BY billing_payment_attempt_id DESC";
+        if (lockRow) {
+            sql = sql + " FOR UPDATE";
+        }
         List<BillingPaymentAttemptValidationContext> items = namedParameterJdbcTemplate.query(
-                "SELECT billing_payment_attempt_id, billing_invoice_id, requested_amount, currency_code, status, external_payment_reference " +
-                        "FROM public.billing_payment_attempts " +
-                        "WHERE LOWER(provider_code) = LOWER(:providerCode) AND external_order_id = :externalOrderId " +
-                        "ORDER BY billing_payment_attempt_id DESC",
+                sql,
                 new MapSqlParameterSource()
                         .addValue("providerCode", providerCode)
                         .addValue("externalOrderId", externalOrderId),
                 (rs, rowNum) -> new BillingPaymentAttemptValidationContext(
                         rs.getLong("billing_payment_attempt_id"),
                         rs.getLong("billing_invoice_id"),
+                        rs.getObject("company_id", Integer.class),
+                        rs.getObject("branch_id", Integer.class),
                         rs.getBigDecimal("requested_amount"),
                         rs.getString("currency_code"),
                         rs.getString("status"),
@@ -759,6 +844,21 @@ public class DbBillingWriteModels {
         return items.isEmpty() ? null : items.get(0);
     }
 
+    public BillingPaymentAttemptSnapshot findLatestPaymentAttemptByInvoiceId(long invoiceId) {
+        List<BillingPaymentAttemptSnapshot> items = namedParameterJdbcTemplate.query(
+                "SELECT billing_payment_attempt_id, provider_code, external_order_id, status, requested_amount, currency_code, " +
+                        "provider_response_json ->> 'checkoutUrl' AS checkout_url " +
+                        "FROM public.billing_payment_attempts " +
+                        "WHERE billing_invoice_id = :invoiceId " +
+                        "ORDER BY billing_payment_attempt_id DESC " +
+                        "LIMIT 1",
+                new MapSqlParameterSource()
+                        .addValue("invoiceId", invoiceId),
+                PAYMENT_ATTEMPT_SNAPSHOT_ROW_MAPPER
+        );
+        return items.isEmpty() ? null : items.get(0);
+    }
+
     public long createPaymentAttempt(long invoiceId,
                                      Integer companyId,
                                      Integer branchId,
@@ -800,10 +900,157 @@ public class DbBillingWriteModels {
         return keyHolder.getKey().longValue();
     }
 
+    public long createProviderCheckoutOutbox(long billingPaymentAttemptId,
+                                             String providerCode,
+                                             String operationType,
+                                             String idempotencyKey,
+                                             String requestPayloadJson) {
+        String sql = "INSERT INTO public.billing_provider_checkout_outbox " +
+                "(billing_payment_attempt_id, provider_code, operation_type, idempotency_key, request_payload_json) " +
+                "VALUES (:billingPaymentAttemptId, :providerCode, :operationType, :idempotencyKey, CAST(:requestPayloadJson AS jsonb)) " +
+                "ON CONFLICT (provider_code, idempotency_key) DO UPDATE SET " +
+                "request_payload_json = EXCLUDED.request_payload_json, " +
+                "status = CASE " +
+                "    WHEN public.billing_provider_checkout_outbox.status = 'SUCCEEDED' THEN public.billing_provider_checkout_outbox.status " +
+                "    ELSE 'PENDING' " +
+                "END, " +
+                "last_error = NULL, next_attempt_at = NOW() " +
+                "RETURNING checkout_outbox_id";
+        Long checkoutOutboxId = namedParameterJdbcTemplate.queryForObject(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("billingPaymentAttemptId", billingPaymentAttemptId)
+                        .addValue("providerCode", providerCode)
+                        .addValue("operationType", operationType)
+                        .addValue("idempotencyKey", idempotencyKey)
+                        .addValue("requestPayloadJson", requestPayloadJson),
+                Long.class
+        );
+        return checkoutOutboxId == null ? 0L : checkoutOutboxId;
+    }
+
+    public List<BillingProviderCheckoutOutboxItem> claimDueProviderCheckoutOutboxItems(int limit) {
+        String sql = "WITH candidates AS ( " +
+                "    SELECT checkout_outbox_id " +
+                "    FROM public.billing_provider_checkout_outbox " +
+                "    WHERE status IN ('PENDING', 'FAILED_RETRYABLE') " +
+                "      AND next_attempt_at <= NOW() " +
+                "    ORDER BY next_attempt_at ASC, checkout_outbox_id ASC " +
+                "    LIMIT :limit " +
+                "    FOR UPDATE SKIP LOCKED " +
+                "), updated AS ( " +
+                "    UPDATE public.billing_provider_checkout_outbox outbox " +
+                "    SET status = 'PROCESSING', attempt_count = outbox.attempt_count + 1, updated_at = NOW() " +
+                "    FROM candidates " +
+                "    WHERE outbox.checkout_outbox_id = candidates.checkout_outbox_id " +
+                "    RETURNING outbox.checkout_outbox_id, outbox.billing_payment_attempt_id, outbox.provider_code, " +
+                "        outbox.operation_type, outbox.idempotency_key, outbox.request_payload_json::text AS request_payload_json, " +
+                "        outbox.attempt_count " +
+                ") " +
+                "SELECT updated.checkout_outbox_id, updated.billing_payment_attempt_id, bpa.billing_invoice_id, " +
+                "       COALESCE(bpa.company_id, 0) AS company_id, bpa.branch_id, updated.provider_code, updated.operation_type, " +
+                "       updated.idempotency_key, bpa.requested_amount, bpa.currency_code, bpa.checkout_reference, " +
+                "       updated.request_payload_json, updated.attempt_count " +
+                "FROM updated " +
+                "JOIN public.billing_payment_attempts bpa ON bpa.billing_payment_attempt_id = updated.billing_payment_attempt_id";
+        return namedParameterJdbcTemplate.query(
+                sql,
+                new MapSqlParameterSource().addValue("limit", limit),
+                PROVIDER_CHECKOUT_OUTBOX_ROW_MAPPER
+        );
+    }
+
+    public int markProviderCheckoutOutboxSucceeded(long checkoutOutboxId, String responsePayloadJson) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_provider_checkout_outbox " +
+                        "SET status = 'SUCCEEDED', response_payload_json = CAST(:responsePayloadJson AS jsonb), " +
+                        "last_error = NULL, updated_at = NOW() " +
+                        "WHERE checkout_outbox_id = :checkoutOutboxId",
+                new MapSqlParameterSource()
+                        .addValue("checkoutOutboxId", checkoutOutboxId)
+                        .addValue("responsePayloadJson", responsePayloadJson)
+        );
+    }
+
+    public int markProviderCheckoutOutboxRetryable(long checkoutOutboxId,
+                                                   String errorMessage,
+                                                   int delaySeconds) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_provider_checkout_outbox " +
+                        "SET status = 'FAILED_RETRYABLE', last_error = :errorMessage, " +
+                        "next_attempt_at = NOW() + (:delaySeconds * INTERVAL '1 second'), updated_at = NOW() " +
+                        "WHERE checkout_outbox_id = :checkoutOutboxId",
+                new MapSqlParameterSource()
+                        .addValue("checkoutOutboxId", checkoutOutboxId)
+                        .addValue("errorMessage", errorMessage)
+                        .addValue("delaySeconds", delaySeconds)
+        );
+    }
+
+    public int markProviderCheckoutOutboxFinal(long checkoutOutboxId,
+                                               String status,
+                                               String responsePayloadJson,
+                                               String errorMessage) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_provider_checkout_outbox " +
+                        "SET status = :status, response_payload_json = CAST(:responsePayloadJson AS jsonb), " +
+                        "last_error = :errorMessage, updated_at = NOW() " +
+                        "WHERE checkout_outbox_id = :checkoutOutboxId",
+                new MapSqlParameterSource()
+                        .addValue("checkoutOutboxId", checkoutOutboxId)
+                        .addValue("status", status)
+                        .addValue("responsePayloadJson", responsePayloadJson)
+                        .addValue("errorMessage", errorMessage)
+        );
+    }
+
+    public int updatePaymentAttemptCheckoutRequestedById(long billingPaymentAttemptId,
+                                                         String externalOrderId,
+                                                         String checkoutReference,
+                                                         String providerResponseJson,
+                                                         String metadataJson) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_payment_attempts " +
+                        "SET external_order_id = :externalOrderId, checkout_reference = COALESCE(:checkoutReference, checkout_reference), " +
+                        "status = 'CHECKOUT_REQUESTED', checkout_requested_at = NOW(), " +
+                        "provider_response_json = CAST(:providerResponseJson AS jsonb), " +
+                        "metadata_json = metadata_json || CAST(:metadataJson AS jsonb) " +
+                        "WHERE billing_payment_attempt_id = :billingPaymentAttemptId " +
+                        "AND UPPER(status) IN ('CREATED', 'CHECKOUT_PENDING', 'PENDING_PROVIDER')",
+                new MapSqlParameterSource()
+                        .addValue("billingPaymentAttemptId", billingPaymentAttemptId)
+                        .addValue("externalOrderId", externalOrderId)
+                        .addValue("checkoutReference", checkoutReference)
+                        .addValue("providerResponseJson", providerResponseJson)
+                        .addValue("metadataJson", metadataJson)
+        );
+    }
+
+    public int updatePaymentAttemptPendingProviderById(long billingPaymentAttemptId,
+                                                       String externalOrderId,
+                                                       String providerResponseJson,
+                                                       String failureCode,
+                                                       String failureMessage) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_payment_attempts " +
+                        "SET external_order_id = COALESCE(:externalOrderId, external_order_id), status = 'PENDING_PROVIDER', " +
+                        "provider_response_json = CAST(:providerResponseJson AS jsonb), " +
+                        "failure_code = :failureCode, failure_message = :failureMessage " +
+                        "WHERE billing_payment_attempt_id = :billingPaymentAttemptId " +
+                        "AND UPPER(status) IN ('CREATED', 'CHECKOUT_PENDING', 'PENDING_PROVIDER')",
+                new MapSqlParameterSource()
+                        .addValue("billingPaymentAttemptId", billingPaymentAttemptId)
+                        .addValue("externalOrderId", externalOrderId)
+                        .addValue("providerResponseJson", providerResponseJson)
+                        .addValue("failureCode", failureCode)
+                        .addValue("failureMessage", failureMessage)
+        );
+    }
+
     public BillingInvoiceMutationContext findInvoiceMutationContext(long billingInvoiceId) {
         List<BillingInvoiceMutationContext> items = namedParameterJdbcTemplate.query(
-                "SELECT bi.billing_invoice_id, bs.branch_subscription_id, ba.tenant_id, ba.company_id, bs.branch_id, " +
-                        "bi.status, bi.total_amount, bi.due_amount, bi.currency_code " +
+                "SELECT bi.billing_invoice_id, bi.billing_account_id, bs.branch_subscription_id, ba.tenant_id, ba.company_id, bs.branch_id, " +
+                        "bi.status, bi.total_amount, bi.paid_amount, bi.due_amount, bi.currency_code " +
                         "FROM public.billing_invoices bi " +
                         "JOIN public.billing_accounts ba ON ba.billing_account_id = bi.billing_account_id " +
                         "LEFT JOIN public.branch_subscriptions bs ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
@@ -811,12 +1058,14 @@ public class DbBillingWriteModels {
                 new MapSqlParameterSource().addValue("billingInvoiceId", billingInvoiceId),
                 (rs, rowNum) -> new BillingInvoiceMutationContext(
                         rs.getLong("billing_invoice_id"),
+                        rs.getLong("billing_account_id"),
                         (Long) rs.getObject("branch_subscription_id"),
                         rs.getInt("tenant_id"),
                         rs.getInt("company_id"),
                         (Integer) rs.getObject("branch_id"),
                         rs.getString("status"),
                         rs.getBigDecimal("total_amount"),
+                        rs.getBigDecimal("paid_amount"),
                         rs.getBigDecimal("due_amount"),
                         rs.getString("currency_code")
                 )
@@ -857,16 +1106,19 @@ public class DbBillingWriteModels {
 
     public int updateInvoiceManualState(long billingInvoiceId,
                                         String status,
+                                        BigDecimal paidAmount,
                                         BigDecimal dueAmount,
                                         Instant paidAt,
                                         String metadataJson) {
         return namedParameterJdbcTemplate.update(
                 "UPDATE public.billing_invoices " +
-                        "SET status = :status, due_amount = :dueAmount, paid_at = :paidAt, metadata_json = metadata_json || CAST(:metadataJson AS jsonb), updated_at = NOW() " +
+                        "SET status = :status, paid_amount = :paidAmount, due_amount = :dueAmount, paid_at = :paidAt, " +
+                        "metadata_json = metadata_json || CAST(:metadataJson AS jsonb), updated_at = NOW() " +
                         "WHERE billing_invoice_id = :billingInvoiceId",
                 new MapSqlParameterSource()
                         .addValue("billingInvoiceId", billingInvoiceId)
                         .addValue("status", status)
+                        .addValue("paidAmount", paidAmount)
                         .addValue("dueAmount", dueAmount)
                         .addValue("paidAt", paidAt == null ? null : Timestamp.from(paidAt))
                         .addValue("metadataJson", metadataJson)
@@ -994,6 +1246,50 @@ public class DbBillingWriteModels {
                         .addValue("externalReference", externalReference)
                         .addValue("payloadJson", payloadJson)
                         .addValue("processingStatus", processingStatus)
+                        .addValue("errorMessage", errorMessage)
+        );
+    }
+
+    public boolean reserveProviderEventProcessing(String providerCode,
+                                                  String providerEventId,
+                                                  String eventType,
+                                                  String externalReference,
+                                                  String payloadJson) {
+        int rows = namedParameterJdbcTemplate.update(
+                "INSERT INTO public.billing_provider_events " +
+                        "(provider_code, provider_event_id, event_type, external_reference, payload_json, processing_status, received_at, locked_at) " +
+                        "VALUES (:providerCode, :providerEventId, :eventType, :externalReference, CAST(:payloadJson AS jsonb), 'processing', NOW(), NOW()) " +
+                        "ON CONFLICT (provider_code, provider_event_id) DO NOTHING",
+                new MapSqlParameterSource()
+                        .addValue("providerCode", providerCode)
+                        .addValue("providerEventId", providerEventId)
+                        .addValue("eventType", eventType)
+                        .addValue("externalReference", externalReference)
+                        .addValue("payloadJson", payloadJson)
+        );
+        return rows > 0;
+    }
+
+    public int markProviderEventStatus(String providerCode,
+                                       String providerEventId,
+                                       String processingStatus,
+                                       Long attemptId,
+                                       Long billingInvoiceId,
+                                       Integer companyId,
+                                       String errorMessage) {
+        return namedParameterJdbcTemplate.update(
+                "UPDATE public.billing_provider_events " +
+                        "SET processing_status = :processingStatus, processed_at = NOW(), locked_at = NULL, " +
+                        "attempt_id = :attemptId, billing_invoice_id = :billingInvoiceId, company_id = :companyId, " +
+                        "error_message = :errorMessage " +
+                        "WHERE LOWER(provider_code) = LOWER(:providerCode) AND provider_event_id = :providerEventId",
+                new MapSqlParameterSource()
+                        .addValue("providerCode", providerCode)
+                        .addValue("providerEventId", providerEventId)
+                        .addValue("processingStatus", processingStatus)
+                        .addValue("attemptId", attemptId)
+                        .addValue("billingInvoiceId", billingInvoiceId)
+                        .addValue("companyId", companyId)
                         .addValue("errorMessage", errorMessage)
         );
     }

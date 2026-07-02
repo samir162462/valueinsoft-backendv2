@@ -51,6 +51,8 @@ class PayMobServiceTest {
                 .thenReturn(new BillingPaymentAttemptValidationContext(
                         7L,
                         8L,
+                        10,
+                        55,
                         new BigDecimal("500.00"),
                         "EGP",
                         "checkout_requested",
@@ -74,6 +76,8 @@ class PayMobServiceTest {
                 .thenReturn(new BillingPaymentAttemptValidationContext(
                         7L,
                         8L,
+                        10,
+                        55,
                         new BigDecimal("500.00"),
                         "EGP",
                         "checkout_requested",
@@ -94,6 +98,8 @@ class PayMobServiceTest {
                 .thenReturn(new BillingPaymentAttemptValidationContext(
                         7L,
                         8L,
+                        10,
+                        55,
                         new BigDecimal("400.00"),
                         "EGP",
                         "checkout_requested",
@@ -103,6 +109,28 @@ class PayMobServiceTest {
         ApiException exception = assertThrows(ApiException.class, () -> payMobService.parseCallback(request));
 
         assertEquals("PAYMOB_AMOUNT_MISMATCH", exception.getCode());
+    }
+
+    @Test
+    void parseCallbackRejectsCurrencyMismatch() throws Exception {
+        PayMobTransactionCallbackRequest request = buildValidCallbackRequest();
+        request.setHmac(computeHmac(request, HMAC_SECRET));
+
+        when(dbBillingWriteModels.findPaymentAttemptValidationContext(eq("paymob"), eq("123456")))
+                .thenReturn(new BillingPaymentAttemptValidationContext(
+                        7L,
+                        8L,
+                        10,
+                        55,
+                        new BigDecimal("500.00"),
+                        "USD",
+                        "checkout_requested",
+                        null
+                ));
+
+        ApiException exception = assertThrows(ApiException.class, () -> payMobService.parseCallback(request));
+
+        assertEquals("PAYMOB_CURRENCY_MISMATCH", exception.getCode());
     }
 
     private PayMobTransactionCallbackRequest buildValidCallbackRequest() {

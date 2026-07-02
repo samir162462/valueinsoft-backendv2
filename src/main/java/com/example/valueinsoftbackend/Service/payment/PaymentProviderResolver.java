@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -20,9 +19,17 @@ public class PaymentProviderResolver {
     public PaymentProviderResolver(BillingProperties billingProperties, List<PaymentProvider> providers) {
         this.billingProperties = billingProperties;
         this.providersByCode = providers.stream()
+                .flatMap(provider -> {
+                    List<String> aliases = provider.getProviderAliases();
+                    return java.util.stream.Stream.concat(
+                            java.util.stream.Stream.of(provider.getProviderCode()),
+                            aliases == null ? java.util.stream.Stream.empty() : aliases.stream()
+                    ).map(code -> Map.entry(code.toLowerCase(Locale.ROOT), provider));
+                })
                 .collect(Collectors.toMap(
-                        provider -> provider.getProviderCode().toLowerCase(Locale.ROOT),
-                        Function.identity()
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (existing, replacement) -> existing
                 ));
     }
 
@@ -30,12 +37,19 @@ public class PaymentProviderResolver {
         String providerCode = billingProperties.getPaymentProvider() == null
                 ? "paymob"
                 : billingProperties.getPaymentProvider().trim().toLowerCase(Locale.ROOT);
-        PaymentProvider provider = providersByCode.get(providerCode);
+        return getProvider(providerCode);
+    }
+
+    public PaymentProvider getProvider(String providerCode) {
+        String normalizedProviderCode = providerCode == null || providerCode.isBlank()
+                ? "paymob"
+                : providerCode.trim().toLowerCase(Locale.ROOT);
+        PaymentProvider provider = providersByCode.get(normalizedProviderCode);
         if (provider == null) {
             throw new ApiException(
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "PAYMENT_PROVIDER_NOT_SUPPORTED",
-                    "Unsupported billing payment provider: " + billingProperties.getPaymentProvider()
+                    "Unsupported billing payment provider: " + providerCode
             );
         }
         return provider;

@@ -38,7 +38,8 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
             "client_receipt");
     private static final Set<String> BILLING_BALANCE_SOURCE_TYPES = Set.of(
             "billing_balance_settlement",
-            "billing_balance_credit");
+            "billing_balance_credit",
+            "billing_payment_reversal");
     private static final Set<String> SUPPLIER_PAYMENT_SOURCE_TYPES = Set.of(
             "supplier_payment",
             "supplier_receipt",
@@ -84,6 +85,9 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         if (BILLING_BALANCE_SOURCE_TYPES.contains(request.getSourceType())) {
             if ("billing_balance_credit".equals(request.getSourceType())) {
                 return postBillingBalanceCredit(request, payload, currencyCode);
+            }
+            if ("billing_payment_reversal".equals(request.getSourceType())) {
+                return postBillingPaymentReversal(request, payload, currencyCode);
             }
             return postBillingBalanceSettlement(request, payload, currencyCode);
         }
@@ -297,6 +301,44 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 lines);
     }
 
+    private UUID postBillingPaymentReversal(FinancePostingRequestItem request, JsonNode payload, String currencyCode) {
+        BigDecimal amount = firstOptionalAmount(payload, "amount", "grossAmount", "netAmount");
+        if (amount.compareTo(ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_BILLING_REVERSAL_AMOUNT_REQUIRED",
+                    "Billing payment reversal posting requires a positive amount");
+        }
+
+        String paymentSource = text(payload, "paymentSource", "MANUAL_REFUND").trim().toUpperCase();
+        String originalPaymentSource = text(payload, "originalPaymentSource", "").trim().toUpperCase();
+        String paymentId = firstText(payload, "paymentId", "billingPaymentId", "reference");
+        ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
+        lines.add(debitLine(
+                resolveMapping(request, "pos.receivable", null),
+                request,
+                amount,
+                "Billing invoice receivable reopened by refund",
+                paymentId,
+                null,
+                null));
+        lines.add(creditLine(
+                resolveMapping(request, reversalCreditMappingKey(paymentSource, originalPaymentSource), null),
+                request,
+                amount,
+                "Billing payment reversal " + paymentSource,
+                paymentId,
+                null,
+                null));
+
+        return createPostedPaymentJournal(
+                request,
+                currencyCode,
+                "payment.billing_payment_reversal",
+                "BR-",
+                "billing_payment_reversal",
+                "Billing payment reversal " + request.getSourceId(),
+                lines);
+    }
+
     private UUID postSupplierPayment(FinancePostingRequestItem request, JsonNode payload, String currencyCode) {
         Integer supplierId = integerValue(payload, "supplierId");
         if (supplierId == null) {
@@ -472,6 +514,16 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
             default -> throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PAYMENT_METHOD_INVALID",
                     "Unsupported payment method");
         };
+    }
+
+    private String reversalCreditMappingKey(String paymentSource, String originalPaymentSource) {
+        if ("COMPANY_BALANCE_REVERSAL".equals(paymentSource) || "COMPANY_BALANCE".equals(originalPaymentSource)) {
+            return "payment.customer_deposits";
+        }
+        if ("PAYMOB_REFUND".equals(paymentSource) || "PAYMOB".equals(originalPaymentSource)) {
+            return "payment.card_clearing";
+        }
+        return "payment.cash_drawer";
     }
 
     private String balanceCreditDebitMappingKey(String fundingSource) {

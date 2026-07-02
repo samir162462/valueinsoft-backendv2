@@ -5,10 +5,15 @@ import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackReq
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.TransactionProcessedCallback;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public interface PaymentProvider {
 
     String getProviderCode();
+
+    default List<String> getProviderAliases() {
+        return List.of();
+    }
 
     int createProviderOrder(int merchantOrderId, int branchId, BigDecimal amountToPay);
 

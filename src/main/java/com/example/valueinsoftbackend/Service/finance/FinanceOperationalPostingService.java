@@ -513,6 +513,58 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(actorName, request);
     }
 
+    public void enqueueBillingPaymentReversal(int companyId,
+                                              Integer branchId,
+                                              long billingInvoiceId,
+                                              long reversalBillingPaymentId,
+                                              long reversalBillingPaymentAllocationId,
+                                              long originalBillingPaymentId,
+                                              long originalBillingPaymentAllocationId,
+                                              BigDecimal amount,
+                                              String currencyCode,
+                                              String reversalPaymentSource,
+                                              String originalPaymentSource,
+                                              String providerCode,
+                                              String reference,
+                                              Timestamp reversalTime,
+                                              String actorName) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        LocalDate postingDate = reversalTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for billing payment reversal posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "payment",
+                "billing_payment_reversal",
+                "billing-reversal-payment-" + reversalBillingPaymentId,
+                postingDate,
+                fiscalPeriodId,
+                buildBillingPaymentReversalPayload(
+                        billingInvoiceId,
+                        reversalBillingPaymentId,
+                        reversalBillingPaymentAllocationId,
+                        originalBillingPaymentId,
+                        originalBillingPaymentAllocationId,
+                        amount,
+                        currencyCode,
+                        reversalPaymentSource,
+                        originalPaymentSource,
+                        providerCode,
+                        reference));
+
+        financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
     public void enqueueClientReceipt(int companyId, ClientReceipt receipt) {
         if (receipt == null || receipt.getAmount() == null || receipt.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             return;
@@ -976,6 +1028,33 @@ public class FinanceOperationalPostingService {
         payload.put("creditReason", creditReason);
         payload.put("reference", reference);
         payload.put("paymentId", "billing-ledger-" + billingAccountLedgerId);
+        return payload;
+    }
+
+    private Map<String, Object> buildBillingPaymentReversalPayload(long billingInvoiceId,
+                                                                   long reversalBillingPaymentId,
+                                                                   long reversalBillingPaymentAllocationId,
+                                                                   long originalBillingPaymentId,
+                                                                   long originalBillingPaymentAllocationId,
+                                                                   BigDecimal amount,
+                                                                   String currencyCode,
+                                                                   String reversalPaymentSource,
+                                                                   String originalPaymentSource,
+                                                                   String providerCode,
+                                                                   String reference) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", currencyCode == null || currencyCode.isBlank() ? DEFAULT_CURRENCY_CODE : currencyCode.trim().toUpperCase());
+        payload.put("amount", money(amount));
+        payload.put("billingInvoiceId", billingInvoiceId);
+        payload.put("billingPaymentId", reversalBillingPaymentId);
+        payload.put("billingPaymentAllocationId", reversalBillingPaymentAllocationId);
+        payload.put("originalBillingPaymentId", originalBillingPaymentId);
+        payload.put("originalBillingPaymentAllocationId", originalBillingPaymentAllocationId);
+        payload.put("paymentSource", reversalPaymentSource);
+        payload.put("originalPaymentSource", originalPaymentSource);
+        payload.put("providerCode", providerCode);
+        payload.put("reference", reference);
+        payload.put("paymentId", "billing-reversal-payment-" + reversalBillingPaymentId);
         return payload;
     }
 

@@ -115,14 +115,16 @@ public class DbPlatformAdminDailyMetrics {
 
     public int getTenantUnpaidBranchSubscriptions(int tenantId) {
         Integer value = jdbcTemplate.queryForObject(
-                "WITH latest_subscriptions AS (" +
-                        " SELECT DISTINCT ON (cs.\"branchId\") cs.\"branchId\", COALESCE(cs.status, 'NP') AS status " +
-                        " FROM public.\"CompanySubscription\" cs " +
-                        " JOIN public.\"Branch\" b ON b.\"branchId\" = cs.\"branchId\" " +
+                "WITH latest_branch_billing AS (" +
+                        " SELECT DISTINCT ON (b.\"branchId\") b.\"branchId\", bs.status AS subscription_status, bi.status AS invoice_status " +
+                        " FROM public.\"Branch\" b " +
+                        " LEFT JOIN public.branch_subscriptions bs ON bs.branch_id = b.\"branchId\" " +
+                        " LEFT JOIN public.billing_invoices bi ON bi.source_type = 'branch_subscription' AND bi.source_id = bs.branch_subscription_id::text " +
                         " WHERE b.\"companyId\" = ? " +
-                        " ORDER BY cs.\"branchId\", cs.\"sId\" DESC" +
+                        " ORDER BY b.\"branchId\", bs.branch_subscription_id DESC NULLS LAST, bi.billing_invoice_id DESC NULLS LAST" +
                         ") " +
-                        "SELECT COUNT(*) FROM latest_subscriptions WHERE status <> 'PD'",
+                        "SELECT COUNT(*) FROM latest_branch_billing " +
+                        "WHERE NOT (LOWER(COALESCE(subscription_status, '')) = 'active' AND LOWER(COALESCE(invoice_status, '')) = 'paid')",
                 Integer.class,
                 tenantId
         );

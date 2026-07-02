@@ -22,14 +22,22 @@ public class BillingProperties {
     private int dunningMaxAttempts = 3;
     private int manualRetryCooldownMinutes = 15;
     private int manualRetryMaxAttempts = 5;
+    private boolean checkoutOutboxWorkerEnabled = true;
+    private String checkoutOutboxWorkerDelayMs = "30000";
+    private int checkoutOutboxBatchSize = 10;
+    private int checkoutOutboxMaxAttempts = 5;
+    private int checkoutOutboxRetryDelaySeconds = 60;
+    private boolean balanceFirstPaymentApisEnabled = true;
 
     @PostConstruct
     void initialize() {
         log.info(
-                "Billing configured: provider={} renewalSchedulerEnabled={} dunningSchedulerEnabled={}",
+                "Billing configured: provider={} renewalSchedulerEnabled={} dunningSchedulerEnabled={} balanceFirstPaymentApisEnabled={} checkoutOutboxWorkerEnabled={}",
                 paymentProvider,
                 renewalSchedulerEnabled,
-                dunningSchedulerEnabled
+                dunningSchedulerEnabled,
+                balanceFirstPaymentApisEnabled,
+                checkoutOutboxWorkerEnabled
         );
     }
 
@@ -119,5 +127,53 @@ public class BillingProperties {
 
     public void setManualRetryMaxAttempts(int manualRetryMaxAttempts) {
         this.manualRetryMaxAttempts = manualRetryMaxAttempts;
+    }
+
+    public boolean isCheckoutOutboxWorkerEnabled() {
+        return checkoutOutboxWorkerEnabled;
+    }
+
+    public void setCheckoutOutboxWorkerEnabled(boolean checkoutOutboxWorkerEnabled) {
+        this.checkoutOutboxWorkerEnabled = checkoutOutboxWorkerEnabled;
+    }
+
+    public String getCheckoutOutboxWorkerDelayMs() {
+        return checkoutOutboxWorkerDelayMs;
+    }
+
+    public void setCheckoutOutboxWorkerDelayMs(String checkoutOutboxWorkerDelayMs) {
+        this.checkoutOutboxWorkerDelayMs = checkoutOutboxWorkerDelayMs;
+    }
+
+    public int getCheckoutOutboxBatchSize() {
+        return checkoutOutboxBatchSize;
+    }
+
+    public void setCheckoutOutboxBatchSize(int checkoutOutboxBatchSize) {
+        this.checkoutOutboxBatchSize = checkoutOutboxBatchSize;
+    }
+
+    public int getCheckoutOutboxMaxAttempts() {
+        return checkoutOutboxMaxAttempts;
+    }
+
+    public void setCheckoutOutboxMaxAttempts(int checkoutOutboxMaxAttempts) {
+        this.checkoutOutboxMaxAttempts = checkoutOutboxMaxAttempts;
+    }
+
+    public int getCheckoutOutboxRetryDelaySeconds() {
+        return checkoutOutboxRetryDelaySeconds;
+    }
+
+    public void setCheckoutOutboxRetryDelaySeconds(int checkoutOutboxRetryDelaySeconds) {
+        this.checkoutOutboxRetryDelaySeconds = checkoutOutboxRetryDelaySeconds;
+    }
+
+    public boolean isBalanceFirstPaymentApisEnabled() {
+        return balanceFirstPaymentApisEnabled;
+    }
+
+    public void setBalanceFirstPaymentApisEnabled(boolean balanceFirstPaymentApisEnabled) {
+        this.balanceFirstPaymentApisEnabled = balanceFirstPaymentApisEnabled;
     }
 }

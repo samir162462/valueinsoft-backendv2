@@ -7,9 +7,13 @@ package com.example.valueinsoftbackend.Controller.MainAppController;
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.example.valueinsoftbackend.Config.BillingProperties;
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Branch;
-import com.example.valueinsoftbackend.Model.AppModel.BranchBillingCheckoutResponse;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationRequest;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationResponse;
 import com.example.valueinsoftbackend.Model.Request.CreateSubscriptionRequest;
+import com.example.valueinsoftbackend.Service.billing.BillingPaymentInitiationCheckoutHydrator;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.branch.BranchService;
 import com.example.valueinsoftbackend.Service.SubscriptionService;
@@ -32,13 +36,19 @@ public class AppSubscriptionController {
     private final SubscriptionService subscriptionService;
     private final BranchService branchService;
     private final AuthorizationService authorizationService;
+    private final BillingProperties billingProperties;
+    private final BillingPaymentInitiationCheckoutHydrator checkoutHydrator;
 
     public AppSubscriptionController(SubscriptionService subscriptionService,
                                      BranchService branchService,
-                                     AuthorizationService authorizationService) {
+                                     AuthorizationService authorizationService,
+                                     BillingProperties billingProperties,
+                                     BillingPaymentInitiationCheckoutHydrator checkoutHydrator) {
         this.subscriptionService = subscriptionService;
         this.branchService = branchService;
         this.authorizationService = authorizationService;
+        this.billingProperties = billingProperties;
+        this.checkoutHydrator = checkoutHydrator;
     }
 
     @RequestMapping(value = "/{branchId}", method = RequestMethod.GET)
@@ -64,12 +74,15 @@ public class AppSubscriptionController {
                 appModelSubscription.getBranchId(),
                 "company.settings.edit"
         );
-        return subscriptionService.addBranchSubscription(appModelSubscription);
+        return subscriptionService.addBranchSubscription(appModelSubscription, principal.getName());
     }
 
-    @PostMapping("/{branchId}/checkout")
-    public ResponseEntity<BranchBillingCheckoutResponse> createBranchCheckout(@PathVariable @Positive int branchId,
-                                                                              Principal principal) {
+    @PostMapping("/{branchId}/initiate-payment")
+    public ResponseEntity<BillingPaymentInitiationResponse> initiateBranchPayment(
+            @PathVariable @Positive int branchId,
+            @RequestBody(required = false) BillingPaymentInitiationRequest request,
+            Principal principal) {
+        assertBalanceFirstApisEnabled();
         Branch branch = branchService.getBranchById(branchId);
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
@@ -77,7 +90,19 @@ public class AppSubscriptionController {
                 branchId,
                 "company.settings.edit"
         );
-        return ResponseEntity.status(HttpStatus.CREATED).body(subscriptionService.createBranchCheckout(branchId));
+        BillingPaymentInitiationResponse response =
+                checkoutHydrator.hydrateCheckoutUrl(subscriptionService.initiateBranchPayment(branchId, request, principal.getName()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    private void assertBalanceFirstApisEnabled() {
+        if (!billingProperties.isBalanceFirstPaymentApisEnabled()) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "BILLING_BALANCE_FIRST_APIS_DISABLED",
+                    "Balance-first billing payment APIs are disabled by rollout configuration"
+            );
+        }
     }
 
     @GetMapping(path = {"/Res"})
