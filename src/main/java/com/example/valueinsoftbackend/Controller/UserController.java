@@ -1,12 +1,16 @@
 package com.example.valueinsoftbackend.Controller;
 
+import com.example.valueinsoftbackend.DatabaseRequests.DbCompany;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
+import com.example.valueinsoftbackend.Service.UserPerformanceService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Company;
 import com.example.valueinsoftbackend.Model.Request.AdminResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.ResetPasswordRequest;
 import com.example.valueinsoftbackend.Model.Request.SaveUserRequest;
 import com.example.valueinsoftbackend.Model.Request.UpdateUserImageRequest;
+import com.example.valueinsoftbackend.Model.Response.UserPerformanceResponse;
 import com.example.valueinsoftbackend.Model.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,11 +28,16 @@ import java.util.ArrayList;
 public class UserController {
 
     private final DbUsers dbUsers;
+    private final DbCompany dbCompany;
     private final AuthorizationService authorizationService;
+    private final UserPerformanceService userPerformanceService;
 
-    public UserController(DbUsers dbUsers, AuthorizationService authorizationService) {
+    public UserController(DbUsers dbUsers, DbCompany dbCompany, AuthorizationService authorizationService,
+                          UserPerformanceService userPerformanceService) {
         this.dbUsers = dbUsers;
+        this.dbCompany = dbCompany;
         this.authorizationService = authorizationService;
+        this.userPerformanceService = userPerformanceService;
     }
 
     @Operation(summary = "Get user profile by ID", description = "Retrieves the full profile of a user given their numeric ID.")
@@ -112,6 +121,60 @@ public class UserController {
                 "profile.self.read"
         );
         return dbUsers.getUserImg(id);
+    }
+
+    @Operation(summary = "Get my performance", description = "Retrieves the authenticated user's own sales performance metrics for a given rolling period.")
+    @RequestMapping(value = "/performance", method = RequestMethod.GET)
+    @ResponseBody
+    public UserPerformanceResponse getMyPerformance(
+            @RequestParam(value = "period", required = false, defaultValue = "TODAY") String period,
+            Principal principal
+    ) {
+        String userName = extractBaseUserName(principal.getName());
+
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                null,
+                null,
+                "profile.self.performance"
+        );
+
+        User user = dbUsers.getUser(userName);
+        if (user == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found!");
+        }
+
+        int branchId = user.getBranchId();
+        if (branchId <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "BRANCH_NOT_ASSIGNED", "No active branch assigned to this account");
+        }
+
+        Integer companyId = resolveCompanyId(user, userName);
+
+        return userPerformanceService.getPerformance(companyId, branchId, userName, period);
+    }
+
+    private Integer resolveCompanyId(User user, String userName) {
+        if (user.getBranchId() > 0) {
+            Company company = dbCompany.getCompanyAndBranchesByUserName(userName);
+            if (company != null) {
+                return company.getCompanyId();
+            }
+        }
+
+        Company company = dbCompany.getCompanyByOwnerId(user.getUserId());
+        if (company != null) {
+            return company.getCompanyId();
+        }
+
+        throw new ApiException(HttpStatus.FORBIDDEN, "TENANT_NOT_FOUND", "User has no associated company");
+    }
+
+    private String extractBaseUserName(String value) {
+        if (value != null && value.contains(" : ")) {
+            return value.split(" : ")[0];
+        }
+        return value == null ? "" : value.trim();
     }
 
     @Operation(summary = "Register new user", description = "Public registration endpoint to create a new user account.")

@@ -36,6 +36,7 @@ public class CacheConfig {
     public static final String BRANCH_SETTINGS_BUNDLE = "branchSettingsBundle";
     public static final String DASHBOARD_BRANCH_SUMMARY = "dashboardBranchSummary";
     public static final String DASHBOARD_COMPANY_SUMMARY = "dashboardCompanySummary";
+    public static final String USER_PERFORMANCE = "userPerformance";
 
     private static final List<String> CACHE_NAMES = List.of(
             CATEGORY_JSON_FLAT,
@@ -48,7 +49,8 @@ public class CacheConfig {
             BRANCH_BY_ID,
             BRANCH_SETTINGS_BUNDLE,
             DASHBOARD_BRANCH_SUMMARY,
-            DASHBOARD_COMPANY_SUMMARY
+            DASHBOARD_COMPANY_SUMMARY,
+            USER_PERFORMANCE
     );
 
     @Bean
@@ -73,7 +75,8 @@ public class CacheConfig {
                         Map.entry(BRANCH_BY_ID, redisCacheConfiguration.entryTtl(Duration.ofMinutes(10))),
                         Map.entry(BRANCH_SETTINGS_BUNDLE, redisCacheConfiguration.entryTtl(Duration.ofMinutes(5))),
                         Map.entry(DASHBOARD_BRANCH_SUMMARY, redisCacheConfiguration.entryTtl(Duration.ofSeconds(60))),
-                        Map.entry(DASHBOARD_COMPANY_SUMMARY, redisCacheConfiguration.entryTtl(Duration.ofSeconds(60)))
+                        Map.entry(DASHBOARD_COMPANY_SUMMARY, redisCacheConfiguration.entryTtl(Duration.ofSeconds(60))),
+                        Map.entry(USER_PERFORMANCE, redisCacheConfiguration.entryTtl(Duration.ofSeconds(60)))
                 ))
                 .build();
     }
