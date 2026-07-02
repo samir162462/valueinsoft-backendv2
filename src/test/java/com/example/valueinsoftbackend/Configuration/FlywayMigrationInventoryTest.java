@@ -324,6 +324,25 @@ class FlywayMigrationInventoryTest {
     }
 
     @Test
+    void billingBalanceFirstSchemaRepairMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V121__repair_billing_balance_first_schema.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing billing balance-first schema repair migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("ADD COLUMN IF NOT EXISTS AVAILABLE_BALANCE"));
+        assertTrue(sql.contains("ADD COLUMN IF NOT EXISTS PAID_AMOUNT"));
+        assertTrue(sql.contains("CREATE TABLE IF NOT EXISTS PUBLIC.BILLING_ACCOUNT_LEDGER"));
+        assertTrue(sql.contains("CREATE TABLE IF NOT EXISTS PUBLIC.BILLING_PAYMENTS"));
+        assertTrue(sql.contains("CREATE TABLE IF NOT EXISTS PUBLIC.BILLING_PAYMENT_ALLOCATIONS"));
+        assertTrue(sql.contains("PROVIDER_GROSS_AMOUNT NUMERIC(12, 2)"));
+        assertFalse(sql.contains(" FLOAT"), "Billing balance-first schema repair migration must not use FLOAT for money");
+        assertFalse(sql.contains(" REAL"), "Billing balance-first schema repair migration must not use REAL for money");
+    }
+
+    @Test
     void billingCreditExpenseFinanceMappingMigrationExists() throws IOException {
         ClassPathResource migration = new ClassPathResource(
                 "db/migration/V116__billing_credit_expense_finance_mapping.sql"
