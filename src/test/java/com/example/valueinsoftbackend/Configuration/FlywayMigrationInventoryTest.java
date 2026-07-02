@@ -306,6 +306,24 @@ class FlywayMigrationInventoryTest {
     }
 
     @Test
+    void billingCheckoutOutboxRepairMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V120__repair_billing_checkout_outbox.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing billing checkout outbox repair migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+        assertTrue(sql.contains("BILLING_PROVIDER_CHECKOUT_OUTBOX"));
+        assertTrue(sql.contains("ADD COLUMN IF NOT EXISTS COMPANY_ID"));
+        assertTrue(sql.contains("ADD COLUMN IF NOT EXISTS CHECKOUT_REFERENCE"));
+        assertTrue(sql.contains("CREATE TABLE IF NOT EXISTS PUBLIC.BILLING_PROVIDER_CHECKOUT_OUTBOX"));
+        assertTrue(sql.contains("TRG_BILLING_PROVIDER_CHECKOUT_OUTBOX_SET_UPDATED_AT"));
+        assertFalse(sql.contains(" FLOAT"), "Billing checkout outbox repair migration must not use FLOAT for money");
+        assertFalse(sql.contains(" REAL"), "Billing checkout outbox repair migration must not use REAL for money");
+    }
+
+    @Test
     void billingCreditExpenseFinanceMappingMigrationExists() throws IOException {
         ClassPathResource migration = new ClassPathResource(
                 "db/migration/V116__billing_credit_expense_finance_mapping.sql"
