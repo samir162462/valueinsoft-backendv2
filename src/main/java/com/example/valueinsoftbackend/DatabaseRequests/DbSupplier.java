@@ -309,7 +309,7 @@ public class DbSupplier {
                        COALESCE(e.reason, e.event_type) AS summary,
                        COALESCE(e.after_state::text, e.before_state::text, '{}') AS changes
                 FROM public.finance_audit_event e
-                LEFT JOIN %s u ON u."userId" = e.actor_user_id
+                LEFT JOIN public.users u ON u.id = e.actor_user_id
                 WHERE e.company_id = ?
                   AND (e.branch_id = ? OR e.branch_id IS NULL)
                   AND e.created_at >= ?
@@ -321,7 +321,7 @@ public class DbSupplier {
                   )
                 ORDER BY e.created_at DESC
                 LIMIT ? OFFSET ?
-                """.formatted(TenantSqlIdentifiers.userTable(companyId));
+                """;
 
         List<SupplierAuditEventResponse> events = jdbcTemplate.query(
                 sql,
