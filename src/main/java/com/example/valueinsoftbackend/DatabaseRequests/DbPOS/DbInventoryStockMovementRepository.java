@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.Inventory.InventoryMovementType;
 import com.example.valueinsoftbackend.Model.Inventory.InventoryStockMovement;
+import com.example.valueinsoftbackend.companyinsights.dirty.InsightDirtyQueueService;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -40,9 +41,12 @@ public class DbInventoryStockMovementRepository {
     );
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final InsightDirtyQueueService dirtyQueueService;
 
-    public DbInventoryStockMovementRepository(NamedParameterJdbcTemplate jdbcTemplate) {
+    public DbInventoryStockMovementRepository(NamedParameterJdbcTemplate jdbcTemplate,
+                                              InsightDirtyQueueService dirtyQueueService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.dirtyQueueService = dirtyQueueService;
     }
 
     public long insertMovement(InventoryStockMovement movement) {
@@ -66,6 +70,9 @@ public class DbInventoryStockMovementRepository {
         if (keyHolder.getKey() == null) {
             return 0;
         }
+        // Company Smart Insights: mark the company/product dirty so inventory insights refresh
+        // (debounced, event-driven). Failure-swallowed inside the service; never affects posting.
+        dirtyQueueService.enqueue(movement.getCompanyId(), movement.getProductId(), "STOCK_MOVEMENT");
         return keyHolder.getKey().longValue();
     }
 

@@ -1,23 +1,20 @@
 package com.example.valueinsoftbackend.Service.DashboardProviders;
 
 import com.example.valueinsoftbackend.Model.Response.DashboardSummaryResponse;
-import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.example.valueinsoftbackend.Service.kpi.CompanyKpiCalculator;
 import org.springframework.stereotype.Component;
 
-import java.sql.Timestamp;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.temporal.TemporalAdjusters;
 
 @Component
 public class DashboardProfitProvider {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final CompanyKpiCalculator kpiCalculator;
 
-    public DashboardProfitProvider(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DashboardProfitProvider(CompanyKpiCalculator kpiCalculator) {
+        this.kpiCalculator = kpiCalculator;
     }
 
     public DashboardSummaryResponse.DashboardProfitSummary getProfitSummary(int companyId, int branchId, LocalDate baseDate) {
@@ -44,39 +41,20 @@ public class DashboardProfitProvider {
     private DashboardSummaryResponse.DashboardProfitSummary.ProfitData calculateProfitData(int companyId, int branchId, LocalDate start, LocalDate end) {
         DashboardSummaryResponse.DashboardProfitSummary.ProfitData data = new DashboardSummaryResponse.DashboardProfitSummary.ProfitData();
 
-        Timestamp startTs = Timestamp.valueOf(start.atStartOfDay());
-        Timestamp endTs = Timestamp.valueOf(end.atStartOfDay());
+        // Revenue / Gross Profit come from the canonical KPI calculation layer so that
+        // dashboards, reports, and Company Smart Insights all use identical arithmetic.
+        CompanyKpiCalculator.BranchSalesProfit salesProfit = kpiCalculator.salesProfit(companyId, branchId, start, end);
+        data.setRevenue(salesProfit.sales());
+        data.setGrossProfit(salesProfit.grossProfit());
 
-        // Calculate Revenue and Gross Profit from Orders
-        String salesSql = "SELECT " +
-                "COALESCE(SUM(\"orderTotal\"), 0) - COALESCE(SUM(\"orderBouncedBack\"), 0) AS revenue, " +
-                "COALESCE(SUM(\"orderIncome\"), 0) AS gross_profit " +
-                "FROM " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " " +
-                "WHERE \"orderTime\" >= ? AND \"orderTime\" < ?";
-
-        jdbcTemplate.query(salesSql, rs -> {
-            data.setRevenue(rs.getDouble("revenue"));
-            data.setGrossProfit(rs.getDouble("gross_profit"));
-        }, startTs, endTs);
-
-        // Calculate Expenses
-        // Note: We check both regular and static expenses if they are recorded in the operational table
-        String expensesSql = "SELECT COALESCE(SUM(amount::money::numeric), 0) AS total_expenses " +
-                "FROM " + TenantSqlIdentifiers.expensesTable(companyId, false) + " " +
-                "WHERE \"branchId\" = ? AND \"time\" >= ? AND \"time\" < ?";
-
-        Double expenses = jdbcTemplate.queryForObject(expensesSql, Double.class, branchId, startTs, endTs);
-        data.setExpenses(expenses != null ? expenses : 0.0);
+        // Expenses (canonical)
+        data.setExpenses(kpiCalculator.expenses(companyId, branchId, start, end));
 
         // Net Profit = Gross Profit - Expenses
         data.setNetProfit(data.getGrossProfit() - data.getExpenses());
 
         // Margin = (Gross Profit / Revenue) * 100
-        if (data.getRevenue() > 0) {
-            data.setMargin(Math.round((data.getGrossProfit() / data.getRevenue()) * 1000.0) / 10.0);
-        } else {
-            data.setMargin(0.0);
-        }
+        data.setMargin(salesProfit.grossMarginPct());
 
         // Set Date Range
         data.setStartDate(start.toString());

@@ -224,10 +224,22 @@ public class DbPosShiftPeriod {
     //  CASH MOVEMENTS
     // ═══════════════════════════════════════════════════
 
+    private Integer findExistingClientIdOrNull(int companyId, Integer clientId) {
+        if (clientId == null || clientId <= 0) {
+            return null;
+        }
+
+        String sql = "SELECT EXISTS (SELECT 1 FROM " + TenantSqlIdentifiers.clientTable(companyId) +
+                " WHERE c_id = ?)";
+        Boolean exists = jdbcTemplate.queryForObject(sql, Boolean.class, clientId);
+        return Boolean.TRUE.equals(exists) ? clientId : null;
+    }
+
     public Long insertCashMovement(int companyId, int shiftId, int branchId,
                                    String movementType, BigDecimal amount,
                                    String actorUserId, String note, Integer clientId, 
                                    String associatedUserId, String referenceType, String referenceId) {
+        Integer persistedClientId = findExistingClientIdOrNull(companyId, clientId);
         String sql = "INSERT INTO " + TenantSqlIdentifiers.shiftCashMovementTable(companyId) +
                 " (shift_id, branch_id, movement_type, amount, actor_user_id, note, client_id, associated_user_id, reference_type, reference_id) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING movement_id";
@@ -240,7 +252,7 @@ public class DbPosShiftPeriod {
                 amount,
                 actorUserId,
                 note,
-                clientId,
+                persistedClientId,
                 associatedUserId,
                 referenceType,
                 referenceId
