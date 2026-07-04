@@ -54,7 +54,7 @@ public class PricingMetricsRepository {
                     SELECT
                         p.product_id,
                         p.product_name,
-                        p.major,
+                        COALESCE(ibp.category_name, p.major) AS major,
                         p.business_line_key,
                         p.template_key,
                         p.pricing_policy_code,
@@ -120,6 +120,10 @@ public class PricingMetricsRepository {
     private String buildProductScopeFromClause(int companyId, int branchId) {
         return """
                 FROM %s p
+                INNER JOIN %s ibp
+                  ON ibp.product_id = p.product_id
+                 AND ibp.branch_id = :branchId
+                 AND ibp.is_active = TRUE
                 LEFT JOIN %s stock
                   ON stock.product_id = p.product_id
                  AND stock.branch_id = :branchId
@@ -133,6 +137,7 @@ public class PricingMetricsRepository {
                 ) history ON TRUE
                 """.formatted(
                 TenantSqlIdentifiers.inventoryProductTable(companyId),
+                TenantSqlIdentifiers.inventoryBranchProductTable(companyId),
                 TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId),
                 TenantSqlIdentifiers.inventoryProductPriceHistoryTable(companyId)
         );
@@ -151,7 +156,7 @@ public class PricingMetricsRepository {
         }
         String category = firstText(query.category(), query.major());
         if (category != null) {
-            conditions.add("LOWER(p.major) = :category");
+            conditions.add("(LOWER(COALESCE(ibp.group_name, '')) = :category OR LOWER(COALESCE(ibp.category_name, p.major, '')) = :category OR LOWER(COALESCE(ibp.subcategory_name, p.product_type, '')) = :category OR LOWER(COALESCE(ibp.group_key, '')) = :category OR LOWER(COALESCE(ibp.category_key, '')) = :category OR LOWER(COALESCE(ibp.subcategory_key, '')) = :category)");
             params.addValue("category", category.toLowerCase(Locale.ROOT));
         }
         if (query.businessLineKey() != null && !query.businessLineKey().isBlank()) {

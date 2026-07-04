@@ -16,6 +16,9 @@ public class InventoryCatalogFilters {
     private String templateKey;
     private Integer supplierId;
     private String major;
+    private String groupKey;
+    private String categoryKey;
+    private String subcategoryKey;
     private Integer quantityMin;
     private Integer quantityMax;
     private Integer buyPriceMin;

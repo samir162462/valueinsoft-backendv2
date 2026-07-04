@@ -26,11 +26,25 @@ public class ProductReceiptProductRequest {
     private Long categoryId;
     private Long subcategoryId;
 
-    @Size(max = 30)
+    private ProductReceiptClassificationRequest classification;
+
+    @Size(max = 100)
+    private String groupName;
+
+    @Size(max = 100)
     private String categoryName;
 
-    @Size(max = 15)
+    @Size(max = 100)
     private String subcategoryName;
+
+    @Size(max = 100)
+    private String brand;
+
+    @Size(max = 100)
+    private String model;
+
+    @Size(max = 100)
+    private String manufacturer;
 
     @Size(max = 40)
     private String businessLineKey;

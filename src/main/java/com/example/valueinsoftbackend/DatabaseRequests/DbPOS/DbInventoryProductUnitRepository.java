@@ -227,6 +227,49 @@ public class DbInventoryProductUnitRepository {
         );
     }
 
+    /**
+     * Corrects the identifier of an existing serialized unit. Only units that are
+     * still AVAILABLE in the given branch/product can be edited, protecting sold or
+     * transferred units from silent identifier changes. Uniqueness is enforced by the
+     * table's unique index (a collision surfaces as a DuplicateKeyException).
+     */
+    public int updateUnitIdentifier(long companyId,
+                                    long branchId,
+                                    long productId,
+                                    long productUnitId,
+                                    String imei,
+                                    String serialNumber,
+                                    String unitIdentifier,
+                                    String conditionCode) {
+        String sql = """
+                UPDATE %s
+                SET imei = :imei,
+                    serial_number = :serialNumber,
+                    unit_identifier = :unitIdentifier,
+                    condition_code = COALESCE(:conditionCode, condition_code),
+                    updated_at = CURRENT_TIMESTAMP,
+                    version = version + 1
+                WHERE company_id = :companyId
+                  AND branch_id = :branchId
+                  AND product_id = :productId
+                  AND product_unit_id = :productUnitId
+                  AND status = 'AVAILABLE'
+                """.formatted(TenantSqlIdentifiers.inventoryProductUnitTable(companyId));
+
+        return jdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("companyId", companyId)
+                        .addValue("branchId", branchId)
+                        .addValue("productId", productId)
+                        .addValue("productUnitId", productUnitId)
+                        .addValue("imei", imei)
+                        .addValue("serialNumber", serialNumber)
+                        .addValue("unitIdentifier", unitIdentifier)
+                        .addValue("conditionCode", conditionCode)
+        );
+    }
+
     public long countAvailableByProduct(long companyId, long branchId, long productId) {
         String sql = """
                 SELECT COUNT(*)
@@ -258,7 +301,7 @@ public class DbInventoryProductUnitRepository {
                 WHERE company_id = :companyId
                   AND branch_id = :branchId
                   AND product_id = :productId
-                  AND (:status IS NULL OR status = :status)
+                  AND (CAST(:status AS text) IS NULL OR status = CAST(:status AS text))
                 ORDER BY product_unit_id DESC
                 """.formatted(TenantSqlIdentifiers.inventoryProductUnitTable(companyId));
 

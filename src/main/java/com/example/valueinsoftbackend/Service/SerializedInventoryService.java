@@ -305,6 +305,73 @@ public class SerializedInventoryService {
         ));
     }
 
+    @Transactional
+    public ProductUnit updateSerializedUnitIdentifier(long companyId,
+                                                      long branchId,
+                                                      long productId,
+                                                      long productUnitId,
+                                                      String imeiInput,
+                                                      String serialNumberInput,
+                                                      String conditionCodeInput) {
+        long safeCompanyId = requirePositive(companyId, "companyId");
+        long safeBranchId = requirePositive(branchId, "branchId");
+        long safeProductId = requirePositive(productId, "productId");
+        long safeProductUnitId = requirePositive(productUnitId, "productUnitId");
+
+        ProductUnit unit = productUnitRepository.findById(safeCompanyId, safeProductUnitId)
+                .filter(found -> found.getBranchId() == safeBranchId)
+                .filter(found -> found.getProductId() == safeProductId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "SERIALIZED_UNIT_NOT_FOUND",
+                        "Unit was not found for this product and branch"
+                ));
+
+        if (unit.getStatus() != ProductUnitStatus.AVAILABLE) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "SERIALIZED_UNIT_NOT_EDITABLE",
+                    "Only available units can have their IMEI/serial corrected"
+            );
+        }
+
+        TrackingType trackingType = requireSerializedTrackingType(unit.getTrackingType());
+        String imei;
+        String serialNumber;
+        if (trackingType == TrackingType.IMEI) {
+            imei = normalizeImei(imeiInput);
+            serialNumber = blankToNull(serialNumberInput);
+        } else {
+            serialNumber = requireNonBlank(serialNumberInput, "serialNumber");
+            imei = blankToNull(imeiInput);
+        }
+        String unitIdentifier = trackingType == TrackingType.IMEI ? imei : serialNumber;
+        String conditionCode = blankToNull(conditionCodeInput);
+
+        int updated;
+        try {
+            updated = productUnitRepository.updateUnitIdentifier(
+                    safeCompanyId,
+                    safeBranchId,
+                    safeProductId,
+                    safeProductUnitId,
+                    imei,
+                    serialNumber,
+                    unitIdentifier,
+                    conditionCode
+            );
+        } catch (DuplicateKeyException exception) {
+            throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_DUPLICATE", "This IMEI or serial already exists for the company");
+        }
+
+        if (updated != 1) {
+            throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_UPDATE_CONFLICT", "Unit could not be updated because its status changed");
+        }
+
+        return productUnitRepository.findById(safeCompanyId, safeProductUnitId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERIALIZED_UNIT_NOT_FOUND", "Unit was not found after update"));
+    }
+
     public long countAvailableSerializedUnits(long companyId, long branchId, long productId) {
         return productUnitRepository.countAvailableByProduct(
                 requirePositive(companyId, "companyId"),

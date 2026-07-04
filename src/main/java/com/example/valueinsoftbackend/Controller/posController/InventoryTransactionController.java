@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Model.Inventory.ProductUnitStatus;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Request.CreateInventoryTransactionRequest;
+import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitIdentifierUpdateRequest;
 import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitStockInRequest;
 import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitTransferRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryTransactionQueryRequest;
@@ -104,6 +105,30 @@ public class InventoryTransactionController {
                 "inventory.item.read"
         );
         return ResponseEntity.ok(serializedInventoryService.listProductUnits(companyId, branchId, productId, status));
+    }
+
+    @PutMapping("/SerializedUnits/{companyId}/{branchId}/{productId}/{productUnitId}/identifier")
+    public ResponseEntity<Object> updateSerializedUnitIdentifier(@PathVariable("companyId") long companyId,
+                                                                 @PathVariable("branchId") long branchId,
+                                                                 @PathVariable("productId") long productId,
+                                                                 @PathVariable("productUnitId") long productUnitId,
+                                                                 @Valid @RequestBody SerializedUnitIdentifierUpdateRequest body,
+                                                                 Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.item.edit"
+        );
+        return ResponseEntity.ok(serializedInventoryService.updateSerializedUnitIdentifier(
+                companyId,
+                branchId,
+                productId,
+                productUnitId,
+                body.getImei(),
+                body.getSerialNumber(),
+                body.getConditionCode()
+        ));
     }
 
     @GetMapping("/SerializedAvailability/{companyId}/{branchId}/{productId}")

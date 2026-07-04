@@ -121,6 +121,35 @@ public class Product {
     List<Long> productUnitIds = new ArrayList<>();
     List<String> unitIdentifiers = new ArrayList<>();
 
+    @Size(max = 80, message = "groupKey must be 80 characters or fewer")
+    String groupKey;
+
+    @Size(max = 80, message = "categoryKey must be 80 characters or fewer")
+    String categoryKey;
+
+    @Size(max = 80, message = "subcategoryKey must be 80 characters or fewer")
+    String subcategoryKey;
+
+    @Size(max = 100, message = "groupName must be 100 characters or fewer")
+    String groupName;
+
+    @Size(max = 100, message = "categoryName must be 100 characters or fewer")
+    String categoryName;
+
+    @Size(max = 100, message = "subcategoryName must be 100 characters or fewer")
+    String subcategoryName;
+
+    @Size(max = 100, message = "brand must be 100 characters or fewer")
+    String brand;
+
+    @Size(max = 100, message = "model must be 100 characters or fewer")
+    String model;
+
+    @Size(max = 100, message = "manufacturer must be 100 characters or fewer")
+    String manufacturer;
+
+    int taxonomyVersion;
+
     @AssertTrue(message = "rPrice must be greater than or equal to lPrice, and lPrice must be greater than or equal to bPrice")
     public boolean isPriceOrderValid() {
         return rPrice >= lPrice && lPrice >= bPrice;

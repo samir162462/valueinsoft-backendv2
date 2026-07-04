@@ -63,7 +63,7 @@ public class DbPosProductCommandRepository {
         long productId = keyHolder.getKey().longValue();
         boolean serializedTracking = isSerializedTracking(product);
         int stockQuantity = serializedTracking ? 0 : product.getQuantity();
-        insertBranchProductAssortment(companyId, numericBranchId, productId, product.getSupplierId());
+        insertBranchProductAssortment(companyId, numericBranchId, productId, product);
         // We no longer blindly create 0-stock rows if not needed, but since this relies on upsertBranchQuantity, we can keep the logic that checks if we need to insert stock balance.
         // Wait, the plan explicitly said "Do not blindly create zero-stock rows; just create the inventory_branch_product row and let stock balance be absent if needed."
         if (stockQuantity != 0) {
@@ -150,15 +150,33 @@ public class DbPosProductCommandRepository {
         return trackingType == TrackingType.IMEI || trackingType == TrackingType.SERIAL;
     }
 
-    private void insertBranchProductAssortment(int companyId, int branchId, long productId, Integer supplierId) {
+    private void insertBranchProductAssortment(int companyId, int branchId, long productId, Product product) {
         String sql = """
                 INSERT INTO %s (
-                    branch_id, product_id, is_active, default_supplier_id, created_at, updated_at
+                    branch_id, product_id, is_active, default_supplier_id,
+                    group_key, category_key, subcategory_key,
+                    group_name, category_name, subcategory_name,
+                    brand, model, manufacturer, taxonomy_version,
+                    created_at, updated_at
                 ) VALUES (
-                    :branchId, :productId, TRUE, :supplierId, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    :branchId, :productId, TRUE, :supplierId,
+                    :groupKey, :categoryKey, :subcategoryKey,
+                    :groupName, :categoryName, :subcategoryName,
+                    :brand, :model, :manufacturer, :taxonomyVersion,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 )
                 ON CONFLICT (branch_id, product_id) DO UPDATE
                 SET default_supplier_id = EXCLUDED.default_supplier_id,
+                    group_key = EXCLUDED.group_key,
+                    category_key = EXCLUDED.category_key,
+                    subcategory_key = EXCLUDED.subcategory_key,
+                    group_name = EXCLUDED.group_name,
+                    category_name = EXCLUDED.category_name,
+                    subcategory_name = EXCLUDED.subcategory_name,
+                    brand = EXCLUDED.brand,
+                    model = EXCLUDED.model,
+                    manufacturer = EXCLUDED.manufacturer,
+                    taxonomy_version = EXCLUDED.taxonomy_version,
                     is_active = TRUE,
                     updated_at = CURRENT_TIMESTAMP
                 """.formatted(TenantSqlIdentifiers.inventoryBranchProductTable(companyId));
@@ -166,7 +184,17 @@ public class DbPosProductCommandRepository {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("branchId", branchId)
                 .addValue("productId", productId)
-                .addValue("supplierId", supplierId != null && supplierId > 0 ? supplierId : null);
+                .addValue("supplierId", product.getSupplierId() > 0 ? product.getSupplierId() : null)
+                .addValue("groupKey", blankToNull(product.getGroupKey()))
+                .addValue("categoryKey", blankToNull(product.getCategoryKey()))
+                .addValue("subcategoryKey", blankToNull(product.getSubcategoryKey()))
+                .addValue("groupName", blankToNull(product.getGroupName()))
+                .addValue("categoryName", blankToNull(product.getCategoryName()))
+                .addValue("subcategoryName", blankToNull(product.getSubcategoryName()))
+                .addValue("brand", blankToNull(product.getBrand()))
+                .addValue("model", blankToNull(product.getModel()))
+                .addValue("manufacturer", blankToNull(product.getManufacturer()))
+                .addValue("taxonomyVersion", product.getTaxonomyVersion() <= 0 ? null : product.getTaxonomyVersion());
                 
         jdbcTemplate.update(sql, params);
     }

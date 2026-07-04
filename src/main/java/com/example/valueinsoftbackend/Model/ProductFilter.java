@@ -23,6 +23,15 @@ public class ProductFilter {
     @Size(max = 30, message = "major must be 30 characters or fewer")
     private String major;
 
+    @Size(max = 80, message = "groupKey must be 80 characters or fewer")
+    private String groupKey;
+
+    @Size(max = 80, message = "categoryKey must be 80 characters or fewer")
+    private String categoryKey;
+
+    @Size(max = 80, message = "subcategoryKey must be 80 characters or fewer")
+    private String subcategoryKey;
+
     @Size(max = 60, message = "dates must be 60 characters or fewer")
     private String dates;
 
@@ -132,6 +141,30 @@ public class ProductFilter {
         this.major = major;
     }
 
+    public String getGroupKey() {
+        return groupKey;
+    }
+
+    public void setGroupKey(String groupKey) {
+        this.groupKey = groupKey;
+    }
+
+    public String getCategoryKey() {
+        return categoryKey;
+    }
+
+    public void setCategoryKey(String categoryKey) {
+        this.categoryKey = categoryKey;
+    }
+
+    public String getSubcategoryKey() {
+        return subcategoryKey;
+    }
+
+    public void setSubcategoryKey(String subcategoryKey) {
+        this.subcategoryKey = subcategoryKey;
+    }
+
     @Override
     public String toString() {
         return "ProductFilter{" +
@@ -142,6 +175,9 @@ public class ProductFilter {
                 ", rangeMin=" + rangeMin +
                 ", rangeMax=" + rangeMax +
                 ", major='" + major + '\'' +
+                ", groupKey='" + groupKey + '\'' +
+                ", categoryKey='" + categoryKey + '\'' +
+                ", subcategoryKey='" + subcategoryKey + '\'' +
                 ", dates='" + dates + '\'' +
                 '}';
     }

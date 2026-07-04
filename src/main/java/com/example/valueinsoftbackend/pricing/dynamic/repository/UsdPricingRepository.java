@@ -39,7 +39,7 @@ public class UsdPricingRepository {
                 SELECT
                     p.product_id,
                     p.product_name,
-                    p.major AS category,
+                    COALESCE(ibp.category_name, p.major) AS category,
                     p.business_line_key,
                     p.template_key,
                     p.pricing_policy_code,
@@ -237,7 +237,7 @@ public class UsdPricingRepository {
                 SELECT
                     p.product_id,
                     p.product_name,
-                    p.major AS category,
+                    COALESCE(ibp.category_name, p.major) AS category,
                     p.business_line_key,
                     p.template_key,
                     p.pricing_policy_code,
@@ -312,6 +312,10 @@ public class UsdPricingRepository {
     private String fromClause(int companyId, int branchId) {
         return """
                 FROM %s p
+                INNER JOIN %s ibp
+                  ON ibp.product_id = p.product_id
+                 AND ibp.branch_id = :branchId
+                 AND ibp.is_active = TRUE
                 LEFT JOIN %s stock
                   ON stock.product_id = p.product_id
                  AND stock.branch_id = :branchId
@@ -338,6 +342,7 @@ public class UsdPricingRepository {
                 ) rate ON TRUE
                 """.formatted(
                 TenantSqlIdentifiers.inventoryProductTable(companyId),
+                TenantSqlIdentifiers.inventoryBranchProductTable(companyId),
                 TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId)
         );
     }
@@ -354,7 +359,7 @@ public class UsdPricingRepository {
                     """);
         }
         if (request.category() != null && !request.category().isBlank()) {
-            where.append(" AND p.major = :category ");
+            where.append(" AND (LOWER(COALESCE(ibp.group_name, '')) = LOWER(:category) OR LOWER(COALESCE(ibp.category_name, p.major, '')) = LOWER(:category) OR LOWER(COALESCE(ibp.subcategory_name, p.product_type, '')) = LOWER(:category) OR LOWER(COALESCE(ibp.group_key, '')) = LOWER(:category) OR LOWER(COALESCE(ibp.category_key, '')) = LOWER(:category) OR LOWER(COALESCE(ibp.subcategory_key, '')) = LOWER(:category)) ");
         }
         if (request.businessLineKey() != null && !request.businessLineKey().isBlank()) {
             where.append(" AND p.business_line_key = :businessLineKey ");

@@ -40,6 +40,16 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         item.setUnitSupplierNames(toStringList(rs.getArray("unitSupplierNames")));
         item.setBusinessLineKey(rs.getString("businessLineKey"));
         item.setTemplateKey(rs.getString("templateKey"));
+        item.setGroupKey(rs.getString("groupKey"));
+        item.setCategoryKey(rs.getString("categoryKey"));
+        item.setSubcategoryKey(rs.getString("subcategoryKey"));
+        item.setGroupName(rs.getString("groupName"));
+        item.setCategoryName(rs.getString("categoryName"));
+        item.setSubcategoryName(rs.getString("subcategoryName"));
+        item.setBrand(rs.getString("brand"));
+        item.setModel(rs.getString("model"));
+        item.setManufacturer(rs.getString("manufacturer"));
+        item.setTaxonomyVersion(rs.getInt("taxonomyVersion"));
         item.setSupplierId(rs.getInt("supplierId"));
         item.setSupplierName(rs.getString("supplierName"));
         item.setQuantityOnHand(rs.getInt("quantity"));
@@ -176,6 +186,16 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
            .append("COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", ")
            .append("p.business_line_key AS \"businessLineKey\", ")
            .append("p.template_key AS \"templateKey\", ")
+           .append("ibp.group_key AS \"groupKey\", ")
+           .append("ibp.category_key AS \"categoryKey\", ")
+           .append("ibp.subcategory_key AS \"subcategoryKey\", ")
+           .append("ibp.group_name AS \"groupName\", ")
+           .append("COALESCE(ibp.category_name, p.major) AS \"categoryName\", ")
+           .append("COALESCE(ibp.subcategory_name, p.product_type) AS \"subcategoryName\", ")
+           .append("ibp.brand AS brand, ")
+           .append("ibp.model AS model, ")
+           .append("ibp.manufacturer AS manufacturer, ")
+           .append("COALESCE(ibp.taxonomy_version, 0) AS \"taxonomyVersion\", ")
            .append("ibp.default_supplier_id AS \"supplierId\", ")
            .append("s.\"SupplierName\" AS \"supplierName\", ")
            .append(effectiveQuantitySql).append(" AS quantity, ")
@@ -214,9 +234,21 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                 conditions.add("ibp.default_supplier_id = :supplierId");
                 params.addValue("supplierId", filters.getSupplierId());
             }
+            if (hasText(filters.getGroupKey())) {
+                conditions.add("ibp.group_key = :groupKey");
+                params.addValue("groupKey", filters.getGroupKey().trim());
+            }
+            if (hasText(filters.getCategoryKey())) {
+                conditions.add("ibp.category_key = :categoryKey");
+                params.addValue("categoryKey", filters.getCategoryKey().trim());
+            }
+            if (hasText(filters.getSubcategoryKey())) {
+                conditions.add("ibp.subcategory_key = :subcategoryKey");
+                params.addValue("subcategoryKey", filters.getSubcategoryKey().trim());
+            }
             if (filters.getMajor() != null && !filters.getMajor().isBlank()) {
-                conditions.add("p.major = :major");
-                params.addValue("major", filters.getMajor());
+                conditions.add("(LOWER(COALESCE(ibp.group_name, '')) = LOWER(:major) OR LOWER(COALESCE(ibp.category_name, p.major, '')) = LOWER(:major) OR LOWER(COALESCE(ibp.subcategory_name, p.product_type, '')) = LOWER(:major) OR ibp.group_key = :major OR ibp.category_key = :major OR ibp.subcategory_key = :major OR p.major = :major)");
+                params.addValue("major", filters.getMajor().trim());
             }
         }
 
@@ -356,6 +388,10 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                "COALESCE(serialized_stock.unit_supplier_ids, ARRAY[]::bigint[]) AS \"unitSupplierIds\", " +
                "COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", " +
                "p.business_line_key AS \"businessLineKey\", p.template_key AS \"templateKey\", " +
+               "ibp.group_key AS \"groupKey\", ibp.category_key AS \"categoryKey\", ibp.subcategory_key AS \"subcategoryKey\", " +
+               "ibp.group_name AS \"groupName\", COALESCE(ibp.category_name, p.major) AS \"categoryName\", " +
+               "COALESCE(ibp.subcategory_name, p.product_type) AS \"subcategoryName\", ibp.brand AS brand, " +
+               "ibp.model AS model, ibp.manufacturer AS manufacturer, COALESCE(ibp.taxonomy_version, 0) AS \"taxonomyVersion\", " +
                "ibp.default_supplier_id AS \"supplierId\", s.\"SupplierName\" AS \"supplierName\", " +
                effectiveQuantitySql + " AS quantity, p.product_state AS \"pState\", " +
                "p.retail_price AS \"sellPrice\", p.buying_price AS \"buyPrice\", p.updated_at " +
@@ -370,6 +406,10 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         return "CASE WHEN COALESCE(" + productAlias + ".tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL') " +
                 "THEN COALESCE(" + serializedAlias + ".available_quantity, 0) " +
                 "ELSE COALESCE(" + stockAlias + ".quantity, 0) END";
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private static int resolveLowStockThreshold(InventoryCatalogFilters filters) {

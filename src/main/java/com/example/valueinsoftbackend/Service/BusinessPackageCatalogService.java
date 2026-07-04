@@ -27,10 +27,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class BusinessPackageCatalogService {
@@ -252,14 +255,13 @@ public class BusinessPackageCatalogService {
         }
 
         BusinessPackageConfig businessPackage = requireBusinessPackage(tenant.getBusinessPackageId());
-        ArrayList<CustomPair> pairs = flattenBusinessPackageToPairs(businessPackage);
-        if (pairs.isEmpty()) {
+        Map<String, Object> payload = buildBranchTaxonomySnapshot(businessPackage);
+        if (((List<?>) payload.getOrDefault("groups", List.of())).isEmpty()) {
             return false;
         }
 
         try {
-            String payload = objectMapper.writeValueAsString(pairs);
-            int rows = dbPosCategory.saveCategoryJson(companyId, branchId, payload);
+            int rows = dbPosCategory.saveCategoryJson(companyId, branchId, objectMapper.writeValueAsString(payload));
             return rows == 1;
         } catch (Exception exception) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "BUSINESS_PACKAGE_CATEGORY_SEED_FAILED", "Unable to seed branch categories from the assigned business package");
@@ -370,6 +372,118 @@ public class BusinessPackageCatalogService {
             }
         }
         return pairs;
+    }
+
+    private Map<String, Object> buildBranchTaxonomySnapshot(BusinessPackageConfig businessPackage) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        ArrayList<Map<String, Object>> groups = new ArrayList<>();
+        ArrayList<Map<String, Object>> legacyCategoryData = new ArrayList<>();
+        ArrayList<Map<String, Object>> legacyBranchGroups = new ArrayList<>();
+
+        if (businessPackage == null || businessPackage.getGroups() == null) {
+            snapshot.put("schemaVersion", 2);
+            snapshot.put("groups", groups);
+            snapshot.put("categoryData", legacyCategoryData);
+            snapshot.put("branchGroups", legacyBranchGroups);
+            return snapshot;
+        }
+
+        Set<String> usedGroupKeys = new HashSet<>();
+        for (BusinessPackageGroupConfig groupConfig : businessPackage.getGroups()) {
+            if (groupConfig == null || groupConfig.getCategories() == null || !"active".equalsIgnoreCase(groupConfig.getStatus())) {
+                continue;
+            }
+
+            String groupLabel = firstNonBlank(groupConfig.getDisplayName(), groupConfig.getGroupKey());
+            if (!hasText(groupLabel)) {
+                continue;
+            }
+            String groupKey = uniqueTaxonomyKey(firstNonBlank(groupConfig.getGroupKey(), groupLabel), usedGroupKeys);
+            Set<String> usedCategoryKeys = new HashSet<>();
+            ArrayList<Map<String, Object>> categories = new ArrayList<>();
+            ArrayList<String> legacyGroupCategories = new ArrayList<>();
+
+            for (BusinessPackageCategoryConfig categoryConfig : groupConfig.getCategories()) {
+                if (categoryConfig == null || categoryConfig.getSubcategories() == null || !"active".equalsIgnoreCase(categoryConfig.getStatus())) {
+                    continue;
+                }
+
+                String categoryLabel = firstNonBlank(categoryConfig.getDisplayName(), categoryConfig.getCategoryKey());
+                if (!hasText(categoryLabel)) {
+                    continue;
+                }
+                String categoryKey = uniqueTaxonomyKey(firstNonBlank(categoryConfig.getCategoryKey(), categoryLabel), usedCategoryKeys);
+                Set<String> usedSubcategoryKeys = new HashSet<>();
+                ArrayList<Map<String, Object>> subcategories = new ArrayList<>();
+                ArrayList<String> legacySubcategories = new ArrayList<>();
+
+                for (BusinessPackageSubcategoryConfig subcategoryConfig : categoryConfig.getSubcategories()) {
+                    if (subcategoryConfig == null || !"active".equalsIgnoreCase(subcategoryConfig.getStatus())) {
+                        continue;
+                    }
+                    String subcategoryLabel = firstNonBlank(subcategoryConfig.getDisplayName(), subcategoryConfig.getSubcategoryKey());
+                    if (!hasText(subcategoryLabel)) {
+                        continue;
+                    }
+                    Map<String, Object> subcategory = new LinkedHashMap<>();
+                    subcategory.put("key", uniqueTaxonomyKey(firstNonBlank(subcategoryConfig.getSubcategoryKey(), subcategoryLabel), usedSubcategoryKeys));
+                    subcategory.put("label", subcategoryLabel.trim());
+                    subcategories.add(subcategory);
+                    legacySubcategories.add(subcategoryLabel.trim());
+                }
+
+                Map<String, Object> category = new LinkedHashMap<>();
+                category.put("key", categoryKey);
+                category.put("label", categoryLabel.trim());
+                category.put("subcategories", subcategories);
+                categories.add(category);
+                legacyGroupCategories.add(categoryLabel.trim());
+
+                Map<String, Object> legacyCategory = new LinkedHashMap<>();
+                legacyCategory.put("key", categoryLabel.trim());
+                legacyCategory.put("value", legacySubcategories);
+                legacyCategoryData.add(legacyCategory);
+            }
+
+            Map<String, Object> group = new LinkedHashMap<>();
+            group.put("key", groupKey);
+            group.put("label", groupLabel.trim());
+            group.put("categories", categories);
+            groups.add(group);
+
+            Map<String, Object> legacyGroup = new LinkedHashMap<>();
+            legacyGroup.put("key", groupLabel.trim());
+            legacyGroup.put("categories", legacyGroupCategories);
+            legacyBranchGroups.add(legacyGroup);
+        }
+
+        snapshot.put("schemaVersion", 2);
+        snapshot.put("groups", groups);
+        snapshot.put("categoryData", legacyCategoryData);
+        snapshot.put("branchGroups", legacyBranchGroups);
+        return snapshot;
+    }
+
+    private String uniqueTaxonomyKey(String value, Set<String> usedKeys) {
+        String base = slugifyTaxonomyKey(value);
+        String candidate = base;
+        int suffix = 2;
+        while (usedKeys.contains(candidate)) {
+            candidate = base + "_" + suffix++;
+        }
+        usedKeys.add(candidate);
+        return candidate;
+    }
+
+    private String slugifyTaxonomyKey(String value) {
+        String text = value == null ? "item" : value.trim().toLowerCase(java.util.Locale.ROOT);
+        text = Normalizer.normalize(text, Normalizer.Form.NFKD).replaceAll("\\p{M}+", "");
+        text = text.replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
+        return text.isBlank() ? "item" : text;
+    }
+
+    private String firstNonBlank(String preferred, String fallback) {
+        return hasText(preferred) ? preferred.trim() : (hasText(fallback) ? fallback.trim() : null);
     }
 
     private ArrayList<BusinessPackageGroupRequest> safeGroups(ArrayList<BusinessPackageGroupRequest> value) {

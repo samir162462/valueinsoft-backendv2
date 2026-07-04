@@ -26,7 +26,6 @@ import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductRece
 import com.example.valueinsoftbackend.Model.Response.InventoryReceipt.ProductReceiptResponse;
 import com.example.valueinsoftbackend.Service.CategoryService;
 import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
-import com.example.valueinsoftbackend.util.CustomPair;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,6 +58,7 @@ public class InventoryProductReceiptService {
     private final DbInventoryStockMovementRepository stockMovementRepository;
     private final FinanceOperationalPostingService financeOperationalPostingService;
     private final CategoryService categoryService;
+    private final BranchTaxonomyResolver branchTaxonomyResolver;
     private final ObjectMapper objectMapper;
 
     public InventoryProductReceiptService(DbInventoryProductReceiptRepository receiptRepository,
@@ -67,6 +67,7 @@ public class InventoryProductReceiptService {
                                           DbInventoryStockMovementRepository stockMovementRepository,
                                           FinanceOperationalPostingService financeOperationalPostingService,
                                           CategoryService categoryService,
+                                          BranchTaxonomyResolver branchTaxonomyResolver,
                                           ObjectMapper objectMapper) {
         this.receiptRepository = receiptRepository;
         this.productCommandRepository = productCommandRepository;
@@ -74,6 +75,7 @@ public class InventoryProductReceiptService {
         this.stockMovementRepository = stockMovementRepository;
         this.financeOperationalPostingService = financeOperationalPostingService;
         this.categoryService = categoryService;
+        this.branchTaxonomyResolver = branchTaxonomyResolver;
         this.objectMapper = objectMapper;
     }
 
@@ -203,8 +205,9 @@ public class InventoryProductReceiptService {
         if (productRequest == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_PAYLOAD_REQUIRED", "product is required when creating and receiving stock");
         }
-        validateCreateProductPayload(request.getCompanyId(), request.getBranchId(), productRequest);
-        Product product = toProduct(productRequest, request.getReceipt().getSupplierId());
+        BranchTaxonomyResolver.ResolvedClassification classification =
+                validateCreateProductPayload(request.getCompanyId(), request.getBranchId(), productRequest);
+        Product product = toProduct(productRequest, request.getReceipt().getSupplierId(), classification);
         long productId = productCommandRepository.addProduct(product, String.valueOf(request.getBranchId()), request.getCompanyId());
         return receiptRepository.findProductForUpdate(request.getCompanyId(), productId)
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PRODUCT_CREATE_RELOAD_FAILED", "Created product could not be reloaded"));
@@ -232,7 +235,7 @@ public class InventoryProductReceiptService {
         }
     }
 
-    private void validateCreateProductPayload(int companyId, int branchId, ProductReceiptProductRequest product) {
+    private BranchTaxonomyResolver.ResolvedClassification validateCreateProductPayload(int companyId, int branchId, ProductReceiptProductRequest product) {
         normalizeRequired(product.getProductName(), "PRODUCT_NAME_REQUIRED", "productName is required");
         BigDecimal buyingPrice = money(product.getBuyingPrice());
         BigDecimal lowestPrice = money(product.getLowestPrice());
@@ -240,7 +243,7 @@ public class InventoryProductReceiptService {
         if (retailPrice.compareTo(lowestPrice) < 0 || lowestPrice.compareTo(buyingPrice) < 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_PRICE_ORDER_INVALID", "retailPrice must be greater than or equal to lowestPrice, and lowestPrice must be greater than or equal to buyingPrice");
         }
-        validateCategory(companyId, branchId, product);
+        return branchTaxonomyResolver.resolveForProduct(companyId, branchId, product);
     }
 
     private void validateReceiptPayload(ProductReceiptRequest request,
@@ -387,45 +390,9 @@ public class InventoryProductReceiptService {
         }
     }
 
-    private void validateCategory(int companyId, int branchId, ProductReceiptProductRequest product) {
-        String categoryName = firstNonBlank(product.getCategoryName(), product.getCategoryId() == null ? null : String.valueOf(product.getCategoryId()));
-        if (categoryName == null) {
-            return;
-        }
-        List<CustomPair> categories = categoryService.getCategoriesJson(companyId, branchId);
-        CustomPair matched = findCategory(categories, categoryName);
-        String subcategoryName = product.getSubcategoryName();
-
-        if (matched == null && product.getCategoryId() == null && subcategoryName != null && !subcategoryName.isBlank()) {
-            matched = findCategory(categories, subcategoryName);
-            if (matched != null) {
-                return;
-            }
-        }
-
-        if (matched == null && product.getCategoryId() == null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_INVALID", "Category does not exist for this branch");
-        }
-        if (matched != null && subcategoryName != null && !subcategoryName.isBlank()) {
-            boolean found = matched.getValue() != null && matched.getValue().stream().anyMatch(value -> subcategoryName.equalsIgnoreCase(value));
-            if (!found) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_TEMPLATE_COMBINATION_INVALID", "Subcategory does not belong to the selected category");
-            }
-        }
-    }
-
-    private CustomPair findCategory(List<CustomPair> categories, String categoryName) {
-        if (categoryName == null || categoryName.isBlank()) {
-            return null;
-        }
-
-        return categories.stream()
-                .filter(pair -> pair.getKey() != null && categoryName.trim().equalsIgnoreCase(pair.getKey()))
-                .findFirst()
-                .orElse(null);
-    }
-
-    private Product toProduct(ProductReceiptProductRequest request, int supplierId) {
+    private Product toProduct(ProductReceiptProductRequest request,
+                              int supplierId,
+                              BranchTaxonomyResolver.ResolvedClassification classification) {
         Product product = new Product();
         product.setProductName(limit(request.getProductName().trim(), 30));
         product.setBuyingDay(new Timestamp(System.currentTimeMillis()));
@@ -434,14 +401,24 @@ public class InventoryProductReceiptService {
         product.setLPrice(moneyToInt(request.getLowestPrice()));
         product.setRPrice(moneyToInt(request.getRetailPrice()));
         product.setCompanyName(limit(firstNonBlank(request.getSku(), request.getProductName()), 30));
-        product.setType(limit(firstNonBlank(request.getSubcategoryName(), request.getSubcategoryId() == null ? "default" : String.valueOf(request.getSubcategoryId())), 15));
+        product.setType(limit(firstNonBlank(classification.subcategoryName(), request.getSubcategoryId() == null ? "default" : String.valueOf(request.getSubcategoryId())), 15));
         product.setSerial(firstNonBlank(request.getBarcode(), request.getSku()));
         product.setDesc("");
         product.setBatteryLife(0);
         product.setQuantity(0);
         product.setPState("New");
         product.setSupplierId(supplierId);
-        product.setMajor(limit(firstNonBlank(request.getCategoryName(), request.getCategoryId() == null ? normalizeBusinessLine(request.getBusinessLineKey()) : String.valueOf(request.getCategoryId())), 30));
+        product.setMajor(limit(firstNonBlank(classification.categoryName(), request.getCategoryId() == null ? normalizeBusinessLine(request.getBusinessLineKey()) : String.valueOf(request.getCategoryId())), 30));
+        product.setGroupKey(classification.groupKey());
+        product.setCategoryKey(classification.categoryKey());
+        product.setSubcategoryKey(classification.subcategoryKey());
+        product.setGroupName(limit(classification.groupName(), 100));
+        product.setCategoryName(limit(classification.categoryName(), 100));
+        product.setSubcategoryName(limit(classification.subcategoryName(), 100));
+        product.setBrand(limit(blankToNull(request.getBrand()), 100));
+        product.setModel(limit(blankToNull(request.getModel()), 100));
+        product.setManufacturer(limit(blankToNull(request.getManufacturer()), 100));
+        product.setTaxonomyVersion(classification.taxonomyVersion());
         product.setBusinessLineKey(normalizeBusinessLine(request.getBusinessLineKey()));
         product.setTemplateKey(normalizeTemplate(request.getTemplateKey()));
         product.setBaseUomCode(firstNonBlank(request.getBaseUomCode(), "PCS"));

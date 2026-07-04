@@ -219,6 +219,7 @@ public class DbInventoryAuditReadModels {
         String balanceTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
         String ledgerTable = TenantSqlIdentifiers.inventoryStockLedgerTable(companyId);
         String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
+        String branchProductTable = TenantSqlIdentifiers.inventoryBranchProductTable(companyId);
 
         return """
                WITH ledger_source AS (
@@ -311,7 +312,7 @@ public class DbInventoryAuditReadModels {
                        COALESCE(product.tracking_type, 'QUANTITY') AS tracking_type,
                        COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, ''), '') AS serial_identifier,
                        product.product_name,
-                       COALESCE(NULLIF(product.major, ''), NULLIF(product.business_line_key, ''), NULLIF(product.template_key, ''), '') AS category,
+                       COALESCE(NULLIF(ibp.category_name, ''), NULLIF(product.major, ''), NULLIF(product.business_line_key, ''), NULLIF(product.template_key, ''), '') AS category,
                        branch."branchName" AS branch,
                        COALESCE(ledger_rollup.opening_qty, 0) AS opening_qty,
                        COALESCE(ledger_rollup.in_qty, 0) AS in_qty,
@@ -320,12 +321,19 @@ public class DbInventoryAuditReadModels {
                        COALESCE(product.retail_price, 0) AS unit_price,
                        COALESCE(ledger_rollup.closing_qty, 0)::bigint * COALESCE(product.retail_price, 0)::bigint AS total_value,
                        ledger_rollup.last_movement_date,
-                       product.major,
+                       COALESCE(NULLIF(ibp.group_name, ''), NULLIF(product.major, ''), '') AS major,
+                       COALESCE(ibp.group_key, '') AS group_key,
+                       COALESCE(ibp.category_key, '') AS category_key,
+                       COALESCE(ibp.subcategory_key, '') AS subcategory_key,
+                       COALESCE(NULLIF(ibp.subcategory_name, ''), NULLIF(product.product_type, ''), '') AS subcategory_name,
                        product.business_line_key,
                        product.template_key,
                        product.supplier_id
                    FROM branch_products branch_products
                    JOIN %s product ON product.product_id = branch_products.product_id
+                   LEFT JOIN %s ibp ON ibp.product_id = product.product_id
+                       AND ibp.branch_id = :branchId
+                       AND ibp.is_active = TRUE
                    JOIN public."Branch" branch ON branch."branchId" = :branchId
                    LEFT JOIN %s unit ON unit.product_unit_id = branch_products.product_unit_id
                    LEFT JOIN ledger_rollup ON ledger_rollup.product_id = product.product_id
@@ -343,6 +351,7 @@ public class DbInventoryAuditReadModels {
                 productTable,
                 productTable,
                 productTable,
+                branchProductTable,
                 unitTable
         );
     }
@@ -373,7 +382,16 @@ public class DbInventoryAuditReadModels {
         }
 
         if (hasText(request.getMajor())) {
-            where.append(" AND LOWER(major) = :major ");
+            where.append("""
+                         AND (
+                             LOWER(major) = :major
+                             OR LOWER(category) = :major
+                             OR LOWER(subcategory_name) = :major
+                             OR LOWER(group_key) = :major
+                             OR LOWER(category_key) = :major
+                             OR LOWER(subcategory_key) = :major
+                         )
+                         """);
         }
 
         if (hasText(request.getBusinessLineKey())) {

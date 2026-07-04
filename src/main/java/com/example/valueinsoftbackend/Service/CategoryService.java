@@ -118,6 +118,11 @@ public class CategoryService {
                 return;
             }
 
+            if (node.has("groups") && node.get("groups").isArray()) {
+                appendSchemaGroupPairs(customPairs, node.get("groups"));
+                return;
+            }
+
             if (node.hasNonNull("key") && node.has("value")) {
                 customPairs.add(new CustomPair(node.get("key").asText(), toStringList(node.get("value"))));
                 return;
@@ -153,6 +158,52 @@ public class CategoryService {
         }
 
         throw new ApiException(HttpStatus.BAD_REQUEST, "CATEGORY_PAYLOAD_UNSUPPORTED", "Category payload must be a JSON object or array of category objects");
+    }
+
+    private void appendSchemaGroupPairs(ArrayList<CustomPair> customPairs, JsonNode groupsNode) {
+        for (JsonNode groupNode : groupsNode) {
+            JsonNode categoriesNode = groupNode == null ? null : groupNode.get("categories");
+            if (categoriesNode == null || !categoriesNode.isArray()) {
+                continue;
+            }
+            for (JsonNode categoryNode : categoriesNode) {
+                if (categoryNode == null || !categoryNode.isObject()) {
+                    continue;
+                }
+                String categoryLabel = firstText(categoryNode, "label", "displayName", "key");
+                if (categoryLabel == null || categoryLabel.isBlank()) {
+                    continue;
+                }
+                ArrayList<String> subcategories = new ArrayList<>();
+                JsonNode subcategoriesNode = categoryNode.get("subcategories");
+                if (subcategoriesNode != null && subcategoriesNode.isArray()) {
+                    for (JsonNode subcategoryNode : subcategoriesNode) {
+                        String subcategoryLabel = subcategoryNode != null && subcategoryNode.isTextual()
+                                ? subcategoryNode.asText()
+                                : firstText(subcategoryNode, "label", "displayName", "key");
+                        if (subcategoryLabel != null && !subcategoryLabel.isBlank()) {
+                            subcategories.add(subcategoryLabel.trim());
+                        }
+                    }
+                }
+                customPairs.add(new CustomPair(categoryLabel.trim(), subcategories));
+            }
+        }
+    }
+
+    private String firstText(JsonNode node, String... fieldNames) {
+        if (node == null || !node.isObject()) {
+            return null;
+        }
+        for (String fieldName : fieldNames) {
+            if (node.hasNonNull(fieldName)) {
+                String value = node.get(fieldName).asText();
+                if (value != null && !value.isBlank()) {
+                    return value.trim();
+                }
+            }
+        }
+        return null;
     }
 
     private JsonNode normalizeCategoryNode(String payload) {

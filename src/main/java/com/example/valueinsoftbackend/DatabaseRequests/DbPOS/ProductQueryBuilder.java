@@ -50,6 +50,16 @@ final class ProductQueryBuilder {
                     "COALESCE(prod.tracking_type, 'QUANTITY') AS \"trackingType\", " +
                     "prod.sku AS sku, " +
                     "prod.barcode AS barcode, " +
+                    "ibp.group_key AS \"groupKey\", " +
+                    "ibp.category_key AS \"categoryKey\", " +
+                    "ibp.subcategory_key AS \"subcategoryKey\", " +
+                    "ibp.group_name AS \"groupName\", " +
+                    "COALESCE(ibp.category_name, prod.major) AS \"categoryName\", " +
+                    "COALESCE(ibp.subcategory_name, prod.product_type) AS \"subcategoryName\", " +
+                    "ibp.brand AS brand, " +
+                    "ibp.model AS model, " +
+                    "ibp.manufacturer AS manufacturer, " +
+                    "COALESCE(ibp.taxonomy_version, 0) AS \"taxonomyVersion\", " +
                     "COALESCE(serialized_stock.product_unit_ids, ARRAY[]::bigint[]) AS \"productUnitIds\", " +
                     "COALESCE(serialized_stock.unit_identifiers, ARRAY[]::text[]) AS \"unitIdentifiers\", " +
                     "prod.show_online AS \"showOnline\", " +
@@ -190,6 +200,19 @@ final class ProductQueryBuilder {
             return;
         }
 
+        if (hasText(productFilter.getGroupKey())) {
+            conditions.add("ibp.group_key = :groupKey");
+            params.addValue("groupKey", productFilter.getGroupKey().trim());
+        }
+        if (hasText(productFilter.getCategoryKey())) {
+            conditions.add("ibp.category_key = :categoryKey");
+            params.addValue("categoryKey", productFilter.getCategoryKey().trim());
+        }
+        if (hasText(productFilter.getSubcategoryKey())) {
+            conditions.add("ibp.subcategory_key = :subcategoryKey");
+            params.addValue("subcategoryKey", productFilter.getSubcategoryKey().trim());
+        }
+
         if (productFilter.isOutOfStock() && productFilter.isToSell()) {
             conditions.add(EFFECTIVE_QUANTITY_SQL + " >= 0");
         } else if (!productFilter.isOutOfStock() && productFilter.isToSell()) {
@@ -225,10 +248,10 @@ final class ProductQueryBuilder {
             }
 
             if (mappedBusinessLine != null) {
-                conditions.add("(prod.major = :major OR prod.business_line_key = :mappedBusinessLine)");
+                conditions.add("(LOWER(COALESCE(ibp.group_name, '')) = LOWER(:major) OR LOWER(COALESCE(ibp.category_name, prod.major, '')) = LOWER(:major) OR prod.major = :major OR prod.business_line_key = :mappedBusinessLine)");
                 params.addValue("mappedBusinessLine", mappedBusinessLine);
             } else {
-                conditions.add("prod.major = :major");
+                conditions.add("(LOWER(COALESCE(ibp.group_name, '')) = LOWER(:major) OR LOWER(COALESCE(ibp.category_name, prod.major, '')) = LOWER(:major) OR LOWER(COALESCE(ibp.subcategory_name, prod.product_type, '')) = LOWER(:major) OR ibp.group_key = :major OR ibp.category_key = :major OR ibp.subcategory_key = :major OR prod.major = :major)");
             }
             params.addValue("major", majorFilter);
         }
@@ -254,6 +277,10 @@ final class ProductQueryBuilder {
         conditions.add("prod.buying_day::date BETWEEN :startDate AND :endDate");
         params.addValue("startDate", startDate);
         params.addValue("endDate", endDate);
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private static String buildWhereClause(List<String> conditions) {

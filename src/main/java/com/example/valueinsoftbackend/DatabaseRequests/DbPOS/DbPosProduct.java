@@ -67,7 +67,17 @@ public class DbPosProduct {
                 rs.getString("sku"),
                 rs.getString("barcode"),
                 new ArrayList<>(),
-                new ArrayList<>()
+                new ArrayList<>(),
+                rs.getString("groupKey"),
+                rs.getString("categoryKey"),
+                rs.getString("subcategoryKey"),
+                rs.getString("groupName"),
+                rs.getString("categoryName"),
+                rs.getString("subcategoryName"),
+                rs.getString("brand"),
+                rs.getString("model"),
+                rs.getString("manufacturer"),
+                rs.getInt("taxonomyVersion")
         );
         product.setProductUnitIds(toLongList(rs.getArray("productUnitIds")));
         product.setUnitIdentifiers(toStringList(rs.getArray("unitIdentifiers")));
