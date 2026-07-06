@@ -171,15 +171,38 @@ public class DbInventoryProductReceiptRepository {
                                     String referenceId,
                                     String idempotencyKey,
                                     String note) {
+        return insertReceiptLedger(companyId, branchId, productId, quantityDelta, supplierId, transTotal,
+                payType, remainingAmount, actorName, referenceId, idempotencyKey, note,
+                "SUPPLIER", null, "NEW", null);
+    }
+
+    public long insertReceiptLedger(int companyId,
+                                    int branchId,
+                                    long productId,
+                                    int quantityDelta,
+                                    int supplierId,
+                                    BigDecimal transTotal,
+                                    String payType,
+                                    BigDecimal remainingAmount,
+                                    String actorName,
+                                    String referenceId,
+                                    String idempotencyKey,
+                                    String note,
+                                    String sourcePartyType,
+                                    Integer clientId,
+                                    String conditionCode,
+                                    String conditionNotes) {
         String sql = """
                 INSERT INTO %s (
                     company_id, branch_id, product_id, quantity_delta, movement_type,
                     reference_type, reference_id, actor_name, note, supplier_id, trans_total,
-                    pay_type, remaining_amount, idempotency_key, created_at
+                    pay_type, remaining_amount, idempotency_key, source_party_type, client_id,
+                    condition_code, condition_notes, created_at
                 ) VALUES (
                     :companyId, :branchId, :productId, :quantityDelta, 'PURCHASE_RECEIPT',
                     'PRODUCT_RECEIPT', :referenceId, :actorName, :note, :supplierId, :transTotal,
-                    :payType, :remainingAmount, :idempotencyKey, CURRENT_TIMESTAMP
+                    :payType, :remainingAmount, :idempotencyKey, :sourcePartyType, :clientId,
+                    :conditionCode, :conditionNotes, CURRENT_TIMESTAMP
                 )
                 RETURNING stock_ledger_id
                 """.formatted(TenantSqlIdentifiers.inventoryStockLedgerTable(companyId));
@@ -195,7 +218,79 @@ public class DbInventoryProductReceiptRepository {
                 .addValue("transTotal", transTotal == null ? BigDecimal.ZERO : transTotal)
                 .addValue("payType", payType)
                 .addValue("remainingAmount", remainingAmount == null ? BigDecimal.ZERO : remainingAmount)
-                .addValue("idempotencyKey", idempotencyKey), Long.class);
+                .addValue("idempotencyKey", idempotencyKey)
+                .addValue("sourcePartyType", sourcePartyType == null ? "SUPPLIER" : sourcePartyType)
+                .addValue("clientId", clientId)
+                .addValue("conditionCode", conditionCode == null ? "NEW" : conditionCode)
+                .addValue("conditionNotes", conditionNotes), Long.class);
+    }
+
+    public Optional<ClientSnapshot> findClientForUpdate(int companyId, int clientId) {
+        String sql = """
+                SELECT c_id, "clientName", "clientPhone", COALESCE(status, 'ACTIVE') AS status
+                FROM %s
+                WHERE c_id = :clientId
+                FOR UPDATE
+                """.formatted(TenantSqlIdentifiers.clientTable(companyId));
+        List<ClientSnapshot> rows = jdbcTemplate.query(sql, new MapSqlParameterSource()
+                        .addValue("clientId", clientId),
+                (rs, rowNum) -> new ClientSnapshot(
+                        rs.getInt("c_id"),
+                        rs.getString("clientName"),
+                        rs.getString("clientPhone"),
+                        rs.getString("status")));
+        return rows.stream().findFirst();
+    }
+
+    public long insertClientTradeInReceipt(int companyId,
+                                           int branchId,
+                                           int clientId,
+                                           long stockLedgerId,
+                                           long productId,
+                                           String receiptReference,
+                                           int quantity,
+                                           String conditionCode,
+                                           String conditionNotes,
+                                           BigDecimal unitCost,
+                                           BigDecimal totalAmount,
+                                           BigDecimal paidAmount,
+                                           BigDecimal remainingAmount,
+                                           String paymentStatus,
+                                           String paymentMethod,
+                                           String idempotencyKey,
+                                           String actorName) {
+        String sql = """
+                INSERT INTO %s (
+                    company_id, branch_id, client_id, stock_ledger_id, product_id, receipt_reference,
+                    quantity, condition_code, condition_notes, unit_cost, total_amount, paid_amount,
+                    remaining_amount, payment_status, payment_method, status, idempotency_key,
+                    created_by, created_at, updated_by, updated_at, version
+                ) VALUES (
+                    :companyId, :branchId, :clientId, :stockLedgerId, :productId, :receiptReference,
+                    :quantity, :conditionCode, :conditionNotes, :unitCost, :totalAmount, :paidAmount,
+                    :remainingAmount, :paymentStatus, :paymentMethod, 'POSTED', :idempotencyKey,
+                    :actorName, CURRENT_TIMESTAMP, :actorName, CURRENT_TIMESTAMP, 0
+                )
+                RETURNING tradein_receipt_id
+                """.formatted(TenantSqlIdentifiers.clientTradeInReceiptTable(companyId));
+        return jdbcTemplate.queryForObject(sql, new MapSqlParameterSource()
+                .addValue("companyId", companyId)
+                .addValue("branchId", branchId)
+                .addValue("clientId", clientId)
+                .addValue("stockLedgerId", stockLedgerId)
+                .addValue("productId", productId)
+                .addValue("receiptReference", receiptReference)
+                .addValue("quantity", quantity)
+                .addValue("conditionCode", conditionCode)
+                .addValue("conditionNotes", conditionNotes)
+                .addValue("unitCost", unitCost == null ? BigDecimal.ZERO : unitCost)
+                .addValue("totalAmount", totalAmount == null ? BigDecimal.ZERO : totalAmount)
+                .addValue("paidAmount", paidAmount == null ? BigDecimal.ZERO : paidAmount)
+                .addValue("remainingAmount", remainingAmount == null ? BigDecimal.ZERO : remainingAmount)
+                .addValue("paymentStatus", paymentStatus)
+                .addValue("paymentMethod", paymentMethod)
+                .addValue("idempotencyKey", idempotencyKey)
+                .addValue("actorName", actorName), Long.class);
     }
 
     public int insertLegacyInventoryTransaction(int companyId,
@@ -244,6 +339,11 @@ public class DbInventoryProductReceiptRepository {
     }
 
     public record IdempotencyRecord(long id, String requestHash, String status, JsonNode responsePayload, String operationId) {}
+    public record ClientSnapshot(int clientId, String clientName, String clientPhone, String status) {
+        public boolean isActive() {
+            return status == null || "ACTIVE".equalsIgnoreCase(status.trim());
+        }
+    }
     public record StockBalanceResult(int previousQuantity, int newQuantity) {}
     public record ProductReceiptProductSnapshot(long productId, String productName, String sku, String barcode,
                                                 TrackingType trackingType, String businessLineKey, String templateKey) {}

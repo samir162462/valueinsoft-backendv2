@@ -621,6 +621,126 @@ public class FinanceOperationalPostingService {
         return financePostingRequestService.createPostingRequestFromSystem(receipt.getUserRecived(), request);
     }
 
+    /**
+     * Client trade-in receipt (shop buys inventory from an existing client).
+     * Posted by the purchase adapter as:
+     *   Debit  purchase.inventory        (full received value)
+     *   Credit purchase.<paymentMethod>  (paid amount, when any)
+     *   Credit purchase.client_payable   (remaining amount, customer dimension)
+     */
+    public FinancePostingRequestItem enqueueClientTradeInReceipt(int companyId,
+                                                                 int branchId,
+                                                                 int clientId,
+                                                                 long tradeInReceiptId,
+                                                                 long productId,
+                                                                 long inventoryMovementId,
+                                                                 int quantity,
+                                                                 BigDecimal totalAmount,
+                                                                 BigDecimal paidAmount,
+                                                                 String paymentMethod,
+                                                                 Timestamp receiptTime,
+                                                                 String actorName) {
+        if (totalAmount == null || totalAmount.compareTo(BigDecimal.ZERO) <= 0 || quantity <= 0) {
+            return null;
+        }
+
+        LocalDate postingDate = receiptTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for client trade-in posting date");
+        }
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "purchase",
+                "client_tradein_receipt",
+                "client-tradein-" + tradeInReceiptId,
+                postingDate,
+                fiscalPeriodId,
+                buildClientTradeInReceiptPayload(clientId, tradeInReceiptId, productId, inventoryMovementId,
+                        quantity, totalAmount, paidAmount, paymentMethod));
+
+        return financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
+    /**
+     * Payment made to a client to settle an outstanding trade-in payable.
+     * Posted by the payment adapter as:
+     *   Debit  purchase.client_payable   (customer dimension)
+     *   Credit payment.<method>
+     */
+    public FinancePostingRequestItem enqueueClientTradeInPayment(int companyId,
+                                                                 int branchId,
+                                                                 int clientId,
+                                                                 long paymentId,
+                                                                 BigDecimal amount,
+                                                                 String paymentMethod,
+                                                                 Timestamp paymentTime,
+                                                                 String actorName) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+
+        Timestamp effectiveTime = paymentTime == null ? new Timestamp(System.currentTimeMillis()) : paymentTime;
+        LocalDate postingDate = effectiveTime.toLocalDateTime().toLocalDate();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for client trade-in payment posting date");
+        }
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("clientId", clientId);
+        payload.put("amountPaid", money(amount));
+        payload.put("paymentMethod", paymentMethod == null || paymentMethod.isBlank() ? "cash" : paymentMethod.trim());
+        payload.put("paymentId", "client-tradein-payment-" + paymentId);
+        payload.put("clientTradeInPaymentId", paymentId);
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "payment",
+                "client_tradein_payment",
+                "client-tradein-payment-" + paymentId,
+                postingDate,
+                fiscalPeriodId,
+                payload);
+
+        return financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
+    private Map<String, Object> buildClientTradeInReceiptPayload(int clientId,
+                                                                 long tradeInReceiptId,
+                                                                 long productId,
+                                                                 long inventoryMovementId,
+                                                                 int quantity,
+                                                                 BigDecimal totalAmount,
+                                                                 BigDecimal paidAmount,
+                                                                 String paymentMethod) {
+        BigDecimal safePaid = paidAmount == null ? BigDecimal.ZERO.setScale(4) : money(paidAmount);
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("clientId", clientId);
+        payload.put("clientTradeInReceiptId", tradeInReceiptId);
+        payload.put("productId", productId);
+        payload.put("quantity", quantity);
+        payload.put("inventoryAmount", money(totalAmount));
+        payload.put("taxAmount", money(0));
+        payload.put("grossAmount", money(totalAmount));
+        payload.put("paidAmount", safePaid);
+        payload.put("paymentMethod", paymentMethod);
+        payload.put("paymentId", safePaid.compareTo(BigDecimal.ZERO) > 0 ? "client-tradein-" + tradeInReceiptId : null);
+        payload.put("inventoryMovementId", inventoryMovementId);
+        return payload;
+    }
+
     public void enqueueExpense(int companyId,
                                int branchId,
                                com.example.valueinsoftbackend.Model.Expenses expense,

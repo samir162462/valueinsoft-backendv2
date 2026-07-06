@@ -70,11 +70,15 @@ public class DbModernSubscription {
     }
 
     public Map<String, Object> getBranchActiveState(int branchId) {
+        return getBranchActiveState(branchId, 0);
+    }
+
+    public Map<String, Object> getBranchActiveState(int branchId, int graceDays) {
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
         String sql = modernSubscriptionContextSql() +
                 "SELECT mc.subscription_id, mc.start_time, mc.end_time, mc.amount_to_pay, mc.amount_paid, mc.order_id, mc.subscription_status " +
                 "FROM modern_context mc WHERE mc.branch_id = :branchId " +
-                "ORDER BY mc.subscription_id DESC LIMIT 1";
+                "ORDER BY mc.subscription_id DESC";
         List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(
                 sql,
                 new MapSqlParameterSource().addValue("branchId", branchId)
@@ -83,13 +87,28 @@ public class DbModernSubscription {
             return null;
         }
 
-        Map<String, Object> row = rows.get(0);
-        Date startTime = (Date) row.get("start_time");
-        Date endTime = (Date) row.get("end_time");
+        // The latest row can be a renewal entry created ahead of the due date (pending_payment).
+        // Branch activity must be judged from the most recent PAID subscription so early renewal
+        // entries never block a branch that is still inside its paid period (plus grace days).
+        Map<String, Object> latestRow = rows.get(0);
+        Map<String, Object> referenceRow = rows.stream()
+                .filter(r -> "PD".equals(r.get("subscription_status")))
+                .max((a, b) -> {
+                    Date endA = (Date) a.get("end_time");
+                    Date endB = (Date) b.get("end_time");
+                    return endA.toLocalDate().compareTo(endB.toLocalDate());
+                })
+                .orElse(latestRow);
+
+        Date startTime = (Date) referenceRow.get("start_time");
+        Date endTime = (Date) referenceRow.get("end_time");
         LocalDate currentDate = LocalDate.now();
+        int grace = Math.max(0, graceDays);
         long allTime = ChronoUnit.DAYS.between(startTime.toLocalDate(), endTime.toLocalDate());
         long remaining = ChronoUnit.DAYS.between(currentDate, endTime.toLocalDate());
-        boolean active = remaining > 0 && "PD".equals(row.get("subscription_status"));
+        boolean paid = "PD".equals(referenceRow.get("subscription_status"));
+        boolean active = paid && (remaining + grace) > 0;
+        boolean inGracePeriod = paid && remaining <= 0 && (remaining + grace) > 0;
 
         Map<String, Object> details = new HashMap<>();
         details.put("sDate", startTime);
@@ -97,8 +116,10 @@ public class DbModernSubscription {
         details.put("cDate", Date.valueOf(currentDate));
         details.put("allTime", (int) allTime);
         details.put("remainingTime", (int) remaining);
-        details.put("status", row.get("subscription_status"));
+        details.put("status", active ? referenceRow.get("subscription_status") : latestRow.get("subscription_status"));
         details.put("active", active);
+        details.put("graceDays", grace);
+        details.put("inGracePeriod", inGracePeriod);
         return details;
     }
 

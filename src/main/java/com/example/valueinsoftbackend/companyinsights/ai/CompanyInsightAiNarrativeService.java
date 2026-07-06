@@ -33,11 +33,15 @@ public class CompanyInsightAiNarrativeService {
 
     private final AiModelClient modelClient;
     private final AiProperties aiProperties;
+    private final com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService;
     private final Gson gson = new Gson();
 
-    public CompanyInsightAiNarrativeService(AiModelClient modelClient, AiProperties aiProperties) {
+    public CompanyInsightAiNarrativeService(AiModelClient modelClient,
+                                            AiProperties aiProperties,
+                                            com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService) {
         this.modelClient = modelClient;
         this.aiProperties = aiProperties;
+        this.usageLogService = usageLogService;
     }
 
     public boolean globallyEnabled() {
@@ -78,7 +82,11 @@ public class CompanyInsightAiNarrativeService {
                     candidate.actionCode() == null ? "" : candidate.actionCode().name(),
                     candidate.actionCode() == null ? "" : candidate.actionCode().name());
 
+            long startedAt = System.nanoTime();
             AiModelResponse response = modelClient.generate(new AiModelRequest(system, user, "COMPANY_INSIGHT_NARRATIVE", ""));
+            // Metered billing: background enrichment is still company-billable usage.
+            usageLogService.logChatUsage(candidate.companyId(), 0L, null,
+                    Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L));
             JsonObject json = JsonParser.parseString(stripFence(response.answer())).getAsJsonObject();
 
             String summaryAr = stringValue(json, "summaryAr");

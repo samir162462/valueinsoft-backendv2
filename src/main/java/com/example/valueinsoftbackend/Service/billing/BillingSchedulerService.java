@@ -5,7 +5,9 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbBillingAdminReadModels;
 import com.example.valueinsoftbackend.DatabaseRequests.DbBillingWriteModels;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformAdminAuditWriter;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Billing.BillingAccountBalanceResponse;
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoiceRetryCandidate;
+import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationRequest;
 import com.example.valueinsoftbackend.Model.Billing.BillingOverdueInvoiceCandidate;
 import com.example.valueinsoftbackend.Model.Billing.BillingRenewalCandidate;
 import com.example.valueinsoftbackend.Model.PlatformAdmin.PlatformBillingDunningRunsPageResponse;
@@ -19,6 +21,7 @@ import com.example.valueinsoftbackend.Service.InvoiceService;
 import com.example.valueinsoftbackend.Service.payment.PaymentAttemptService;
 import com.example.valueinsoftbackend.Service.payment.PaymentProvider;
 import com.example.valueinsoftbackend.Service.payment.PaymentProviderResolver;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +34,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@Slf4j
 public class BillingSchedulerService {
 
     private final DbBillingWriteModels dbBillingWriteModels;
@@ -41,6 +45,7 @@ public class BillingSchedulerService {
     private final BillingEntitlementService billingEntitlementService;
     private final PaymentProviderResolver paymentProviderResolver;
     private final BillingProperties billingProperties;
+    private final BillingInvoicePaymentService billingInvoicePaymentService;
 
     public BillingSchedulerService(DbBillingWriteModels dbBillingWriteModels,
                                    DbBillingAdminReadModels dbBillingAdminReadModels,
@@ -49,7 +54,8 @@ public class BillingSchedulerService {
                                    PaymentAttemptService paymentAttemptService,
                                    BillingEntitlementService billingEntitlementService,
                                    PaymentProviderResolver paymentProviderResolver,
-                                   BillingProperties billingProperties) {
+                                   BillingProperties billingProperties,
+                                   BillingInvoicePaymentService billingInvoicePaymentService) {
         this.dbBillingWriteModels = dbBillingWriteModels;
         this.dbBillingAdminReadModels = dbBillingAdminReadModels;
         this.dbPlatformAdminAuditWriter = dbPlatformAdminAuditWriter;
@@ -58,6 +64,7 @@ public class BillingSchedulerService {
         this.billingEntitlementService = billingEntitlementService;
         this.paymentProviderResolver = paymentProviderResolver;
         this.billingProperties = billingProperties;
+        this.billingInvoicePaymentService = billingInvoicePaymentService;
     }
 
     @Transactional
@@ -84,10 +91,22 @@ public class BillingSchedulerService {
                 }
             }
 
+            // Sweep: settle any open branch invoice that the company balance now fully
+            // covers (e.g. the balance was topped up after the renewal entry was created).
+            int settledFromBalance = 0;
+            for (Long openInvoiceId : dbBillingWriteModels.findOpenBranchInvoicesCoveredByBalance(100)) {
+                billingInvoicePaymentService.settleFromBalance(
+                        openInvoiceId,
+                        new BillingPaymentInitiationRequest("renewal-auto-balance-" + openInvoiceId, Boolean.FALSE)
+                );
+                settledFromBalance++;
+                log.info("Open invoice {} auto-settled from company balance during renewal cycle", openInvoiceId);
+            }
+
             PlatformBillingOperationResponse response = new PlatformBillingOperationResponse(
                     "renewal_cycle",
-                    candidates.size(),
-                    generated,
+                    candidates.size() + settledFromBalance,
+                    generated + settledFromBalance,
                     skipped,
                     new Timestamp(System.currentTimeMillis())
             );
@@ -95,7 +114,7 @@ public class BillingSchedulerService {
                     actorUserName,
                     "platform.billing.renewals.run",
                     "{\"renewalLeadDays\":" + Math.max(0, billingProperties.getRenewalLeadDays()) + "}",
-                    "{\"processedItems\":" + response.getProcessedItems() + ",\"generatedItems\":" + response.getGeneratedItems() + ",\"skippedItems\":" + response.getSkippedItems() + "}",
+                    "{\"processedItems\":" + response.getProcessedItems() + ",\"generatedItems\":" + response.getGeneratedItems() + ",\"skippedItems\":" + response.getSkippedItems() + ",\"balanceSettledInvoices\":" + settledFromBalance + "}",
                     "success",
                     null,
                     null
@@ -107,7 +126,7 @@ public class BillingSchedulerService {
                     "platform.billing.renewals.run",
                     "{\"renewalLeadDays\":" + Math.max(0, billingProperties.getRenewalLeadDays()) + "}",
                     "{\"error\":\"" + escapeJson(ex.getMessage()) + "\"}",
-                    "failure",
+                    "failed",
                     null,
                     null
             );
@@ -163,7 +182,7 @@ public class BillingSchedulerService {
                     "platform.billing.dunning.run",
                     "{\"dunningGraceDays\":" + Math.max(0, billingProperties.getDunningGraceDays()) + ",\"dunningMaxAttempts\":" + Math.max(1, billingProperties.getDunningMaxAttempts()) + "}",
                     "{\"error\":\"" + escapeJson(ex.getMessage()) + "\"}",
-                    "failure",
+                    "failed",
                     null,
                     null
             );
@@ -227,7 +246,7 @@ public class BillingSchedulerService {
                     "platform.billing.invoice.retry",
                     "{\"billingInvoiceId\":" + billingInvoiceId + "}",
                     "{\"error\":\"Billing invoice not found\"}",
-                    "failure",
+                    "failed",
                     null,
                     null
             );
@@ -239,7 +258,7 @@ public class BillingSchedulerService {
                     "platform.billing.invoice.retry",
                     "{\"billingInvoiceId\":" + billingInvoiceId + "}",
                     "{\"error\":\"Only open invoices can be retried\"}",
-                    "failure",
+                    "failed",
                     candidate.getTenantId(),
                     candidate.getBranchId()
             );
@@ -251,7 +270,7 @@ public class BillingSchedulerService {
                     "platform.billing.invoice.retry",
                     "{\"billingInvoiceId\":" + billingInvoiceId + "}",
                     "{\"error\":\"Invoice does not have due amount to retry\"}",
-                    "failure",
+                    "failed",
                     candidate.getTenantId(),
                     candidate.getBranchId()
             );
@@ -263,7 +282,7 @@ public class BillingSchedulerService {
                     "platform.billing.invoice.retry",
                     "{\"billingInvoiceId\":" + billingInvoiceId + "}",
                     "{\"error\":\"Manual retry max attempts exceeded\",\"attemptCount\":" + candidate.getAttemptCount() + "}",
-                    "failure",
+                    "failed",
                     candidate.getTenantId(),
                     candidate.getBranchId()
             );
@@ -279,7 +298,7 @@ public class BillingSchedulerService {
                         "platform.billing.invoice.retry",
                         "{\"billingInvoiceId\":" + billingInvoiceId + "}",
                         "{\"error\":\"Manual retry cooldown is active\",\"retryAllowedAt\":\"" + retryAllowedAt + "\"}",
-                        "failure",
+                        "failed",
                         candidate.getTenantId(),
                         candidate.getBranchId()
                 );
@@ -365,24 +384,8 @@ public class BillingSchedulerService {
                 normalizeCurrency(candidate.getCurrencyCode()),
                 candidate.getUnitAmount(),
                 BigDecimal.ZERO,
-                "Renewal subscription for " + candidate.getBranchName()
-        );
-
-        PaymentProvider paymentProvider = paymentProviderResolver.getActiveProvider();
-        int providerOrderId = paymentProvider.createProviderOrder(
-                Math.toIntExact(nextBranchSubscriptionId),
-                candidate.getBranchId(),
-                candidate.getUnitAmount()
-        );
-
-        paymentAttemptService.ensureCreatedAttempt(
-                invoiceId,
-                paymentProvider.getProviderCode(),
-                String.valueOf(providerOrderId),
-                candidate.getUnitAmount(),
-                normalizeCurrency(candidate.getCurrencyCode()),
-                "{\"source\":\"billing_scheduler_renewal\",\"branchSubscriptionId\":" + nextBranchSubscriptionId + ",\"branchId\":" + candidate.getBranchId() + "}",
-                "{\"providerOrderId\":" + providerOrderId + "}"
+                "Renewal subscription for " + candidate.getBranchName(),
+                Timestamp.valueOf(nextPeriodStart.toLocalDate().atStartOfDay())
         );
 
         billingEntitlementService.recordPendingRenewal(
@@ -391,6 +394,52 @@ public class BillingSchedulerService {
                 invoiceId,
                 candidate.getPreviousBranchSubscriptionId()
         );
+
+        // Auto-renew from company balance when it fully covers the renewal amount.
+        // The invoice is settled from the available balance and the subscription is
+        // activated immediately, so no payment step is required from the client.
+        BillingAccountBalanceResponse balance = dbBillingWriteModels.findBillingAccountBalance(
+                candidate.getCompanyId(),
+                normalizeCurrency(candidate.getCurrencyCode())
+        );
+        if (balance != null
+                && balance.getAvailableBalance() != null
+                && candidate.getUnitAmount() != null
+                && balance.getAvailableBalance().compareTo(candidate.getUnitAmount()) >= 0) {
+            billingInvoicePaymentService.settleFromBalance(
+                    invoiceId,
+                    new BillingPaymentInitiationRequest("renewal-auto-balance-" + invoiceId, Boolean.FALSE)
+            );
+            log.info("Renewal invoice {} auto-paid from company balance for branch {}",
+                    invoiceId, candidate.getBranchId());
+            return true;
+        }
+
+        // Provider checkout preparation is best-effort: the renewal entry (subscription +
+        // invoice + entitlement) must survive even if the payment provider is unreachable
+        // or not configured, so manual payments (cash / InstaPay) stay possible and the
+        // client-side "pay now" flow can create a checkout later.
+        try {
+            PaymentProvider paymentProvider = paymentProviderResolver.getActiveProvider();
+            int providerOrderId = paymentProvider.createProviderOrder(
+                    Math.toIntExact(nextBranchSubscriptionId),
+                    candidate.getBranchId(),
+                    candidate.getUnitAmount()
+            );
+
+            paymentAttemptService.ensureCreatedAttempt(
+                    invoiceId,
+                    paymentProvider.getProviderCode(),
+                    String.valueOf(providerOrderId),
+                    candidate.getUnitAmount(),
+                    normalizeCurrency(candidate.getCurrencyCode()),
+                    "{\"source\":\"billing_scheduler_renewal\",\"branchSubscriptionId\":" + nextBranchSubscriptionId + ",\"branchId\":" + candidate.getBranchId() + "}",
+                    "{\"providerOrderId\":" + providerOrderId + "}"
+            );
+        } catch (RuntimeException ex) {
+            log.warn("Renewal entry created for branch {} (subscription {}, invoice {}) but provider checkout preparation failed: {}",
+                    candidate.getBranchId(), nextBranchSubscriptionId, invoiceId, ex.getMessage());
+        }
         return true;
     }
 

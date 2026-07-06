@@ -26,27 +26,66 @@ public class AiUsageLogRepository {
                        int promptTokens,
                        int completionTokens,
                        int totalTokens,
+                       int cachedPromptTokens,
                        BigDecimal estimatedCost,
+                       BigDecimal estimatedCostUsd,
                        Long durationMs) {
         jdbcTemplate.update("""
                 INSERT INTO public.ai_usage_log
                     (id, company_id, user_id, conversation_id, model_name, prompt_tokens,
-                     completion_tokens, total_tokens, estimated_cost, duration_ms, created_at)
+                     completion_tokens, total_tokens, cached_prompt_tokens, estimated_cost,
+                     estimated_cost_usd, duration_ms, created_at)
                 VALUES
                     (:id, :companyId, :userId, :conversationId, :modelName, :promptTokens,
-                     :completionTokens, :totalTokens, :estimatedCost, :durationMs, :createdAt)
+                     :completionTokens, :totalTokens, :cachedPromptTokens, :estimatedCost,
+                     :estimatedCostUsd, :durationMs, :createdAt)
                 """, new MapSqlParameterSource()
                 .addValue("id", UUID.randomUUID())
                 .addValue("companyId", companyId)
                 .addValue("userId", userId)
-                .addValue("conversationId", conversationId)
+                // Typed binding: non-chat surfaces pass a null conversation id, and an
+                // untyped null cannot be inferred as UUID by the Postgres driver.
+                .addValue("conversationId", conversationId, java.sql.Types.OTHER)
                 .addValue("modelName", modelName)
                 .addValue("promptTokens", Math.max(0, promptTokens))
                 .addValue("completionTokens", Math.max(0, completionTokens))
                 .addValue("totalTokens", Math.max(0, totalTokens))
+                .addValue("cachedPromptTokens", Math.max(0, cachedPromptTokens))
                 .addValue("estimatedCost", estimatedCost == null ? BigDecimal.ZERO : estimatedCost)
+                .addValue("estimatedCostUsd", estimatedCostUsd == null ? BigDecimal.ZERO : estimatedCostUsd)
                 .addValue("durationMs", durationMs)
                 .addValue("createdAt", Timestamp.from(Instant.now())));
+    }
+
+    public record AiUsageBillingAggregate(long companyId,
+                                          String modelName,
+                                          long totalTokens,
+                                          BigDecimal billableCost,
+                                          long requestCount) {
+    }
+
+    /** Aggregated client-billable AI usage per company and model for [from, to). */
+    public java.util.List<AiUsageBillingAggregate> aggregateCompanyUsage(LocalDateTime from, LocalDateTime to) {
+        return jdbcTemplate.query("""
+                SELECT company_id, model_name,
+                       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                       COALESCE(SUM(estimated_cost), 0) AS billable_cost,
+                       COUNT(*) AS request_count
+                FROM public.ai_usage_log
+                WHERE created_at >= :from AND created_at < :to
+                GROUP BY company_id, model_name
+                HAVING COALESCE(SUM(estimated_cost), 0) > 0
+                ORDER BY company_id, model_name
+                """, new MapSqlParameterSource()
+                        .addValue("from", Timestamp.valueOf(from))
+                        .addValue("to", Timestamp.valueOf(to)),
+                (rs, rowNum) -> new AiUsageBillingAggregate(
+                        rs.getLong("company_id"),
+                        rs.getString("model_name"),
+                        rs.getLong("total_tokens"),
+                        rs.getBigDecimal("billable_cost"),
+                        rs.getLong("request_count")
+                ));
     }
 
     public long countUserRequestsSince(long companyId, long userId, LocalDateTime since) {

@@ -54,6 +54,7 @@ public class InventoryAuditService {
     private final ObjectMapper objectMapper;
     private final int pdfMaxRows;
     private final int aiMaxRows;
+    private final com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService;
 
     public InventoryAuditService(DbInventoryAuditReadModels dbInventoryAuditReadModels,
                                  AuthorizationService authorizationService,
@@ -61,7 +62,8 @@ public class InventoryAuditService {
                                  AiProperties aiProperties,
                                  ObjectMapper objectMapper,
                                  @Value("${inventory.audit.pdf.max-rows:5000}") int pdfMaxRows,
-                                 @Value("${inventory.audit.ai.max-rows:500}") int aiMaxRows) {
+                                 @Value("${inventory.audit.ai.max-rows:500}") int aiMaxRows,
+                                 com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService) {
         this.dbInventoryAuditReadModels = dbInventoryAuditReadModels;
         this.authorizationService = authorizationService;
         this.aiModelClient = aiModelClient;
@@ -69,6 +71,7 @@ public class InventoryAuditService {
         this.objectMapper = objectMapper;
         this.pdfMaxRows = Math.max(pdfMaxRows, 100);
         this.aiMaxRows = Math.max(aiMaxRows, 50);
+        this.usageLogService = usageLogService;
     }
 
     public InventoryAuditPageResponse search(String authenticatedName, InventoryAuditSearchRequest request) {
@@ -158,12 +161,16 @@ public class InventoryAuditService {
         }
 
         try {
+            long startedAt = System.nanoTime();
             AiModelResponse modelResponse = aiModelClient.generate(new AiModelRequest(
                     buildAiSystemPrompt(request),
                     buildAiUserPrompt(request, summary, rows),
                     "inventory-audit-analysis",
                     ""
             ));
+            // Metered billing: consume the token usage recorded by the provider call above.
+            usageLogService.logChatUsage(request.getCompanyId(), 0L, null,
+                    Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L));
 
             if (modelResponse.fallback() || modelResponse.answer() == null || modelResponse.answer().isBlank()) {
                 return fallback;

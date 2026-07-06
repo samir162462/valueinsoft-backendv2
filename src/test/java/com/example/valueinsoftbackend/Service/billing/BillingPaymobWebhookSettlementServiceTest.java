@@ -56,7 +56,8 @@ class BillingPaymobWebhookSettlementServiceTest {
                 paymentAttemptService,
                 billingEntitlementService,
                 financeIntegrationService,
-                new ObjectMapper()
+                new ObjectMapper(),
+                Mockito.mock(BillingBalanceService.class)
         );
     }
 

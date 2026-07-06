@@ -275,7 +275,7 @@ public class DbBillingWriteModels {
                 "approval_status, description, created_at " +
                 "FROM public.billing_account_ledger " +
                 "WHERE company_id = :companyId AND UPPER(currency_code) = UPPER(:currencyCode) " +
-                "AND (:transactionType IS NULL OR transaction_type = :transactionType) " +
+                "AND (CAST(:transactionType AS TEXT) IS NULL OR transaction_type = CAST(:transactionType AS TEXT)) " +
                 "ORDER BY created_at DESC, billing_account_ledger_id DESC " +
                 "LIMIT :limit OFFSET :offset";
         return namedParameterJdbcTemplate.query(
@@ -653,6 +653,35 @@ public class DbBillingWriteModels {
                         .addValue("providerCode", providerCode)
                         .addValue("externalOrderId", externalOrderId)
         );
+    }
+
+    /**
+     * Open branch-subscription invoices whose company balance fully covers the due
+     * amount — candidates for automatic settlement from balance during the renewal cycle.
+     */
+    public List<Long> findOpenBranchInvoicesCoveredByBalance(int limit) {
+        return namedParameterJdbcTemplate.query(
+                "SELECT bi.billing_invoice_id " +
+                        "FROM public.billing_invoices bi " +
+                        "JOIN public.billing_accounts ba ON ba.billing_account_id = bi.billing_account_id " +
+                        "WHERE bi.source_type IN ('branch_subscription', 'ai_usage') " +
+                        "AND LOWER(bi.status) = 'open' " +
+                        "AND COALESCE(bi.due_amount, 0) > 0 " +
+                        "AND COALESCE(ba.available_balance, 0) >= bi.due_amount " +
+                        "ORDER BY bi.billing_invoice_id ASC " +
+                        "LIMIT :limit",
+                new MapSqlParameterSource().addValue("limit", Math.max(1, limit)),
+                (rs, rowNum) -> rs.getLong("billing_invoice_id")
+        );
+    }
+
+    public String findInvoiceSourceType(long billingInvoiceId) {
+        List<String> types = namedParameterJdbcTemplate.query(
+                "SELECT source_type FROM public.billing_invoices WHERE billing_invoice_id = :billingInvoiceId",
+                new MapSqlParameterSource().addValue("billingInvoiceId", billingInvoiceId),
+                (rs, rowNum) -> rs.getString("source_type")
+        );
+        return types.isEmpty() ? null : types.get(0);
     }
 
     public Long findInvoiceIdBySource(String sourceType, String sourceId) {

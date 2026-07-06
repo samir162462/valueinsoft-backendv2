@@ -41,6 +41,7 @@ public class AiDailyInsightsService {
     private final AiModelClient modelClient;
     private final DashboardSummaryService dashboardSummaryService;
     private final Gson gson;
+    private final com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService;
 
     public AiDailyInsightsService(AiSecurityContextResolver securityContextResolver,
                                   AiPermissionService permissionService,
@@ -50,7 +51,8 @@ public class AiDailyInsightsService {
                                   AiSqlAgentService sqlAgentService,
                                   AiModelClient modelClient,
                                   DashboardSummaryService dashboardSummaryService,
-                                  Gson gson) {
+                                  Gson gson,
+                                  com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService) {
         this.securityContextResolver = securityContextResolver;
         this.permissionService = permissionService;
         this.rateLimitService = rateLimitService;
@@ -60,6 +62,7 @@ public class AiDailyInsightsService {
         this.modelClient = modelClient;
         this.dashboardSummaryService = dashboardSummaryService;
         this.gson = gson;
+        this.usageLogService = usageLogService;
     }
 
     public AiDailyInsightsResponse generate(AiDailyInsightsRequest request, Principal principal) {
@@ -135,6 +138,9 @@ public class AiDailyInsightsService {
             log.warn("AI weekly insight synthesis failed companyId={} branchId={} weekStart={} reason={}",
                     context.companyId(), branchId, weekStart, exception.getMessage());
         }
+
+        // Metered billing: consume tokens from the synthesis + SQL evidence model calls.
+        usageLogService.logChatUsage(context.companyId(), context.userId(), null, elapsedMs(startedAt));
 
         if (insights.isEmpty()) {
             insights = dashboardEvidence != null

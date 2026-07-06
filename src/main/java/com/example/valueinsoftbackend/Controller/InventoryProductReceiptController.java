@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Controller;
 
+import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.AcquisitionSource;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptOperationMode;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptRequest;
 import com.example.valueinsoftbackend.Model.Response.InventoryReceipt.ProductReceiptResponse;
@@ -45,11 +46,21 @@ public class InventoryProductReceiptController {
                 request.getCompanyId(),
                 request.getBranchId(),
                 "inventory.adjustment.create");
-        authorizationService.assertAuthenticatedCapability(
-                principal.getName(),
-                request.getCompanyId(),
-                request.getBranchId(),
-                "suppliers.account.edit");
+        boolean clientTradeIn = request.getReceipt() != null
+                && AcquisitionSource.defaultIfNull(request.getReceipt().getAcquisitionSource()).isClientTradeIn();
+        if (clientTradeIn) {
+            authorizationService.assertAuthenticatedCapability(
+                    principal.getName(),
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    "clients.tradein.create");
+        } else {
+            authorizationService.assertAuthenticatedCapability(
+                    principal.getName(),
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    "suppliers.account.edit");
+        }
         ProductReceiptResponse response = receiptService.receiveProduct(principal.getName(), request);
         return ResponseEntity.status(response.isIdempotentReplay() ? HttpStatus.OK : HttpStatus.CREATED).body(response);
     }

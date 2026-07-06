@@ -43,6 +43,17 @@ public class DbClient {
         }
     }
 
+    public int updateClientStatus(int companyId, int clientId, String status, String actorName) {
+        String query = "UPDATE " + TenantSqlIdentifiers.clientTable(companyId) +
+                " SET status = ?," +
+                "     archived_at = CASE WHEN ? = 'ARCHIVED' THEN CURRENT_TIMESTAMP ELSE NULL END," +
+                "     updated_by = ?," +
+                "     updated_at = CURRENT_TIMESTAMP," +
+                "     version = COALESCE(version, 0) + 1" +
+                " WHERE c_id = ?";
+        return jdbcTemplate.update(query, status, status, actorName, clientId);
+    }
+
     public ResponseEntity<ArrayList<Client>> getClientByPhoneNumberOrName(int companyId, String phone, String name, Timestamp date, String shiftStartTime, int branchId) {
         try {
             StringBuilder queryBuilder = new StringBuilder(

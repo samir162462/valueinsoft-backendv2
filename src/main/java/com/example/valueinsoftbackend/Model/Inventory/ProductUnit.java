@@ -20,7 +20,10 @@ public class ProductUnit {
     private String serialNumber;
     private ProductUnitStatus status;
     private String conditionCode;
+    private String conditionNotes;
     private Long supplierId;
+    private String sourcePartyType;
+    private Long sourceClientId;
     private String purchaseReferenceType;
     private String purchaseReferenceId;
     private Long purchaseLineId;

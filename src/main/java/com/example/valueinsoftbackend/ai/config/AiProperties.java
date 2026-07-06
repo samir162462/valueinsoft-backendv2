@@ -12,7 +12,8 @@ public class AiProperties {
     private int requestTimeoutMs = 60_000;
     private String model = "gemini-2.5-flash";
     private double temperature = 0.2;
-    private int maxOutputTokens = 800;
+    private int maxOutputTokens = 2000;
+    private boolean thinkingEnabled = true;
     private int timeoutSeconds = 30;
     private long monthlyTokenLimitDefault = 1_000_000L;
     private int dailyUserRequestLimit = 100;
@@ -32,6 +33,15 @@ public class AiProperties {
     private EmbeddingProperties embedding = new EmbeddingProperties();
     private GeminiProperties gemini = new GeminiProperties();
     private DeepSeekProperties deepseek = new DeepSeekProperties();
+    private UsageBillingProperties usageBilling = new UsageBillingProperties();
+
+    public UsageBillingProperties getUsageBilling() {
+        return usageBilling;
+    }
+
+    public void setUsageBilling(UsageBillingProperties usageBilling) {
+        this.usageBilling = usageBilling;
+    }
 
     public boolean isEnabled() {
         return enabled;
@@ -95,6 +105,14 @@ public class AiProperties {
 
     public void setMaxOutputTokens(int maxOutputTokens) {
         this.maxOutputTokens = maxOutputTokens;
+    }
+
+    public boolean isThinkingEnabled() {
+        return thinkingEnabled;
+    }
+
+    public void setThinkingEnabled(boolean thinkingEnabled) {
+        this.thinkingEnabled = thinkingEnabled;
     }
 
     public int getTimeoutSeconds() {
@@ -269,7 +287,7 @@ public class AiProperties {
     public static class RagProperties {
         private boolean enabled = false;
         private int topK = 5;
-        private double similarityThreshold = 0.72;
+        private double similarityThreshold = 0.60;
         private int chunkTargetTokens = 700;
         private int chunkOverlapTokens = 120;
         private boolean keywordFallbackEnabled = true;
@@ -455,6 +473,107 @@ public class AiProperties {
 
         public void setTimeoutMs(int timeoutMs) {
             this.timeoutMs = timeoutMs;
+        }
+    }
+
+    /**
+     * Client-facing usage billing rates (market-practice metered billing).
+     * Prices are what the CLIENT pays per one million tokens, in EGP, and
+     * should include the margin over the raw provider cost.
+     */
+    public static class UsageBillingProperties {
+        private boolean enabled = true;
+        private java.math.BigDecimal defaultPricePerMillionTokensEgp = new java.math.BigDecimal("100.00");
+        private java.math.BigDecimal deepseekPricePerMillionTokensEgp = new java.math.BigDecimal("60.00");
+        private java.math.BigDecimal geminiPricePerMillionTokensEgp = new java.math.BigDecimal("120.00");
+        private java.math.BigDecimal minimumMonthlyChargeEgp = java.math.BigDecimal.ZERO;
+        // DeepSeek token-type pricing in USD per one million tokens.
+        private java.math.BigDecimal deepseekInputUsdPerMillionTokens = new java.math.BigDecimal("0.14");
+        private java.math.BigDecimal deepseekCachedInputUsdPerMillionTokens = new java.math.BigDecimal("0.0028");
+        private java.math.BigDecimal deepseekOutputUsdPerMillionTokens = new java.math.BigDecimal("0.28");
+        private java.math.BigDecimal usdToEgpRate = new java.math.BigDecimal("48.85");
+
+        public java.math.BigDecimal getDeepseekInputUsdPerMillionTokens() {
+            return deepseekInputUsdPerMillionTokens;
+        }
+
+        public void setDeepseekInputUsdPerMillionTokens(java.math.BigDecimal deepseekInputUsdPerMillionTokens) {
+            this.deepseekInputUsdPerMillionTokens = deepseekInputUsdPerMillionTokens;
+        }
+
+        public java.math.BigDecimal getDeepseekCachedInputUsdPerMillionTokens() {
+            return deepseekCachedInputUsdPerMillionTokens;
+        }
+
+        public void setDeepseekCachedInputUsdPerMillionTokens(java.math.BigDecimal deepseekCachedInputUsdPerMillionTokens) {
+            this.deepseekCachedInputUsdPerMillionTokens = deepseekCachedInputUsdPerMillionTokens;
+        }
+
+        public java.math.BigDecimal getDeepseekOutputUsdPerMillionTokens() {
+            return deepseekOutputUsdPerMillionTokens;
+        }
+
+        public void setDeepseekOutputUsdPerMillionTokens(java.math.BigDecimal deepseekOutputUsdPerMillionTokens) {
+            this.deepseekOutputUsdPerMillionTokens = deepseekOutputUsdPerMillionTokens;
+        }
+
+        public java.math.BigDecimal getUsdToEgpRate() {
+            return usdToEgpRate;
+        }
+
+        public void setUsdToEgpRate(java.math.BigDecimal usdToEgpRate) {
+            this.usdToEgpRate = usdToEgpRate;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public java.math.BigDecimal getDefaultPricePerMillionTokensEgp() {
+            return defaultPricePerMillionTokensEgp;
+        }
+
+        public void setDefaultPricePerMillionTokensEgp(java.math.BigDecimal defaultPricePerMillionTokensEgp) {
+            this.defaultPricePerMillionTokensEgp = defaultPricePerMillionTokensEgp;
+        }
+
+        public java.math.BigDecimal getDeepseekPricePerMillionTokensEgp() {
+            return deepseekPricePerMillionTokensEgp;
+        }
+
+        public void setDeepseekPricePerMillionTokensEgp(java.math.BigDecimal deepseekPricePerMillionTokensEgp) {
+            this.deepseekPricePerMillionTokensEgp = deepseekPricePerMillionTokensEgp;
+        }
+
+        public java.math.BigDecimal getGeminiPricePerMillionTokensEgp() {
+            return geminiPricePerMillionTokensEgp;
+        }
+
+        public void setGeminiPricePerMillionTokensEgp(java.math.BigDecimal geminiPricePerMillionTokensEgp) {
+            this.geminiPricePerMillionTokensEgp = geminiPricePerMillionTokensEgp;
+        }
+
+        public java.math.BigDecimal getMinimumMonthlyChargeEgp() {
+            return minimumMonthlyChargeEgp;
+        }
+
+        public void setMinimumMonthlyChargeEgp(java.math.BigDecimal minimumMonthlyChargeEgp) {
+            this.minimumMonthlyChargeEgp = minimumMonthlyChargeEgp;
+        }
+
+        public java.math.BigDecimal priceForModel(String modelName) {
+            String normalized = modelName == null ? "" : modelName.trim().toLowerCase();
+            if (normalized.contains("deepseek")) {
+                return deepseekPricePerMillionTokensEgp;
+            }
+            if (normalized.contains("gemini")) {
+                return geminiPricePerMillionTokensEgp;
+            }
+            return defaultPricePerMillionTokensEgp;
         }
     }
 }

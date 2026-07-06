@@ -14,6 +14,6 @@ public record AiChatRequest(
         String provider
 ) {
     public boolean useRealAiOnly() {
-        return true;
+        return Boolean.TRUE.equals(realAiOnly);
     }
 }

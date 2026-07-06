@@ -216,6 +216,22 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"ClientReceipts\"";
     }
 
+    public static String clientTradeInReceiptTable(int companyId) {
+        return companySchema(companyId) + ".client_tradein_receipt";
+    }
+
+    public static String clientTradeInPaymentTable(int companyId) {
+        return companySchema(companyId) + ".client_tradein_payment";
+    }
+
+    public static String clientTradeInPaymentAllocationTable(int companyId) {
+        return companySchema(companyId) + ".client_tradein_payment_allocation";
+    }
+
+    public static String inventoryUnitConditionAuditTable(int companyId) {
+        return companySchema(companyId) + ".inventory_unit_condition_audit";
+    }
+
     public static String loyaltyProgramConfigTable(int companyId) {
         return companySchema(companyId) + ".loyalty_program_config";
     }

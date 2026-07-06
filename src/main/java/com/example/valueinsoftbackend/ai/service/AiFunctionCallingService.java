@@ -13,6 +13,7 @@ import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.time.Instant;
 import java.util.*;
 
 @Service
@@ -99,7 +100,7 @@ public class AiFunctionCallingService {
                 modelResponse.answer(),
                 suggestions,
                 actions,
-                List.of(), // Sources
+                sourcesFromTools(executedTools),
                 executedTools,
                 modelResponse.providerName(),
                 modelResponse.providerCode()
@@ -174,7 +175,12 @@ public class AiFunctionCallingService {
                     if (!suggestions.isEmpty()) {
                         sink.next(new AiStreamChunk("suggestions", null, suggestions));
                     }
-                    sink.next(new AiStreamChunk("done", "", providerData(modelResponse)));
+                    List<AiSourceDto> sources = sourcesFromTools(executedTools);
+                    if (!sources.isEmpty()) {
+                        sink.next(new AiStreamChunk("sources", null, sources));
+                    }
+                    sink.next(new AiStreamChunk("scope", null, scopeData(securityContext, branchId)));
+                    sink.next(new AiStreamChunk("done", "", completionData(modelResponse, sources, securityContext, branchId)));
                 } catch (RuntimeException exception) {
                     log.error("Error in non-streaming AI generation for stream endpoint type={} detail={}",
                             exception.getClass().getSimpleName(),
@@ -232,10 +238,12 @@ public class AiFunctionCallingService {
                                         if (!suggestions.isEmpty()) {
                                             sink.next(new AiStreamChunk("suggestions", null, suggestions));
                                         }
-                                        sink.next(new AiStreamChunk("done", "", Map.of(
-                                                "providerCode", modelResponse.providerCode() == null ? "" : modelResponse.providerCode(),
-                                                "providerName", modelResponse.providerName() == null ? "" : modelResponse.providerName()
-                                        )));
+                                        List<AiSourceDto> sources = sourcesFromTools(executedTools);
+                                        if (!sources.isEmpty()) {
+                                            sink.next(new AiStreamChunk("sources", null, sources));
+                                        }
+                                        sink.next(new AiStreamChunk("scope", null, scopeData(securityContext, branchId)));
+                                        sink.next(new AiStreamChunk("done", "", completionData(modelResponse, sources, securityContext, branchId)));
                                     } catch (Exception ex) {
                                         log.error("Stream fallback also failed", ex);
                                         sink.next(new AiStreamChunk("error", "AI streaming is temporarily unavailable. Try again shortly.", null));
@@ -253,7 +261,17 @@ public class AiFunctionCallingService {
                                 if (!suggestions.isEmpty()) {
                                     sink.next(new AiStreamChunk("suggestions", null, suggestions));
                                 }
-                                sink.next(new AiStreamChunk("done", "", Map.of("providerCode", "GEM", "providerName", "gemini")));
+                                List<AiSourceDto> sources = sourcesFromTools(executedTools);
+                                if (!sources.isEmpty()) {
+                                    sink.next(new AiStreamChunk("sources", null, sources));
+                                }
+                                sink.next(new AiStreamChunk("scope", null, scopeData(securityContext, branchId)));
+                                Map<String, Object> data = new LinkedHashMap<>();
+                                data.put("providerCode", "GEM");
+                                data.put("providerName", "gemini");
+                                data.put("sources", sources);
+                                data.put("scope", scopeData(securityContext, branchId));
+                                sink.next(new AiStreamChunk("done", "", data));
                                 sink.complete();
                             }
                     );
@@ -291,12 +309,53 @@ public class AiFunctionCallingService {
                 || normalizedProvider.equals("genai");
     }
 
-    private Map<String, String> providerData(AiModelResponse response) {
+    private Map<String, Object> providerData(AiModelResponse response) {
         return Map.of(
                 "providerCode", response.providerCode() == null ? "" : response.providerCode(),
                 "providerName", response.providerName() == null ? "" : response.providerName(),
                 "model", response.modelName() == null ? "" : response.modelName()
         );
+    }
+
+    private Map<String, Object> completionData(AiModelResponse response,
+                                               List<AiSourceDto> sources,
+                                               AiSecurityContext securityContext,
+                                               Long branchId) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("providerCode", response.providerCode() == null ? "" : response.providerCode());
+        data.put("providerName", response.providerName() == null ? "" : response.providerName());
+        data.put("model", response.modelName() == null ? "" : response.modelName());
+        data.put("sources", sources == null ? List.of() : sources);
+        data.put("scope", scopeData(securityContext, branchId));
+        return data;
+    }
+
+    private Map<String, Object> scopeData(AiSecurityContext securityContext, Long branchId) {
+        Map<String, Object> scope = new LinkedHashMap<>();
+        scope.put("companyId", securityContext.companyId());
+        scope.put("branchId", branchId != null ? branchId : securityContext.defaultBranchId());
+        scope.put("generatedAt", Instant.now().toString());
+        return scope;
+    }
+
+    private List<AiSourceDto> sourcesFromTools(List<AiToolCallDto> tools) {
+        if (tools == null || tools.isEmpty()) {
+            return List.of();
+        }
+        Map<String, AiSourceDto> sources = new LinkedHashMap<>();
+        for (AiToolCallDto tool : tools) {
+            if (tool == null || tool.toolName() == null || tool.toolName().isBlank()) {
+                continue;
+            }
+            if ("navigateToScreen".equals(tool.toolName())) {
+                continue;
+            }
+            sources.putIfAbsent(
+                    tool.toolName(),
+                    new AiSourceDto(tool.toolName(), "TOOL", tool.summary())
+            );
+        }
+        return List.copyOf(sources.values());
     }
 
     private List<String> generateSuggestions(List<AiToolCallDto> tools) {

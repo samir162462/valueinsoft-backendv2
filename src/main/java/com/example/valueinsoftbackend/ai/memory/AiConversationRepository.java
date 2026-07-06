@@ -83,6 +83,33 @@ public class AiConversationRepository {
                 .addValue("updatedAt", Timestamp.from(Instant.now())));
     }
 
+    public Optional<ConversationSummary> findSummary(UUID id) {
+        List<ConversationSummary> rows = jdbcTemplate.query("""
+                SELECT summary, summary_message_count
+                FROM public.ai_conversation
+                WHERE id = :id AND deleted = false
+                """, new MapSqlParameterSource("id", id),
+                (rs, rowNum) -> new ConversationSummary(rs.getString("summary"), rs.getInt("summary_message_count")));
+        return rows.stream().findFirst();
+    }
+
+    public void updateSummary(UUID id, String summary, int summaryMessageCount) {
+        jdbcTemplate.update("""
+                UPDATE public.ai_conversation
+                SET summary = :summary,
+                    summary_message_count = :summaryMessageCount,
+                    updated_at = :updatedAt
+                WHERE id = :id AND deleted = false
+                """, new MapSqlParameterSource()
+                .addValue("id", id)
+                .addValue("summary", summary)
+                .addValue("summaryMessageCount", Math.max(0, summaryMessageCount))
+                .addValue("updatedAt", Timestamp.from(Instant.now())));
+    }
+
+    public record ConversationSummary(String summary, int summaryMessageCount) {
+    }
+
     public boolean softDelete(UUID id, long companyId, long userId) {
         int rows = jdbcTemplate.update("""
                 UPDATE public.ai_conversation

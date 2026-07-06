@@ -131,6 +131,28 @@ public class InventoryTransactionController {
         ));
     }
 
+    @PostMapping("/SerializedUnits/{companyId}/{branchId}/{productUnitId}/condition-correction")
+    public ResponseEntity<Object> correctSerializedUnitCondition(@PathVariable("companyId") long companyId,
+                                                                 @PathVariable("branchId") long branchId,
+                                                                 @PathVariable("productUnitId") long productUnitId,
+                                                                 @Valid @RequestBody com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitConditionCorrectionRequest body,
+                                                                 Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.item.edit"
+        );
+        return ResponseEntity.ok(serializedInventoryService.correctSerializedUnitCondition(
+                companyId,
+                branchId,
+                productUnitId,
+                body.getConditionCode(),
+                body.getReason(),
+                principal.getName()
+        ));
+    }
+
     @GetMapping("/SerializedAvailability/{companyId}/{branchId}/{productId}")
     public ResponseEntity<Object> serializedAvailability(@PathVariable("companyId") long companyId,
                                                         @PathVariable("branchId") long branchId,

@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.customerbehavior.ai;
 
+import com.example.valueinsoftbackend.ai.audit.AiUsageLogService;
 import com.example.valueinsoftbackend.ai.cache.AiInsightCacheService;
 import com.example.valueinsoftbackend.ai.service.AiCostTrackingService;
 import com.example.valueinsoftbackend.ai.service.AiModelClient;
@@ -52,6 +53,7 @@ public class CustomerBehaviorAiService {
     private final AiInsightCacheService cacheService;
     private final AiModelClient modelClient;
     private final ObjectMapper objectMapper;
+    private final AiUsageLogService usageLogService;
 
     public CustomerBehaviorAiService(CustomerBehaviorService behaviorService,
                                      CustomerBehaviorSecurityService securityService,
@@ -61,7 +63,8 @@ public class CustomerBehaviorAiService {
                                      AiCostTrackingService costTrackingService,
                                      AiInsightCacheService cacheService,
                                      AiModelClient modelClient,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     AiUsageLogService usageLogService) {
         this.behaviorService = behaviorService;
         this.securityService = securityService;
         this.auditService = auditService;
@@ -71,6 +74,7 @@ public class CustomerBehaviorAiService {
         this.cacheService = cacheService;
         this.modelClient = modelClient;
         this.objectMapper = objectMapper;
+        this.usageLogService = usageLogService;
     }
 
     public CustomerBehaviorInsight generate(CustomerBehaviorAiRequest request, Principal principal) {
@@ -142,6 +146,9 @@ public class CustomerBehaviorAiService {
         if (fallbackUsed && !insight.fallbackUsed()) {
             insight = withFallback(insight, true);
         }
+
+        // Metered billing: consume the token usage recorded by the provider call above.
+        usageLogService.logChatUsage(context.companyId(), context.userId(), null, elapsedMs(startedAt));
 
         OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC).plusHours(6);
         cacheService.putUntil(

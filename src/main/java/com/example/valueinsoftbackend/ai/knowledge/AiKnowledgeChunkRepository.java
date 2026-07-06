@@ -159,7 +159,7 @@ public class AiKnowledgeChunkRepository {
         boolean modulesEmpty = allowedModules.isEmpty();
         String language = request.language() == null || request.language().isBlank() ? "en" : request.language().trim();
         int topK = Math.max(1, request.topK() == null ? 5 : Math.min(request.topK(), 25));
-        double threshold = request.similarityThreshold() == null ? 0.72 : request.similarityThreshold();
+        double threshold = request.similarityThreshold() == null ? 0.60 : request.similarityThreshold();
 
         return jdbcTemplate.getJdbcTemplate().query(connection -> {
             PreparedStatement statement = connection.prepareStatement("""

@@ -22,6 +22,24 @@ public class InvoiceService {
                                                 BigDecimal amountToPay,
                                                 BigDecimal amountPaid,
                                                 String lineDescription) {
+        return ensureBranchSubscriptionInvoice(
+                billingAccountId,
+                branchSubscriptionId,
+                currencyCode,
+                amountToPay,
+                amountPaid,
+                lineDescription,
+                new Timestamp(System.currentTimeMillis())
+        );
+    }
+
+    public long ensureBranchSubscriptionInvoice(long billingAccountId,
+                                                long branchSubscriptionId,
+                                                String currencyCode,
+                                                BigDecimal amountToPay,
+                                                BigDecimal amountPaid,
+                                                String lineDescription,
+                                                Timestamp dueAt) {
         return ensureInvoice(
                 billingAccountId,
                 branchSubscriptionId,
@@ -30,6 +48,7 @@ public class InvoiceService {
                 amountToPay,
                 amountPaid,
                 lineDescription,
+                dueAt,
                 "{\"source\":\"modern_branch_subscription\"}",
                 "{\"source\":\"modern_branch_subscription\"}"
         );
@@ -42,6 +61,7 @@ public class InvoiceService {
                                BigDecimal amountToPay,
                                BigDecimal amountPaid,
                                String lineDescription,
+                               Timestamp dueAt,
                                String metadataJson,
                                String lineMetadataJson) {
         Long existingId = dbBillingWriteModels.findInvoiceIdBySource("branch_subscription", String.valueOf(branchSubscriptionId));
@@ -60,7 +80,7 @@ public class InvoiceService {
                 amountToPay,
                 amountToPay,
                 dueAmount,
-                new Timestamp(System.currentTimeMillis()),
+                dueAt == null ? new Timestamp(System.currentTimeMillis()) : dueAt,
                 "branch_subscription",
                 String.valueOf(branchSubscriptionId),
                 metadataJson

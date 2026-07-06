@@ -63,4 +63,14 @@ public class BillingCompanyBalanceController {
                 .status(HttpStatus.CREATED)
                 .body(billingBalanceService.creditBalance(companyId, request, principal.getName()));
     }
+
+    @PostMapping("/{companyId}/balance/reversals")
+    public ResponseEntity<BillingBalanceCreditResponse> reverseBalance(Principal principal,
+                                                                       @PathVariable @Positive int companyId,
+                                                                       @Valid @RequestBody BillingBalanceCreditRequest request) {
+        platformAuthorizationService.requirePlatformCapability(principal.getName(), "platform.billing.balance.write");
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(billingBalanceService.reverseBalance(companyId, request, principal.getName()));
+    }
 }

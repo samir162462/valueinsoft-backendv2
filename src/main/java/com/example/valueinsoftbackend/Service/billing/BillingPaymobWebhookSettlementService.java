@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.Service.billing;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBillingWriteModels;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Billing.BillingBalanceCreditRequest;
 import com.example.valueinsoftbackend.Model.Billing.BillingInvoicePaymentContext;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptStatus;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentAttemptValidationContext;
@@ -34,19 +35,22 @@ public class BillingPaymobWebhookSettlementService {
     private final BillingEntitlementService billingEntitlementService;
     private final PaymentProviderFinanceIntegrationService paymentProviderFinanceIntegrationService;
     private final ObjectMapper objectMapper;
+    private final BillingBalanceService billingBalanceService;
 
     public BillingPaymobWebhookSettlementService(DbBillingWriteModels dbBillingWriteModels,
                                                  PayMobService payMobService,
                                                  PaymentAttemptService paymentAttemptService,
                                                  BillingEntitlementService billingEntitlementService,
                                                  PaymentProviderFinanceIntegrationService paymentProviderFinanceIntegrationService,
-                                                 ObjectMapper objectMapper) {
+                                                 ObjectMapper objectMapper,
+                                                 BillingBalanceService billingBalanceService) {
         this.dbBillingWriteModels = dbBillingWriteModels;
         this.payMobService = payMobService;
         this.paymentAttemptService = paymentAttemptService;
         this.billingEntitlementService = billingEntitlementService;
         this.paymentProviderFinanceIntegrationService = paymentProviderFinanceIntegrationService;
         this.objectMapper = objectMapper;
+        this.billingBalanceService = billingBalanceService;
     }
 
     @Transactional(noRollbackFor = ApiException.class)
@@ -196,9 +200,32 @@ public class BillingPaymobWebhookSettlementService {
             );
         }
 
+        if (fullyPaid && invoice.getBranchSubscriptionId() == null) {
+            creditBalanceForTopUpInvoice(invoice, paymentAmount, providerEventId);
+        }
+
         paymentProviderFinanceIntegrationService.enqueuePayMobSettlement(PROVIDER_CODE, externalOrderId, providerEventId, request);
         dbBillingWriteModels.markProviderEventStatus(PROVIDER_CODE, providerEventId, "processed", attempt.getBillingPaymentAttemptId(), attempt.getBillingInvoiceId(), invoice.getCompanyId(), null);
         return response("SETTLED", providerEventId, externalOrderId, invoice.getBillingInvoiceId(), attempt.getBillingPaymentAttemptId(), paymentId, allocationId, false);
+    }
+
+    private void creditBalanceForTopUpInvoice(BillingInvoicePaymentContext invoice,
+                                              BigDecimal amount,
+                                              String providerEventId) {
+        String sourceType = dbBillingWriteModels.findInvoiceSourceType(invoice.getBillingInvoiceId());
+        if (!BillingBalanceTopUpService.TOP_UP_SOURCE_TYPE.equalsIgnoreCase(sourceType)) {
+            return;
+        }
+        BillingBalanceCreditRequest credit = new BillingBalanceCreditRequest();
+        credit.setAmount(amount);
+        credit.setCurrencyCode(normalizeCurrency(invoice.getCurrencyCode()));
+        credit.setTransactionType("TOP_UP");
+        credit.setFundingSource("ONLINE_TOP_UP");
+        credit.setCreditReason("CUSTOMER_PREPAYMENT");
+        credit.setReference("paymob:" + providerEventId);
+        credit.setIdempotencyKey("paymob-topup-" + providerEventId);
+        credit.setDescription("Online balance top-up via Paymob");
+        billingBalanceService.creditBalance(invoice.getCompanyId(), credit, "PaymobWebhook");
     }
 
     private void validateAttemptOwnership(String providerEventId,

@@ -109,6 +109,22 @@ public class ClientController {
         return clientService.getClientsByYear(companyId, bid);
     }
 
+    @PutMapping("/{companyId}/{clientId}/status/{archived}")
+    public ResponseEntity<Map<String, String>> setClientStatus(
+            @PathVariable("companyId") @Positive int companyId,
+            @PathVariable("clientId") @Positive int clientId,
+            @PathVariable("archived") boolean archived,
+            Principal principal
+    ) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                null,
+                "clients.account.archive"
+        );
+        return ResponseEntity.ok(clientService.setClientStatus(companyId, clientId, archived, principal.getName()));
+    }
+
     @PostMapping("/{companyId}/AddClient")
     public ResponseEntity<Map<String, String>> newUser(
             @Valid @RequestBody CreateClientRequest body,

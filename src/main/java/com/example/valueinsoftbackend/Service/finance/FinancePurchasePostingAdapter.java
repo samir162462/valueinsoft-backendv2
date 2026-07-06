@@ -32,7 +32,8 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
             "purchase_return",
             "supplier_return",
             "vendor_return",
-            "return_to_supplier");
+            "return_to_supplier",
+            "client_tradein_receipt");
 
     private final DbFinanceSetup dbFinanceSetup;
     private final DbFinanceJournal dbFinanceJournal;
@@ -66,8 +67,16 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                     "Currency code must use three uppercase letters");
         }
 
+        boolean clientTradeIn = isClientTradeIn(request);
         Integer supplierId = integerValue(payload, "supplierId");
-        if (supplierId == null) {
+        Integer clientId = integerValue(payload, "clientId");
+        if (clientTradeIn) {
+            if (clientId == null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PURCHASE_CLIENT_REQUIRED",
+                        "Client trade-in posting requires clientId");
+            }
+            supplierId = null;
+        } else if (supplierId == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PURCHASE_SUPPLIER_REQUIRED",
                     "Purchase posting requires supplierId");
         }
@@ -123,6 +132,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
         }
         BigDecimal payableAmount = grossAmount.subtract(settledAmount).setScale(4, RoundingMode.HALF_UP);
 
+        Integer lineCustomerId = clientTradeIn ? clientId : null;
         ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
         FinanceAccountMappingItem inventoryMapping = resolveMapping(request, "purchase.inventory", null);
         for (PurchaseInventoryLine inventoryLine : inventoryLines) {
@@ -132,6 +142,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         request,
                         inventoryLine.amount(),
                         "Purchase return inventory reduction",
+                        lineCustomerId,
                         supplierId,
                         inventoryLine.productId(),
                         inventoryLine.inventoryMovementId(),
@@ -141,7 +152,8 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         inventoryMapping,
                         request,
                         inventoryLine.amount(),
-                        "Purchase inventory receipt",
+                        clientTradeIn ? "Client trade-in inventory receipt" : "Purchase inventory receipt",
+                        lineCustomerId,
                         supplierId,
                         inventoryLine.productId(),
                         inventoryLine.inventoryMovementId(),
@@ -155,6 +167,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         request,
                         taxAmount,
                         "Purchase return VAT reversal",
+                        lineCustomerId,
                         supplierId,
                         null,
                         null,
@@ -165,6 +178,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         request,
                         taxAmount,
                         "Purchase input VAT",
+                        lineCustomerId,
                         supplierId,
                         null,
                         null,
@@ -179,6 +193,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         request,
                         settledAmount,
                         "Purchase return " + paymentMethod + " refund",
+                        lineCustomerId,
                         supplierId,
                         null,
                         null,
@@ -188,7 +203,8 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         resolveMapping(request, "purchase." + paymentMethod, null),
                         request,
                         settledAmount,
-                        "Purchase " + paymentMethod + " payment",
+                        (clientTradeIn ? "Client trade-in " : "Purchase ") + paymentMethod + " payment",
+                        lineCustomerId,
                         supplierId,
                         null,
                         null,
@@ -196,15 +212,21 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
             }
         }
         if (payableAmount.compareTo(ZERO) > 0) {
-            String payableMappingKey = !purchaseReturn && isGoodsReceipt(request)
-                    ? "purchase.grni"
-                    : "purchase.payable";
+            String payableMappingKey;
+            if (clientTradeIn) {
+                payableMappingKey = "purchase.client_payable";
+            } else if (!purchaseReturn && isGoodsReceipt(request)) {
+                payableMappingKey = "purchase.grni";
+            } else {
+                payableMappingKey = "purchase.payable";
+            }
             if (purchaseReturn) {
                 lines.add(debitLine(
                         resolveMapping(request, payableMappingKey, supplierId),
                         request,
                         payableAmount,
                         "Purchase return supplier credit",
+                        lineCustomerId,
                         supplierId,
                         null,
                         null,
@@ -214,7 +236,10 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         resolveMapping(request, payableMappingKey, supplierId),
                         request,
                         payableAmount,
-                        isGoodsReceipt(request) ? "Purchase goods received not invoiced" : "Purchase supplier payable",
+                        clientTradeIn
+                                ? "Client trade-in payable"
+                                : (isGoodsReceipt(request) ? "Purchase goods received not invoiced" : "Purchase supplier payable"),
+                        lineCustomerId,
                         supplierId,
                         null,
                         null,
@@ -231,8 +256,8 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
 
         String journalNumber = dbFinanceJournal.allocateSourceJournalNumber(
                 request.getCompanyId(),
-                purchaseReturn ? "purchase.return" : "purchase.invoice",
-                purchaseReturn ? "PR-" : "PI-");
+                purchaseReturn ? "purchase.return" : (clientTradeIn ? "purchase.client_tradein" : "purchase.invoice"),
+                purchaseReturn ? "PR-" : (clientTradeIn ? "CT-" : "PI-"));
         Integer postedBy = request.getUpdatedBy() == null ? request.getCreatedBy() : request.getUpdatedBy();
         if (postedBy == null) {
             postedBy = 0;
@@ -249,7 +274,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                         request.getSourceId(),
                         request.getPostingDate(),
                         request.getFiscalPeriodId(),
-                        (purchaseReturn ? "Purchase return " : "Purchase ") + request.getSourceId(),
+                        (purchaseReturn ? "Purchase return " : (clientTradeIn ? "Client trade-in purchase " : "Purchase ")) + request.getSourceId(),
                         currencyCode,
                         ONE,
                         totalDebit,
@@ -305,6 +330,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
             FinancePostingRequestItem request,
             BigDecimal amount,
             String description,
+            Integer customerId,
             Integer supplierId,
             Long productId,
             Long inventoryMovementId,
@@ -315,7 +341,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                 amount,
                 ZERO,
                 description,
-                null,
+                customerId,
                 supplierId,
                 productId,
                 inventoryMovementId,
@@ -328,6 +354,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
             FinancePostingRequestItem request,
             BigDecimal amount,
             String description,
+            Integer customerId,
             Integer supplierId,
             Long productId,
             Long inventoryMovementId,
@@ -338,7 +365,7 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                 ZERO,
                 amount,
                 description,
-                null,
+                customerId,
                 supplierId,
                 productId,
                 inventoryMovementId,
@@ -474,6 +501,10 @@ public class FinancePurchasePostingAdapter implements FinancePostingAdapter {
                 || "supplier_return".equals(request.getSourceType())
                 || "vendor_return".equals(request.getSourceType())
                 || "return_to_supplier".equals(request.getSourceType());
+    }
+
+    private boolean isClientTradeIn(FinancePostingRequestItem request) {
+        return "client_tradein_receipt".equals(request.getSourceType());
     }
 
     private BigDecimal totalDebit(List<DbFinanceJournal.PostedSourceJournalLineCommand> lines) {

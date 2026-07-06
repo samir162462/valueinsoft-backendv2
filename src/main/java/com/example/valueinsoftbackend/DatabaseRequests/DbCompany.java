@@ -221,6 +221,9 @@ public class DbCompany {
                 SQLPosReceiptSequences(schemaName, databaseOwner)
         ));
         statements.addAll(SQLModernInventoryFoundation(schemaName, companyId, databaseOwner));
+        // Client trade-in foundation (party/condition columns, payable subledger,
+        // payments, condition audit). Defined in V133; safe to re-run.
+        statements.add("SELECT public.ensure_client_tradein_foundation_for_tenant('" + schemaName + "', " + companyId + ")");
         return statements;
     }
 

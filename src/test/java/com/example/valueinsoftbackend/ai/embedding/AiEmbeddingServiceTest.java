@@ -19,7 +19,7 @@ class AiEmbeddingServiceTest {
         assertFalse(properties.isRagEnabled());
         assertFalse(properties.getRag().isEnabled());
         assertEquals(5, properties.getRag().getTopK());
-        assertEquals(0.72, properties.getRag().getSimilarityThreshold());
+        assertEquals(0.60, properties.getRag().getSimilarityThreshold());
         assertEquals(700, properties.getRag().getChunkTargetTokens());
         assertEquals(120, properties.getRag().getChunkOverlapTokens());
         assertEquals("en", properties.getRag().getDefaultLanguage());

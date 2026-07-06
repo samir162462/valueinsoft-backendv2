@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.ai.provider;
 
+import com.example.valueinsoftbackend.ai.audit.AiUsageMeteringContext;
 import com.example.valueinsoftbackend.ai.config.AiProperties;
 import com.example.valueinsoftbackend.ai.service.AiModelRequest;
 import com.example.valueinsoftbackend.ai.service.AiModelResponse;
@@ -31,9 +32,11 @@ public class GeminiAiProvider implements AiProvider {
 
     private final ChatModel chatModel;
     private final AiProperties aiProperties;
+    private final AiUsageMeteringContext usageMeteringContext;
 
-    public GeminiAiProvider(Map<String, ChatModel> chatModels, AiProperties aiProperties) {
+    public GeminiAiProvider(Map<String, ChatModel> chatModels, AiProperties aiProperties, AiUsageMeteringContext usageMeteringContext) {
         this.aiProperties = aiProperties;
+        this.usageMeteringContext = usageMeteringContext;
         this.chatModel = chatModels.entrySet().stream()
                 .filter(entry -> entry.getKey().toLowerCase().contains("google"))
                 .map(Map.Entry::getValue)
@@ -73,9 +76,11 @@ public class GeminiAiProvider implements AiProvider {
                     lengthOf(request.knowledgeContext()),
                     lengthOf(request.conversationContext()),
                     timeoutMs());
-            return CompletableFuture.supplyAsync(() -> callModel(request))
+            AiModelResponse modelResponse = CompletableFuture.supplyAsync(() -> callModel(request))
                     .orTimeout(Math.max(1, timeoutMs()), TimeUnit.MILLISECONDS)
                     .join();
+            usageMeteringContext.record(modelResponse);
+            return modelResponse;
         } catch (RuntimeException exception) {
             Throwable cause = unwrap(exception);
             if (cause instanceof TimeoutException) {
@@ -113,7 +118,7 @@ public class GeminiAiProvider implements AiProvider {
             log.debug("Gemini model call with functions queued model={} functionsCount={}",
                     modelName(),
                     functions.size());
-            return CompletableFuture.supplyAsync(() -> callModelWithFunctions(request, functions))
+            AiModelResponse modelResponse = CompletableFuture.supplyAsync(() -> callModelWithFunctions(request, functions))
                     .orTimeout(Math.max(1, timeoutMs()), TimeUnit.MILLISECONDS)
                     .exceptionally(exception -> {
                         log.error("Gemini model call with functions failed category={} detail={}",
@@ -122,6 +127,8 @@ public class GeminiAiProvider implements AiProvider {
                         return fallbackResponse("AI response timed out or is temporarily unavailable. Try again shortly.");
                     })
                     .join();
+            usageMeteringContext.record(modelResponse);
+            return modelResponse;
         } catch (RuntimeException exception) {
             log.error("Gemini model call with functions runtime exception category={} detail={}",
                     exceptionCategory(unwrap(exception)),
@@ -188,7 +195,8 @@ public class GeminiAiProvider implements AiProvider {
         SystemMessage systemMessage = new SystemMessage(request.systemPrompt());
         UserMessage userMessage = new UserMessage(userMessageContent);
 
-        String content = chatModel.call(new Prompt(List.of(systemMessage, userMessage)))
+        ChatResponse chatResponse = chatModel.call(new Prompt(List.of(systemMessage, userMessage)));
+        String content = chatResponse
                 .getResult()
                 .getOutput()
                 .getText();
@@ -197,7 +205,8 @@ public class GeminiAiProvider implements AiProvider {
                 request.mode(),
                 Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L),
                 lengthOf(content));
-        return new AiModelResponse(content, modelName(), false, PROVIDER_NAME, AiModelResponse.providerCodeFor(PROVIDER_NAME));
+        return withUsageFrom(chatResponse,
+                new AiModelResponse(content, modelName(), false, PROVIDER_NAME, AiModelResponse.providerCodeFor(PROVIDER_NAME)));
     }
 
     private AiModelResponse callModelWithFunctions(AiModelRequest request, List<ToolCallback> functions) {
@@ -215,7 +224,8 @@ public class GeminiAiProvider implements AiProvider {
                 .toolCallbacks(functions)
                 .build();
 
-        String content = chatModel.call(new Prompt(List.of(systemMessage, userMessage), options))
+        ChatResponse chatResponse = chatModel.call(new Prompt(List.of(systemMessage, userMessage), options));
+        String content = chatResponse
                 .getResult()
                 .getOutput()
                 .getText();
@@ -224,7 +234,27 @@ public class GeminiAiProvider implements AiProvider {
                 chatModel.getClass().getSimpleName(),
                 Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L),
                 lengthOf(content));
-        return new AiModelResponse(content, modelName(), false, PROVIDER_NAME, AiModelResponse.providerCodeFor(PROVIDER_NAME));
+        return withUsageFrom(chatResponse,
+                new AiModelResponse(content, modelName(), false, PROVIDER_NAME, AiModelResponse.providerCodeFor(PROVIDER_NAME)));
+    }
+
+    private AiModelResponse withUsageFrom(ChatResponse chatResponse, AiModelResponse response) {
+        try {
+            var usage = chatResponse == null || chatResponse.getMetadata() == null
+                    ? null
+                    : chatResponse.getMetadata().getUsage();
+            if (usage == null) {
+                return response;
+            }
+            int promptTokens = usage.getPromptTokens() == null ? 0 : usage.getPromptTokens().intValue();
+            int completionTokens = usage.getCompletionTokens() == null ? 0 : usage.getCompletionTokens().intValue();
+            Integer total = usage.getTotalTokens();
+            int totalTokens = total == null || total == 0 ? promptTokens + completionTokens : total;
+            return response.withUsage(promptTokens, completionTokens, totalTokens);
+        } catch (RuntimeException exception) {
+            log.debug("Gemini usage metadata unavailable: {}", exception.getMessage());
+            return response;
+        }
     }
 
     private AiModelResponse fallbackResponse(String message) {

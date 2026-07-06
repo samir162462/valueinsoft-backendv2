@@ -29,7 +29,7 @@ public class AiKnowledgeSearchService {
             return List.of();
         }
 
-        return chunkRepository.findActiveChunks(companyId, "en", 500)
+        return chunkRepository.findActiveChunks(companyId, null, 500)
                 .stream()
                 .map(chunk -> new AiKnowledgeSearchResult(chunk, score(chunk, terms)))
                 .filter(result -> result.score() > 0)
@@ -54,11 +54,15 @@ public class AiKnowledgeSearchService {
             return Set.of();
         }
         Set<String> tokens = new LinkedHashSet<>();
-        Arrays.stream(value.toLowerCase(Locale.ROOT).split("[^a-z0-9]+"))
+        Arrays.stream(value.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{Nd}]+"))
                 .map(String::trim)
-                .filter(token -> token.length() >= 3)
+                .filter(token -> token.length() >= (isAscii(token) ? 3 : 2))
                 .filter(token -> !STOP_WORDS.contains(token))
                 .forEach(tokens::add);
         return tokens;
+    }
+
+    private boolean isAscii(String token) {
+        return token.chars().allMatch(character -> character < 128);
     }
 }

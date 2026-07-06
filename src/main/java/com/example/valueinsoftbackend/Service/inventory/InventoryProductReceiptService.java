@@ -18,6 +18,7 @@ import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitInput;
+import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.AcquisitionSource;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptDetailsRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptOperationMode;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptProductRequest;
@@ -114,12 +115,24 @@ public class InventoryProductReceiptService {
         ProductReceiptProductSnapshot product = resolveProduct(request);
         TrackingType trackingType = TrackingType.defaultIfNull(product.trackingType());
         ProductReceiptDetailsRequest receipt = request.getReceipt();
+        AcquisitionSource acquisitionSource = AcquisitionSource.defaultIfNull(receipt.getAcquisitionSource());
+        String conditionCode = normalizeConditionCode(receipt.getConditionCode());
         BigDecimal totalCost = money(receipt.getUnitCost()).multiply(BigDecimal.valueOf(receipt.getQuantity())).setScale(4, RoundingMode.HALF_UP);
         BigDecimal paidAmount = money(receipt.getPaidAmount());
         BigDecimal remainingAmount = totalCost.subtract(paidAmount).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
         Timestamp receiptTime = Timestamp.valueOf((receipt.getReceiptDate() == null ? LocalDate.now() : receipt.getReceiptDate()).atStartOfDay());
 
         validateReceiptPayload(request, product, trackingType, totalCost, paidAmount);
+        validatePaymentOption(receipt, totalCost, paidAmount);
+
+        DbInventoryProductReceiptRepository.ClientSnapshot tradeInClient = null;
+        if (acquisitionSource.isClientTradeIn()) {
+            tradeInClient = receiptRepository.findClientForUpdate(request.getCompanyId(), receipt.getClientId())
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CLIENT_NOT_FOUND", "Client was not found for this tenant"));
+            if (!tradeInClient.isActive()) {
+                throw new ApiException(HttpStatus.CONFLICT, "CLIENT_NOT_ACTIVE", "Archived clients cannot sell products to the shop");
+            }
+        }
 
         StockBalanceResult balance = receiptRepository.increaseBranchStockBalance(
                 request.getCompanyId(),
@@ -133,57 +146,100 @@ public class InventoryProductReceiptService {
                 request.getBranchId(),
                 product.productId(),
                 receipt.getQuantity(),
-                receipt.getSupplierId(),
+                acquisitionSource.isClientTradeIn() ? 0 : receipt.getSupplierId(),
                 totalCost,
                 normalizePaymentMethod(receipt.getPaymentMethod()),
                 remainingAmount,
                 actorName,
                 referenceId,
                 idempotencyKey,
-                receipt.getNotes());
+                receipt.getNotes(),
+                acquisitionSource.isClientTradeIn() ? "CLIENT" : "SUPPLIER",
+                acquisitionSource.isClientTradeIn() ? receipt.getClientId() : null,
+                conditionCode,
+                blankToNull(receipt.getConditionNotes()));
 
-        insertSerializedUnitsIfRequired(request, product, trackingType, referenceId, actorName);
+        insertSerializedUnitsIfRequired(request, product, trackingType, referenceId, actorName, acquisitionSource, conditionCode);
 
-        int supplierRows = receiptRepository.updateSupplierPurchaseTotals(
-                request.getCompanyId(),
-                request.getBranchId(),
-                receipt.getSupplierId(),
-                totalCost,
-                remainingAmount);
-        if (supplierRows != 1) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Supplier was not found in the selected branch");
+        int legacyTransactionId = 0;
+        FinancePostingRequestItem financeRequest;
+        String paymentStatus = derivePaymentStatus(totalCost, paidAmount, remainingAmount);
+
+        if (acquisitionSource.isClientTradeIn()) {
+            long tradeInReceiptId = receiptRepository.insertClientTradeInReceipt(
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    receipt.getClientId(),
+                    ledgerId,
+                    product.productId(),
+                    referenceId,
+                    receipt.getQuantity(),
+                    conditionCode,
+                    blankToNull(receipt.getConditionNotes()),
+                    money(receipt.getUnitCost()),
+                    totalCost,
+                    paidAmount,
+                    remainingAmount,
+                    paymentStatus,
+                    paidAmount.compareTo(BigDecimal.ZERO) > 0 ? normalizePaymentMethod(receipt.getPaymentMethod()) : null,
+                    idempotencyKey,
+                    actorName);
+
+            financeRequest = financeOperationalPostingService.enqueueClientTradeInReceipt(
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    receipt.getClientId(),
+                    tradeInReceiptId,
+                    product.productId(),
+                    ledgerId,
+                    receipt.getQuantity(),
+                    totalCost,
+                    paidAmount,
+                    normalizePaymentMethod(receipt.getPaymentMethod()),
+                    receiptTime,
+                    actorName);
+        } else {
+            int supplierRows = receiptRepository.updateSupplierPurchaseTotals(
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    receipt.getSupplierId(),
+                    totalCost,
+                    remainingAmount);
+            if (supplierRows != 1) {
+                throw new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_NOT_FOUND", "Supplier was not found in the selected branch");
+            }
+
+            legacyTransactionId = receiptRepository.insertLegacyInventoryTransaction(
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    product.productId(),
+                    actorName,
+                    receipt.getSupplierId(),
+                    receipt.getQuantity(),
+                    totalCost,
+                    normalizePaymentMethod(receipt.getPaymentMethod()),
+                    receiptTime,
+                    remainingAmount);
+
+            financeRequest = financeOperationalPostingService.enqueuePurchaseInventoryTransaction(
+                    request.getCompanyId(),
+                    request.getBranchId(),
+                    new InventoryTransaction(
+                            legacyTransactionId,
+                            (int) product.productId(),
+                            actorName,
+                            receipt.getSupplierId(),
+                            "PurchaseReceipt",
+                            receipt.getQuantity(),
+                            moneyToInt(totalCost),
+                            normalizePaymentMethod(receipt.getPaymentMethod()),
+                            receiptTime,
+                            moneyToInt(remainingAmount)),
+                    legacyTransactionId,
+                    ledgerId);
         }
 
-        int legacyTransactionId = receiptRepository.insertLegacyInventoryTransaction(
-                request.getCompanyId(),
-                request.getBranchId(),
-                product.productId(),
-                actorName,
-                receipt.getSupplierId(),
-                receipt.getQuantity(),
-                totalCost,
-                normalizePaymentMethod(receipt.getPaymentMethod()),
-                receiptTime,
-                remainingAmount);
-
-        FinancePostingRequestItem financeRequest = financeOperationalPostingService.enqueuePurchaseInventoryTransaction(
-                request.getCompanyId(),
-                request.getBranchId(),
-                new InventoryTransaction(
-                        legacyTransactionId,
-                        (int) product.productId(),
-                        actorName,
-                        receipt.getSupplierId(),
-                        "PurchaseReceipt",
-                        receipt.getQuantity(),
-                        moneyToInt(totalCost),
-                        normalizePaymentMethod(receipt.getPaymentMethod()),
-                        receiptTime,
-                        moneyToInt(remainingAmount)),
-                legacyTransactionId,
-                ledgerId);
-
-        ProductReceiptResponse response = buildResponse(referenceId, product, request, balance, ledgerId, totalCost, paidAmount, remainingAmount, legacyTransactionId, financeRequest);
+        ProductReceiptResponse response = buildResponse(referenceId, product, request, balance, ledgerId, totalCost, paidAmount, remainingAmount, legacyTransactionId, financeRequest, acquisitionSource, conditionCode, paymentStatus);
         try {
             receiptRepository.markIdempotencyCompleted(request.getCompanyId(), idempotency.id(), objectMapper.writeValueAsString(response));
         } catch (Exception exception) {
@@ -207,7 +263,8 @@ public class InventoryProductReceiptService {
         }
         BranchTaxonomyResolver.ResolvedClassification classification =
                 validateCreateProductPayload(request.getCompanyId(), request.getBranchId(), productRequest);
-        Product product = toProduct(productRequest, request.getReceipt().getSupplierId(), classification);
+        Product product = toProduct(productRequest, request.getReceipt().getSupplierId(), classification,
+                request.getReceipt().getConditionCode());
         long productId = productCommandRepository.addProduct(product, String.valueOf(request.getBranchId()), request.getCompanyId());
         return receiptRepository.findProductForUpdate(request.getCompanyId(), productId)
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PRODUCT_CREATE_RELOAD_FAILED", "Created product could not be reloaded"));
@@ -226,13 +283,83 @@ public class InventoryProductReceiptService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_REQUIRED", "receipt is required");
         }
         ProductReceiptDetailsRequest receipt = request.getReceipt();
-        TenantSqlIdentifiers.requirePositive(receipt.getSupplierId(), "supplierId");
+        AcquisitionSource acquisitionSource = AcquisitionSource.defaultIfNull(receipt.getAcquisitionSource());
+        if (acquisitionSource.isClientTradeIn()) {
+            if (receipt.getClientId() == null || receipt.getClientId() <= 0) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "CLIENT_ID_REQUIRED", "clientId is required for client trade-in receipts");
+            }
+            if (receipt.getSupplierId() > 0) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "SUPPLIER_NOT_ALLOWED_FOR_TRADE_IN", "supplierId must be omitted for client trade-in receipts");
+            }
+        } else {
+            TenantSqlIdentifiers.requirePositive(receipt.getSupplierId(), "supplierId");
+            if (receipt.getClientId() != null) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "CLIENT_NOT_ALLOWED_FOR_SUPPLIER", "clientId must be omitted for supplier receipts");
+            }
+        }
+        normalizeConditionCode(receipt.getConditionCode());
         if (receipt.getQuantity() <= 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_QUANTITY_INVALID", "receipt.quantity must be greater than zero");
         }
         if (money(receipt.getUnitCost()).compareTo(BigDecimal.ZERO) < 0 || money(receipt.getPaidAmount()).compareTo(BigDecimal.ZERO) < 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_AMOUNT_INVALID", "Receipt amounts must be non-negative");
         }
+    }
+
+    private String normalizeConditionCode(String value) {
+        String normalized = blankToNull(value);
+        if (normalized == null) {
+            return "NEW";
+        }
+        normalized = normalized.trim().toUpperCase(Locale.ROOT);
+        if (!"NEW".equals(normalized) && !"USED".equals(normalized)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CONDITION_CODE_INVALID", "conditionCode must be NEW or USED");
+        }
+        return normalized;
+    }
+
+    private void validatePaymentOption(ProductReceiptDetailsRequest receipt, BigDecimal totalCost, BigDecimal paidAmount) {
+        String option = blankToNull(receipt.getPaymentOption());
+        if (option == null) {
+            return;
+        }
+        option = option.trim().toUpperCase(Locale.ROOT);
+        switch (option) {
+            case "FULL" -> {
+                requirePaymentMethod(receipt);
+                if (paidAmount.compareTo(totalCost) != 0) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_FULL_AMOUNT_MISMATCH", "Pay in full requires paidAmount equal to the receipt total");
+                }
+            }
+            case "PARTIAL" -> {
+                requirePaymentMethod(receipt);
+                if (paidAmount.compareTo(BigDecimal.ZERO) <= 0 || paidAmount.compareTo(totalCost) >= 0) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_PARTIAL_AMOUNT_INVALID", "Partial payment requires paidAmount greater than zero and less than the receipt total");
+                }
+            }
+            case "LATER" -> {
+                if (paidAmount.compareTo(BigDecimal.ZERO) != 0) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_LATER_AMOUNT_INVALID", "Pay later requires paidAmount of zero");
+                }
+            }
+            default -> throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_OPTION_INVALID", "paymentOption must be FULL, PARTIAL, or LATER");
+        }
+    }
+
+    private void requirePaymentMethod(ProductReceiptDetailsRequest receipt) {
+        if (blankToNull(receipt.getPaymentMethod()) == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_METHOD_REQUIRED", "paymentMethod is required when paying now");
+        }
+    }
+
+    private String derivePaymentStatus(BigDecimal totalCost, BigDecimal paidAmount, BigDecimal remainingAmount) {
+        if (remainingAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return "PAID";
+        }
+        if (paidAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return "UNPAID";
+        }
+        return "PARTIALLY_PAID";
     }
 
     private BranchTaxonomyResolver.ResolvedClassification validateCreateProductPayload(int companyId, int branchId, ProductReceiptProductRequest product) {
@@ -354,10 +481,13 @@ public class InventoryProductReceiptService {
                                                  ProductReceiptProductSnapshot product,
                                                  TrackingType trackingType,
                                                  String referenceId,
-                                                 String actorName) {
+                                                 String actorName,
+                                                 AcquisitionSource acquisitionSource,
+                                                 String receiptConditionCode) {
         if (!trackingType.isSerialized()) {
             return;
         }
+        boolean clientTradeIn = acquisitionSource.isClientTradeIn();
         for (SerializedUnitInput input : request.getSerializedUnits()) {
             ProductUnit unit = new ProductUnit();
             unit.setCompanyId(request.getCompanyId());
@@ -368,8 +498,13 @@ public class InventoryProductReceiptService {
             unit.setImei(trackingType == TrackingType.IMEI ? input.getImei().trim() : blankToNull(input.getImei()));
             unit.setSerialNumber(trackingType == TrackingType.SERIAL ? input.getSerialNumber().trim() : blankToNull(input.getSerialNumber()));
             unit.setStatus(ProductUnitStatus.AVAILABLE);
-            unit.setConditionCode(blankToNull(input.getConditionCode()) == null ? "NEW" : input.getConditionCode().trim());
-            unit.setSupplierId((long) request.getReceipt().getSupplierId());
+            unit.setConditionCode(blankToNull(input.getConditionCode()) == null
+                    ? receiptConditionCode
+                    : normalizeConditionCode(input.getConditionCode()));
+            unit.setConditionNotes(blankToNull(request.getReceipt().getConditionNotes()));
+            unit.setSupplierId(clientTradeIn ? null : (long) request.getReceipt().getSupplierId());
+            unit.setSourcePartyType(clientTradeIn ? "CLIENT" : "SUPPLIER");
+            unit.setSourceClientId(clientTradeIn ? request.getReceipt().getClientId().longValue() : null);
             unit.setPurchaseReferenceType("PRODUCT_RECEIPT");
             unit.setPurchaseReferenceId(referenceId);
             long unitId = productUnitRepository.insertProductUnit(unit);
@@ -383,7 +518,7 @@ public class InventoryProductReceiptService {
             movement.setQuantityDelta(BigDecimal.ONE);
             movement.setReferenceType("PRODUCT_RECEIPT");
             movement.setReferenceId(referenceId);
-            movement.setSupplierId((long) request.getReceipt().getSupplierId());
+            movement.setSupplierId(clientTradeIn ? null : (long) request.getReceipt().getSupplierId());
             movement.setActorName(actorName);
             movement.setIdempotencyKey(limit(request.getIdempotencyKey() + ":" + unit.getUnitIdentifier(), 160));
             stockMovementRepository.insertMovement(movement);
@@ -392,7 +527,8 @@ public class InventoryProductReceiptService {
 
     private Product toProduct(ProductReceiptProductRequest request,
                               int supplierId,
-                              BranchTaxonomyResolver.ResolvedClassification classification) {
+                              BranchTaxonomyResolver.ResolvedClassification classification,
+                              String receiptConditionCodeForProduct) {
         Product product = new Product();
         product.setProductName(limit(request.getProductName().trim(), 30));
         product.setBuyingDay(new Timestamp(System.currentTimeMillis()));
@@ -406,7 +542,7 @@ public class InventoryProductReceiptService {
         product.setDesc("");
         product.setBatteryLife(0);
         product.setQuantity(0);
-        product.setPState("New");
+        product.setPState("USED".equals(normalizeConditionCode(receiptConditionCodeForProduct)) ? "Used" : "New");
         product.setSupplierId(supplierId);
         product.setMajor(limit(firstNonBlank(classification.categoryName(), request.getCategoryId() == null ? normalizeBusinessLine(request.getBusinessLineKey()) : String.valueOf(request.getCategoryId())), 30));
         product.setGroupKey(classification.groupKey());
@@ -452,12 +588,28 @@ public class InventoryProductReceiptService {
                                                  BigDecimal paidAmount,
                                                  BigDecimal remainingAmount,
                                                  int legacyTransactionId,
-                                                 FinancePostingRequestItem financeRequest) {
+                                                 FinancePostingRequestItem financeRequest,
+                                                 AcquisitionSource acquisitionSource,
+                                                 String conditionCode,
+                                                 String paymentStatus) {
         return new ProductReceiptResponse(
                 operationId,
                 false,
                 new ProductReceiptResponse.ProductSummary(product.productId(), product.productName(), product.sku(), product.barcode(), product.trackingType().name()),
-                new ProductReceiptResponse.ReceiptSummary(legacyTransactionId, request.getBranchId(), request.getReceipt().getQuantity(), balance.previousQuantity(), balance.newQuantity(), request.getReceipt().getSupplierId(), totalCost, paidAmount, remainingAmount),
+                new ProductReceiptResponse.ReceiptSummary(
+                        legacyTransactionId,
+                        request.getBranchId(),
+                        request.getReceipt().getQuantity(),
+                        balance.previousQuantity(),
+                        balance.newQuantity(),
+                        request.getReceipt().getSupplierId(),
+                        totalCost,
+                        paidAmount,
+                        remainingAmount,
+                        acquisitionSource.name(),
+                        acquisitionSource.isClientTradeIn() ? request.getReceipt().getClientId() : null,
+                        conditionCode,
+                        paymentStatus),
                 new ProductReceiptResponse.LedgerSummary(ledgerId, "PURCHASE_RECEIPT", request.getReceipt().getQuantity()),
                 new ProductReceiptResponse.FinanceSummary(financeRequest == null ? "SKIPPED" : financeRequest.getStatus(), financeRequest == null || financeRequest.getPostingRequestId() == null ? null : financeRequest.getPostingRequestId().toString()),
                 List.of()

@@ -9,6 +9,7 @@ public record AiAdminUsageCompanyDto(
         long completionTokens,
         long totalTokens,
         BigDecimal estimatedCost,
+        BigDecimal estimatedCostUsd,
         BigDecimal averageLatencyMs,
         boolean nearMonthlyTokenLimit
 ) {

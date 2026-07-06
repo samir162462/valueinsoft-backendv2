@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Service;
 
+import com.example.valueinsoftbackend.Config.BillingProperties;
 import com.example.valueinsoftbackend.Service.billing.BillingAccountService;
 import com.example.valueinsoftbackend.Service.billing.BillingEntitlementService;
 import com.example.valueinsoftbackend.Service.billing.BillingInvoicePaymentService;
@@ -50,6 +51,7 @@ public class SubscriptionService {
     private final BillingEntitlementService billingEntitlementService;
     private final PaymentProviderResolver paymentProviderResolver;
     private final BillingInvoicePaymentService billingInvoicePaymentService;
+    private final BillingProperties billingProperties;
 
     public SubscriptionService(DbModernSubscription dbModernSubscription,
                                DbBillingWriteModels dbBillingWriteModels,
@@ -62,7 +64,8 @@ public class SubscriptionService {
                                BranchSubscriptionService branchSubscriptionService,
                                BillingEntitlementService billingEntitlementService,
                                PaymentProviderResolver paymentProviderResolver,
-                               BillingInvoicePaymentService billingInvoicePaymentService) {
+                               BillingInvoicePaymentService billingInvoicePaymentService,
+                               BillingProperties billingProperties) {
         this.dbModernSubscription = dbModernSubscription;
         this.dbBillingWriteModels = dbBillingWriteModels;
         this.dbCompany = dbCompany;
@@ -75,6 +78,11 @@ public class SubscriptionService {
         this.billingEntitlementService = billingEntitlementService;
         this.paymentProviderResolver = paymentProviderResolver;
         this.billingInvoicePaymentService = billingInvoicePaymentService;
+        this.billingProperties = billingProperties;
+    }
+
+    private int paymentGraceDays() {
+        return Math.max(0, billingProperties.getDunningGraceDays());
     }
 
     public List<AppModelSubscription> getBranchSubscription(int branchId) {
@@ -153,7 +161,7 @@ public class SubscriptionService {
         Branch branch = dbBranch.getBranchById(branchId);
         TenantConfig tenant = dbTenants.getTenantById(branch.getBranchOfCompanyId());
         if (tenant != null && "suspended".equalsIgnoreCase(tenant.getStatus())) {
-            Map<String, Object> details = dbModernSubscription.getBranchActiveState(branchId);
+            Map<String, Object> details = dbModernSubscription.getBranchActiveState(branchId, paymentGraceDays());
             if (details == null) {
                 details = new java.util.HashMap<>();
             }
@@ -165,7 +173,7 @@ public class SubscriptionService {
             return details;
         }
 
-        Map<String, Object> details = dbModernSubscription.getBranchActiveState(branchId);
+        Map<String, Object> details = dbModernSubscription.getBranchActiveState(branchId, paymentGraceDays());
         if (details != null && tenant != null) {
             details.put("tenantStatus", tenant.getStatus());
         }
@@ -216,7 +224,7 @@ public class SubscriptionService {
             return true;
         }
 
-        Map<String, Object> branchActiveState = dbModernSubscription.getBranchActiveState(branchId);
+        Map<String, Object> branchActiveState = dbModernSubscription.getBranchActiveState(branchId, paymentGraceDays());
         return branchActiveState == null || !Boolean.TRUE.equals(branchActiveState.get("active"));
     }
 

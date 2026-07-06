@@ -509,6 +509,15 @@ public class PlatformAdminController {
         return platformAdminBillingService.runDunningCycleForAuthenticatedUser(principal.getName());
     }
 
+    @PostMapping("/billing/ai-usage/run")
+    public PlatformBillingOperationResponse runAiUsageBilling(Principal principal,
+                                                              @RequestParam(value = "month", required = false) String month) {
+        java.time.YearMonth billingMonth = month == null || month.isBlank()
+                ? null
+                : java.time.YearMonth.parse(month.trim());
+        return platformAdminBillingService.runAiUsageBillingForAuthenticatedUser(principal.getName(), billingMonth);
+    }
+
     @PostMapping("/billing/invoices/{billingInvoiceId}/retry")
     public PlatformBillingRetryInvoiceResponse retryBillingInvoice(Principal principal,
                                                                    @PathVariable long billingInvoiceId) {

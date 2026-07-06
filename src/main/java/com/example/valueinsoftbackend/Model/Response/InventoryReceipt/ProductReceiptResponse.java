@@ -44,6 +44,10 @@ public class ProductReceiptResponse {
         private BigDecimal totalCost;
         private BigDecimal paidAmount;
         private BigDecimal remainingAmount;
+        private String acquisitionSource;
+        private Integer clientId;
+        private String conditionCode;
+        private String paymentStatus;
     }
 
     @Data

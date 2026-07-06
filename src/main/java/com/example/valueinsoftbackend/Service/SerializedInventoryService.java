@@ -347,6 +347,15 @@ public class SerializedInventoryService {
         }
         String unitIdentifier = trackingType == TrackingType.IMEI ? imei : serialNumber;
         String conditionCode = blankToNull(conditionCodeInput);
+        if (conditionCode != null
+                && unit.getConditionCode() != null
+                && !conditionCode.equalsIgnoreCase(unit.getConditionCode())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "CONDITION_CHANGE_REQUIRES_CORRECTION",
+                    "Changing a posted unit's condition requires the auditable condition correction flow"
+            );
+        }
 
         int updated;
         try {
@@ -366,6 +375,57 @@ public class SerializedInventoryService {
 
         if (updated != 1) {
             throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_UPDATE_CONFLICT", "Unit could not be updated because its status changed");
+        }
+
+        return productUnitRepository.findById(safeCompanyId, safeProductUnitId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SERIALIZED_UNIT_NOT_FOUND", "Unit was not found after update"));
+    }
+
+    /**
+     * Auditable correction flow for a posted unit's condition (NEW <-> USED).
+     * A reason is mandatory and every change is written to
+     * inventory_unit_condition_audit before the unit is updated.
+     */
+    @Transactional
+    public ProductUnit correctSerializedUnitCondition(long companyId,
+                                                      long branchId,
+                                                      long productUnitId,
+                                                      String newConditionCode,
+                                                      String reason,
+                                                      String actorName) {
+        long safeCompanyId = requirePositive(companyId, "companyId");
+        long safeBranchId = requirePositive(branchId, "branchId");
+        long safeProductUnitId = requirePositive(productUnitId, "productUnitId");
+        String safeReason = requireNonBlank(reason, "reason");
+        String normalizedCondition = requireNonBlank(newConditionCode, "conditionCode").toUpperCase(Locale.ROOT);
+        if (!"NEW".equals(normalizedCondition) && !"USED".equals(normalizedCondition)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CONDITION_CODE_INVALID", "conditionCode must be NEW or USED");
+        }
+
+        ProductUnit unit = productUnitRepository.findById(safeCompanyId, safeProductUnitId)
+                .filter(found -> found.getBranchId() == safeBranchId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "SERIALIZED_UNIT_NOT_FOUND",
+                        "Unit was not found for this branch"
+                ));
+
+        if (normalizedCondition.equalsIgnoreCase(unit.getConditionCode())) {
+            throw new ApiException(HttpStatus.CONFLICT, "CONDITION_UNCHANGED", "Unit already has this condition");
+        }
+
+        productUnitRepository.insertConditionAudit(
+                safeCompanyId,
+                safeBranchId,
+                safeProductUnitId,
+                null,
+                unit.getConditionCode(),
+                normalizedCondition,
+                safeReason,
+                actorName);
+        int updated = productUnitRepository.updateUnitCondition(safeCompanyId, safeProductUnitId, normalizedCondition);
+        if (updated != 1) {
+            throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_UPDATE_CONFLICT", "Unit condition could not be updated");
         }
 
         return productUnitRepository.findById(safeCompanyId, safeProductUnitId)

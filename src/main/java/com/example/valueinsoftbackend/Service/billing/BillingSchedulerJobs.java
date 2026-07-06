@@ -15,11 +15,17 @@ public class BillingSchedulerJobs {
 
     private final BillingSchedulerService billingSchedulerService;
     private final BillingProperties billingProperties;
+    private final AiUsageBillingService aiUsageBillingService;
+    private final com.example.valueinsoftbackend.ai.config.AiProperties aiProperties;
 
     public BillingSchedulerJobs(BillingSchedulerService billingSchedulerService,
-                                BillingProperties billingProperties) {
+                                BillingProperties billingProperties,
+                                AiUsageBillingService aiUsageBillingService,
+                                com.example.valueinsoftbackend.ai.config.AiProperties aiProperties) {
         this.billingSchedulerService = billingSchedulerService;
         this.billingProperties = billingProperties;
+        this.aiUsageBillingService = aiUsageBillingService;
+        this.aiProperties = aiProperties;
     }
 
     @Scheduled(cron = "${vls.billing.renewal-scheduler-cron}")
@@ -38,5 +44,15 @@ public class BillingSchedulerJobs {
         }
         log.info("Running billing dunning scheduler");
         billingSchedulerService.runDunningCycle();
+    }
+
+    /** Bills last month's metered AI usage on the 1st of every month at 03:30. */
+    @Scheduled(cron = "${vls.billing.ai-usage-billing-cron:0 30 3 1 * *}")
+    public void runAiUsageBillingScheduler() {
+        if (aiProperties.getUsageBilling() == null || !aiProperties.getUsageBilling().isEnabled()) {
+            return;
+        }
+        log.info("Running monthly AI usage billing scheduler");
+        aiUsageBillingService.runMonthlyAiUsageBilling(java.time.YearMonth.now().minusMonths(1), null);
     }
 }

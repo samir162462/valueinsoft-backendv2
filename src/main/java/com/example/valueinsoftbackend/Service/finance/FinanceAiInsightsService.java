@@ -44,6 +44,7 @@ public class FinanceAiInsightsService {
     private final AiInsightCacheService cacheService;
     private final AiModelClient modelClient;
     private final ObjectMapper objectMapper;
+    private final com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService;
 
     public FinanceAiInsightsService(AiPermissionService aiPermissionService,
                                     AiRateLimitService rateLimitService,
@@ -51,7 +52,8 @@ public class FinanceAiInsightsService {
                                     AiSecurityContextResolver securityContextResolver,
                                     AiInsightCacheService cacheService,
                                     AiModelClient modelClient,
-                                    ObjectMapper objectMapper) {
+                                    ObjectMapper objectMapper,
+                                    com.example.valueinsoftbackend.ai.audit.AiUsageLogService usageLogService) {
         this.aiPermissionService = aiPermissionService;
         this.rateLimitService = rateLimitService;
         this.costTrackingService = costTrackingService;
@@ -59,6 +61,7 @@ public class FinanceAiInsightsService {
         this.cacheService = cacheService;
         this.modelClient = modelClient;
         this.objectMapper = objectMapper;
+        this.usageLogService = usageLogService;
     }
 
     public FinanceAiInsightsResponse generate(FinanceAiInsightsRequest request, Principal principal) {
@@ -82,6 +85,7 @@ public class FinanceAiInsightsService {
         rateLimitService.validateDailyUserRequestLimit(context);
         costTrackingService.validateCompanyMonthlyTokenLimit(context);
 
+        long startedAt = System.nanoTime();
         AiModelResponse modelResponse = modelClient.generate(new AiModelRequest(
                 systemPrompt(),
                 userPrompt(request, snapshotJson),
@@ -90,6 +94,9 @@ public class FinanceAiInsightsService {
                 "",
                 "deepseek"
         ));
+        // Metered billing: consume the token usage recorded by the provider call above.
+        usageLogService.logChatUsage(context.companyId(), context.userId(), null,
+                Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L));
 
         FinanceAiInsightsResponse parsed = parseModelResponse(modelResponse);
         if (parsed != null) {

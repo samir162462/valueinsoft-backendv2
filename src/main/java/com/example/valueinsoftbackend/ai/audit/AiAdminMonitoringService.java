@@ -60,6 +60,10 @@ public class AiAdminMonitoringService {
         BigDecimal estimatedCost = companies.stream()
                 .map(AiAdminUsageCompanyDto::estimatedCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal estimatedCostUsd = companies.stream()
+                .map(AiAdminUsageCompanyDto::estimatedCostUsd)
+                .filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal averageLatency = weightedAverageLatency(companies, totalRequests);
         long companiesNearLimit = companies.stream().filter(AiAdminUsageCompanyDto::nearMonthlyTokenLimit).count();
         return new AiAdminUsageResponse(
@@ -69,6 +73,7 @@ public class AiAdminMonitoringService {
                 totalRequests,
                 totalTokens,
                 estimatedCost,
+                estimatedCostUsd,
                 averageLatency,
                 companiesNearLimit,
                 companies

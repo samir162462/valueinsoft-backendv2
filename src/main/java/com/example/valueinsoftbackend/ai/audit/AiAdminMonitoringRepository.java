@@ -35,6 +35,7 @@ public class AiAdminMonitoringRepository {
                        COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
                        COALESCE(SUM(total_tokens), 0) AS total_tokens,
                        COALESCE(SUM(estimated_cost), 0) AS estimated_cost,
+                       COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd,
                        COALESCE(AVG(duration_ms), 0) AS average_latency_ms
                 FROM public.ai_usage_log
                 WHERE created_at >= :fromDate
@@ -108,6 +109,7 @@ public class AiAdminMonitoringRepository {
                     rs.getLong("completion_tokens"),
                     totalTokens,
                     defaultDecimal(rs.getBigDecimal("estimated_cost")),
+                    defaultDecimal(rs.getBigDecimal("estimated_cost_usd")),
                     defaultDecimal(rs.getBigDecimal("average_latency_ms")),
                     nearLimitThreshold > 0 && totalTokens >= nearLimitThreshold
             );

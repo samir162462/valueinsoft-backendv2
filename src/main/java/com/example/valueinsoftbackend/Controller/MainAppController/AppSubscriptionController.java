@@ -10,9 +10,12 @@ import lombok.extern.slf4j.Slf4j;
 import com.example.valueinsoftbackend.Config.BillingProperties;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Branch;
+import com.example.valueinsoftbackend.Model.Billing.BillingBalanceTopUpRequest;
+import com.example.valueinsoftbackend.Model.Billing.BillingBalanceTopUpResponse;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationRequest;
 import com.example.valueinsoftbackend.Model.Billing.BillingPaymentInitiationResponse;
 import com.example.valueinsoftbackend.Model.Request.CreateSubscriptionRequest;
+import com.example.valueinsoftbackend.Service.billing.BillingBalanceTopUpService;
 import com.example.valueinsoftbackend.Service.billing.BillingPaymentInitiationCheckoutHydrator;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.branch.BranchService;
@@ -38,17 +41,20 @@ public class AppSubscriptionController {
     private final AuthorizationService authorizationService;
     private final BillingProperties billingProperties;
     private final BillingPaymentInitiationCheckoutHydrator checkoutHydrator;
+    private final BillingBalanceTopUpService billingBalanceTopUpService;
 
     public AppSubscriptionController(SubscriptionService subscriptionService,
                                      BranchService branchService,
                                      AuthorizationService authorizationService,
                                      BillingProperties billingProperties,
-                                     BillingPaymentInitiationCheckoutHydrator checkoutHydrator) {
+                                     BillingPaymentInitiationCheckoutHydrator checkoutHydrator,
+                                     BillingBalanceTopUpService billingBalanceTopUpService) {
         this.subscriptionService = subscriptionService;
         this.branchService = branchService;
         this.authorizationService = authorizationService;
         this.billingProperties = billingProperties;
         this.checkoutHydrator = checkoutHydrator;
+        this.billingBalanceTopUpService = billingBalanceTopUpService;
     }
 
     @RequestMapping(value = "/{branchId}", method = RequestMethod.GET)
@@ -92,6 +98,28 @@ public class AppSubscriptionController {
         );
         BillingPaymentInitiationResponse response =
                 checkoutHydrator.hydrateCheckoutUrl(subscriptionService.initiateBranchPayment(branchId, request, principal.getName()));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/{branchId}/topup")
+    public ResponseEntity<BillingBalanceTopUpResponse> initiateBalanceTopUp(
+            @PathVariable @Positive int branchId,
+            @Valid @RequestBody BillingBalanceTopUpRequest request,
+            Principal principal) {
+        assertBalanceFirstApisEnabled();
+        Branch branch = branchService.getBranchById(branchId);
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                branch.getBranchOfCompanyId(),
+                branchId,
+                "company.settings.edit"
+        );
+        BillingBalanceTopUpResponse response = billingBalanceTopUpService.initiateTopUp(
+                branch.getBranchOfCompanyId(),
+                branchId,
+                request,
+                principal.getName()
+        );
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

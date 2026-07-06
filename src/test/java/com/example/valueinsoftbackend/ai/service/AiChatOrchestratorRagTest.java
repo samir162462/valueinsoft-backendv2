@@ -100,10 +100,10 @@ class AiChatOrchestratorRagTest {
                 ""
         );
 
-        assertEquals("old behavior", result.answer());
+        assertEquals("rag answer", result.answer());
         verify(retrieverService, never()).retrieve(any());
-        verify(modelClient, never()).generate(any());
-        verify(functionCallingService).execute(anyString(), any(), any(), any(), anyString(), any());
+        verify(modelClient).generate(any());
+        verify(functionCallingService, never()).execute(anyString(), any(), any(), any(), anyString(), any());
     }
 
     @Test
@@ -111,17 +111,17 @@ class AiChatOrchestratorRagTest {
         properties.getRag().setEnabled(true);
 
         AiChatOrchestratorService.OrchestratedChatResult result = orchestrator.answer(
-                request("INVENTORY", "How do I add a product?", 100L),
-                "INVENTORY",
+                request("BUSINESS", "Give me a general business answer", 100L),
+                "BUSINESS",
                 securityContext,
                 UUID.randomUUID(),
                 ""
         );
 
-        assertEquals("old behavior", result.answer());
+        assertEquals("rag answer", result.answer());
         verify(retrieverService, never()).retrieve(any());
-        verify(modelClient, never()).generate(any());
-        verify(functionCallingService).execute(anyString(), any(), any(), any(), anyString(), any());
+        verify(modelClient).generate(any());
+        verify(functionCallingService, never()).execute(anyString(), any(), any(), any(), anyString(), any());
     }
 
     @Test
@@ -180,7 +180,29 @@ class AiChatOrchestratorRagTest {
     }
 
     @Test
-    void retrievalExceptionFallsBackToOldBehavior() {
+    void retrievedKnowledgeWithModelFailureReturnsSourcedFallbackAnswer() {
+        properties.getRag().setEnabled(true);
+        when(retrieverService.retrieve(any())).thenReturn(List.of(retrievedChunk()));
+        when(modelClient.generate(any())).thenThrow(new RuntimeException("provider unavailable"));
+
+        AiChatOrchestratorService.OrchestratedChatResult result = orchestrator.answer(
+                request("HELP", "How do I manage payments?", 100L),
+                "HELP",
+                securityContext,
+                UUID.randomUUID(),
+                ""
+        );
+
+        assertTrue(result.answer().contains("I found relevant ValueInSoft knowledge-base sources"));
+        assertTrue(result.answer().contains("Add products from Inventory."));
+        assertEquals("RAG", result.providerCode());
+        assertFalse(result.sources().isEmpty());
+        assertEquals("FALLBACK", result.toolCalls().get(0).status());
+        verify(functionCallingService, never()).execute(anyString(), any(), any(), any(), anyString(), any());
+    }
+
+    @Test
+    void retrievalExceptionReturnsGroundedUnavailableAnswer() {
         properties.getRag().setEnabled(true);
         when(retrieverService.retrieve(any())).thenThrow(new RuntimeException("vector unavailable"));
 
@@ -192,12 +214,15 @@ class AiChatOrchestratorRagTest {
                 ""
         );
 
-        assertEquals("old behavior", result.answer());
-        verify(functionCallingService).execute(anyString(), any(), any(), any(), anyString(), any());
+        assertTrue(result.answer().contains("will not guess"));
+        assertEquals("RAG", result.providerCode());
+        assertEquals(1, result.toolCalls().size());
+        assertEquals("NO_MATCH", result.toolCalls().get(0).status());
+        verify(functionCallingService, never()).execute(anyString(), any(), any(), any(), anyString(), any());
     }
 
     @Test
-    void noRetrievedChunksFallsBackToOldBehavior() {
+    void noRetrievedChunksReturnsGroundedNoKnowledgeAnswer() {
         properties.getRag().setEnabled(true);
         when(retrieverService.retrieve(any())).thenReturn(List.of());
 
@@ -209,8 +234,32 @@ class AiChatOrchestratorRagTest {
                 ""
         );
 
-        assertEquals("old behavior", result.answer());
-        verify(functionCallingService).execute(anyString(), any(), any(), any(), anyString(), any());
+        assertTrue(result.answer().contains("could not find enough matching ValueInSoft knowledge-base content"));
+        assertEquals("RAG", result.providerCode());
+        assertEquals(1, result.toolCalls().size());
+        assertEquals("NO_MATCH", result.toolCalls().get(0).status());
+        verify(functionCallingService, never()).execute(anyString(), any(), any(), any(), anyString(), any());
+    }
+
+    @Test
+    void arabicPosQuestionWithoutRetrievedChunksUsesBuiltInWorkflowFallback() {
+        properties.getRag().setEnabled(true);
+        when(retrieverService.retrieve(any())).thenReturn(List.of());
+
+        AiChatOrchestratorService.OrchestratedChatResult result = orchestrator.answer(
+                request("HELP", "كيف أستخدم نقطة البيع؟", null),
+                "HELP",
+                securityContext,
+                UUID.randomUUID(),
+                ""
+        );
+
+        assertTrue(result.answer().contains("نقطة البيع"));
+        assertEquals("Built-in Help", result.providerName());
+        assertEquals("BUILTIN_HELP", result.sources().get(0).type());
+        assertEquals("aiBuiltInHelp", result.toolCalls().get(0).toolName());
+        verify(modelClient, never()).generate(any());
+        verify(functionCallingService, never()).execute(anyString(), any(), any(), any(), anyString(), any());
     }
 
     private AiChatRequest request(String mode, String message, Long branchId) {

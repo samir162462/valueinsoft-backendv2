@@ -61,6 +61,22 @@ public class AiMessageRepository {
     public List<AiMessageRecord> findByConversation(UUID conversationId, int limit) {
         return jdbcTemplate.query("""
                 SELECT id, conversation_id, company_id, branch_id, user_id, role, content, token_count, created_at
+                FROM (
+                    SELECT id, conversation_id, company_id, branch_id, user_id, role, content, token_count, created_at
+                    FROM public.ai_message
+                    WHERE conversation_id = :conversationId
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                ) recent_messages
+                ORDER BY created_at ASC
+                """, new MapSqlParameterSource()
+                .addValue("conversationId", conversationId)
+                .addValue("limit", Math.max(1, Math.min(limit, 100))), ROW_MAPPER);
+    }
+
+    public List<AiMessageRecord> findOldestByConversation(UUID conversationId, int limit) {
+        return jdbcTemplate.query("""
+                SELECT id, conversation_id, company_id, branch_id, user_id, role, content, token_count, created_at
                 FROM public.ai_message
                 WHERE conversation_id = :conversationId
                 ORDER BY created_at ASC
@@ -68,6 +84,15 @@ public class AiMessageRepository {
                 """, new MapSqlParameterSource()
                 .addValue("conversationId", conversationId)
                 .addValue("limit", Math.max(1, Math.min(limit, 100))), ROW_MAPPER);
+    }
+
+    public int countByConversation(UUID conversationId) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM public.ai_message
+                WHERE conversation_id = :conversationId
+                """, new MapSqlParameterSource("conversationId", conversationId), Integer.class);
+        return count == null ? 0 : count;
     }
 
     private static Long nullableLong(Object value) {

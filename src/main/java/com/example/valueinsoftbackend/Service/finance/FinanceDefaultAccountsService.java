@@ -238,6 +238,8 @@ public class FinanceDefaultAccountsService {
         s.add(header("2000", "Liabilities",        "liability", "credit", null));
         s.add(detail("2100", "Accounts Payable",   "liability", "credit", "2000",
                 true,  false, true,  false, false));
+        s.add(detail("2110", "Client Trade-In Payables", "liability", "credit", "2000",
+                true,  true,  false, false, false));
         s.add(detail("2200", "Output VAT Payable", "liability", "credit", "2000",
                 true,  false, false, false, false));
         s.add(detail("2300", "Customer Deposits",  "liability", "credit", "2000",
@@ -312,6 +314,7 @@ public class FinanceDefaultAccountsService {
         s.add(new MappingSeed("purchase.inventory",  "1200"));
         s.add(new MappingSeed("purchase.input_vat",  "1300"));
         s.add(new MappingSeed("purchase.payable",    "2100"));
+        s.add(new MappingSeed("purchase.client_payable", "2110"));
         s.add(new MappingSeed("purchase.grni",       "2400"));
         s.add(new MappingSeed("purchase.cash",       "1011"));
         s.add(new MappingSeed("purchase.bank",       "1021"));

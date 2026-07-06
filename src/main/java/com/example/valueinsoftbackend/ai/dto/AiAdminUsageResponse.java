@@ -12,6 +12,7 @@ public record AiAdminUsageResponse(
         long totalRequests,
         long totalTokens,
         BigDecimal estimatedCost,
+        BigDecimal estimatedCostUsd,
         BigDecimal averageLatencyMs,
         long companiesNearLimit,
         List<AiAdminUsageCompanyDto> companies

@@ -44,6 +44,8 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
             "supplier_payment",
             "supplier_receipt",
             "vendor_payment");
+    private static final Set<String> CLIENT_TRADEIN_PAYMENT_SOURCE_TYPES = Set.of(
+            "client_tradein_payment");
 
     private final DbFinanceSetup dbFinanceSetup;
     private final DbFinanceJournal dbFinanceJournal;
@@ -67,9 +69,10 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         if (!SETTLEMENT_SOURCE_TYPES.contains(request.getSourceType())
                 && !CUSTOMER_RECEIPT_SOURCE_TYPES.contains(request.getSourceType())
                 && !BILLING_BALANCE_SOURCE_TYPES.contains(request.getSourceType())
-                && !SUPPLIER_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())) {
+                && !SUPPLIER_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())
+                && !CLIENT_TRADEIN_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PAYMENT_SOURCE_TYPE_UNSUPPORTED",
-                    "Payment posting adapter currently supports settlement, customer receipt, billing balance settlement, and supplier payment source types only");
+                    "Payment posting adapter currently supports settlement, customer receipt, billing balance settlement, supplier payment, and client trade-in payment source types only");
         }
 
         JsonNode payload = parsePayload(request);
@@ -93,6 +96,9 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
         }
         if (SUPPLIER_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())) {
             return postSupplierPayment(request, payload, currencyCode);
+        }
+        if (CLIENT_TRADEIN_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())) {
+            return postClientTradeInPayment(request, payload, currencyCode);
         }
         return postSettlement(request, payload, currencyCode);
     }
@@ -379,6 +385,49 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 "SP-",
                 "supplier_payment",
                 "Supplier payment " + request.getSourceId(),
+                lines);
+    }
+
+    private UUID postClientTradeInPayment(FinancePostingRequestItem request, JsonNode payload, String currencyCode) {
+        Integer clientId = integerValue(payload, "clientId");
+        if (clientId == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_CLIENT_TRADEIN_PAYMENT_CLIENT_REQUIRED",
+                    "Client trade-in payment posting requires clientId");
+        }
+
+        BigDecimal amount = firstOptionalAmount(payload, "amountPaid", "amount", "grossAmount", "netAmount");
+        if (amount.compareTo(ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_CLIENT_TRADEIN_PAYMENT_AMOUNT_REQUIRED",
+                    "Client trade-in payment posting requires a positive amount");
+        }
+
+        String paymentMethod = normalizePaymentMethod(text(payload, "paymentMethod", "cash"));
+        String paymentId = firstText(payload, "paymentId", "clientTradeInPaymentId");
+        ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
+        lines.add(debitLine(
+                resolveMapping(request, "purchase.client_payable", null),
+                request,
+                amount,
+                "Client trade-in payable settlement",
+                paymentId,
+                clientId,
+                null));
+        lines.add(creditLine(
+                resolveMapping(request, paymentInstrumentMappingKey(paymentMethod), null),
+                request,
+                amount,
+                "Client trade-in payment " + paymentMethod,
+                paymentId,
+                clientId,
+                null));
+
+        return createPostedPaymentJournal(
+                request,
+                currencyCode,
+                "payment.client_tradein_payment",
+                "CP-",
+                "payment",
+                "Client trade-in payment " + request.getSourceId(),
                 lines);
     }
 

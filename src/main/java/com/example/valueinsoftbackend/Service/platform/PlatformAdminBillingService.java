@@ -30,15 +30,18 @@ public class PlatformAdminBillingService {
     private final PlatformAuthorizationService platformAuthorizationService;
     private final BillingSchedulerService billingSchedulerService;
     private final ManualBillingAdjustmentService manualBillingAdjustmentService;
+    private final com.example.valueinsoftbackend.Service.billing.AiUsageBillingService aiUsageBillingService;
 
     public PlatformAdminBillingService(DbBillingAdminReadModels dbBillingAdminReadModels,
                                        PlatformAuthorizationService platformAuthorizationService,
                                        BillingSchedulerService billingSchedulerService,
-                                       ManualBillingAdjustmentService manualBillingAdjustmentService) {
+                                       ManualBillingAdjustmentService manualBillingAdjustmentService,
+                                       com.example.valueinsoftbackend.Service.billing.AiUsageBillingService aiUsageBillingService) {
         this.dbBillingAdminReadModels = dbBillingAdminReadModels;
         this.platformAuthorizationService = platformAuthorizationService;
         this.billingSchedulerService = billingSchedulerService;
         this.manualBillingAdjustmentService = manualBillingAdjustmentService;
+        this.aiUsageBillingService = aiUsageBillingService;
     }
 
     public PlatformBillingSummaryResponse getBillingSummaryForAuthenticatedUser(String authenticatedName, String packageId) {
@@ -208,6 +211,15 @@ public class PlatformAdminBillingService {
     public PlatformBillingOperationResponse runDunningCycleForAuthenticatedUser(String authenticatedName) {
         platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.admin.write");
         return billingSchedulerService.runDunningCycle(authenticatedName);
+    }
+
+    public PlatformBillingOperationResponse runAiUsageBillingForAuthenticatedUser(String authenticatedName,
+                                                                                  java.time.YearMonth billingMonth) {
+        platformAuthorizationService.requirePlatformCapability(authenticatedName, "platform.admin.write");
+        return aiUsageBillingService.runMonthlyAiUsageBilling(
+                billingMonth == null ? java.time.YearMonth.now().minusMonths(1) : billingMonth,
+                authenticatedName
+        );
     }
 
     public PlatformBillingRetryInvoiceResponse retryInvoiceForAuthenticatedUser(String authenticatedName,

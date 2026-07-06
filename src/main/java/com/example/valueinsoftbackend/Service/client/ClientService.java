@@ -48,6 +48,25 @@ public class ClientService {
         return dbClient.getClientsByYear(companyId, branchId);
     }
 
+    /**
+     * Archive (never hard-delete) a client. Archived clients keep their
+     * history but can no longer be selected for new trade-in receipts or
+     * payments.
+     */
+    public Map<String, String> setClientStatus(int companyId, int clientId, boolean archived, String actorName) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(clientId, "clientId");
+        int updated = dbClient.updateClientStatus(companyId, clientId, archived ? "ARCHIVED" : "ACTIVE", actorName);
+        Map<String, String> response = new HashMap<>();
+        response.put("title", updated == 1
+                ? (archived ? "client archived" : "client restored")
+                : "client not found");
+        response.put("updated", String.valueOf(updated == 1));
+        log.info("Client {} for company {} set to {} by {} (rows {})", clientId, companyId,
+                archived ? "ARCHIVED" : "ACTIVE", actorName, updated);
+        return response;
+    }
+
     public Map<String, String> addClient(int companyId, CreateClientRequest request) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
         String message = dbClient.addClient(

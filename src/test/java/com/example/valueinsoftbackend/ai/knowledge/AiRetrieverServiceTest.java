@@ -64,7 +64,7 @@ class AiRetrieverServiceTest {
         ArgumentCaptor<AiRetrievalRequest> captor = ArgumentCaptor.forClass(AiRetrievalRequest.class);
         verify(chunkRepository).vectorSearch(captor.capture(), eq(queryVector));
         assertEquals(5, captor.getValue().topK());
-        assertEquals(0.72, captor.getValue().similarityThreshold());
+        assertEquals(0.60, captor.getValue().similarityThreshold());
         assertEquals("en", captor.getValue().language());
     }
 

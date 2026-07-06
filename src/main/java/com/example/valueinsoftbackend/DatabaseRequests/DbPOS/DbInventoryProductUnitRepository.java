@@ -32,7 +32,10 @@ public class DbInventoryProductUnitRepository {
             rs.getString("serial_number"),
             ProductUnitStatus.valueOf(rs.getString("status")),
             rs.getString("condition_code"),
+            rs.getString("condition_notes"),
             getLongOrNull(rs, "supplier_id"),
+            rs.getString("source_party_type"),
+            getLongOrNull(rs, "source_client_id"),
             rs.getString("purchase_reference_type"),
             rs.getString("purchase_reference_id"),
             getLongOrNull(rs, "purchase_line_id"),
@@ -59,12 +62,14 @@ public class DbInventoryProductUnitRepository {
         String sql = """
                 INSERT INTO %s (
                     company_id, branch_id, product_id, tracking_type, unit_identifier,
-                    imei, serial_number, status, condition_code, supplier_id,
+                    imei, serial_number, status, condition_code, condition_notes, supplier_id,
+                    source_party_type, source_client_id,
                     purchase_reference_type, purchase_reference_id, purchase_line_id,
                     received_at, status_updated_at, created_at, updated_at, version
                 ) VALUES (
                     :companyId, :branchId, :productId, :trackingType, :unitIdentifier,
-                    :imei, :serialNumber, :status, :conditionCode, :supplierId,
+                    :imei, :serialNumber, :status, :conditionCode, :conditionNotes, :supplierId,
+                    :sourcePartyType, :sourceClientId,
                     :purchaseReferenceType, :purchaseReferenceId, :purchaseLineId,
                     :receivedAt, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
                 )
@@ -270,6 +275,49 @@ public class DbInventoryProductUnitRepository {
         );
     }
 
+    public int updateUnitCondition(long companyId, long productUnitId, String conditionCode) {
+        String sql = """
+                UPDATE %s
+                SET condition_code = :conditionCode,
+                    updated_at = CURRENT_TIMESTAMP,
+                    version = version + 1
+                WHERE company_id = :companyId
+                  AND product_unit_id = :productUnitId
+                """.formatted(TenantSqlIdentifiers.inventoryProductUnitTable(companyId));
+        return jdbcTemplate.update(sql, new MapSqlParameterSource()
+                .addValue("companyId", companyId)
+                .addValue("productUnitId", productUnitId)
+                .addValue("conditionCode", conditionCode));
+    }
+
+    public void insertConditionAudit(long companyId,
+                                     long branchId,
+                                     Long productUnitId,
+                                     Long stockLedgerId,
+                                     String oldConditionCode,
+                                     String newConditionCode,
+                                     String reason,
+                                     String actorName) {
+        String sql = """
+                INSERT INTO %s (
+                    company_id, branch_id, product_unit_id, stock_ledger_id,
+                    old_condition_code, new_condition_code, reason, actor_name, created_at
+                ) VALUES (
+                    :companyId, :branchId, :productUnitId, :stockLedgerId,
+                    :oldConditionCode, :newConditionCode, :reason, :actorName, CURRENT_TIMESTAMP
+                )
+                """.formatted(TenantSqlIdentifiers.inventoryUnitConditionAuditTable((int) companyId));
+        jdbcTemplate.update(sql, new MapSqlParameterSource()
+                .addValue("companyId", companyId)
+                .addValue("branchId", branchId)
+                .addValue("productUnitId", productUnitId)
+                .addValue("stockLedgerId", stockLedgerId)
+                .addValue("oldConditionCode", oldConditionCode)
+                .addValue("newConditionCode", newConditionCode)
+                .addValue("reason", reason)
+                .addValue("actorName", actorName));
+    }
+
     public long countAvailableByProduct(long companyId, long branchId, long productId) {
         String sql = """
                 SELECT COUNT(*)
@@ -358,7 +406,10 @@ public class DbInventoryProductUnitRepository {
                 .addValue("serialNumber", productUnit.getSerialNumber())
                 .addValue("status", status.name())
                 .addValue("conditionCode", productUnit.getConditionCode() == null ? "NEW" : productUnit.getConditionCode())
+                .addValue("conditionNotes", productUnit.getConditionNotes())
                 .addValue("supplierId", productUnit.getSupplierId())
+                .addValue("sourcePartyType", productUnit.getSourcePartyType() == null ? "SUPPLIER" : productUnit.getSourcePartyType())
+                .addValue("sourceClientId", productUnit.getSourceClientId())
                 .addValue("purchaseReferenceType", productUnit.getPurchaseReferenceType())
                 .addValue("purchaseReferenceId", productUnit.getPurchaseReferenceId())
                 .addValue("purchaseLineId", productUnit.getPurchaseLineId())

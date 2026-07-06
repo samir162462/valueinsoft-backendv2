@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.ai.provider;
 
+import com.example.valueinsoftbackend.ai.audit.AiUsageMeteringContext;
 import com.example.valueinsoftbackend.ai.config.AiProperties;
 import com.example.valueinsoftbackend.ai.service.AiModelRequest;
 import com.example.valueinsoftbackend.ai.service.AiModelResponse;
@@ -33,16 +34,22 @@ public class DeepSeekAiProvider implements AiProvider {
     private final AiProperties aiProperties;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final AiUsageMeteringContext usageMeteringContext;
 
     @Autowired
-    public DeepSeekAiProvider(AiProperties aiProperties, ObjectMapper objectMapper) {
-        this(aiProperties, objectMapper, createRestTemplate(aiProperties));
+    public DeepSeekAiProvider(AiProperties aiProperties, ObjectMapper objectMapper, AiUsageMeteringContext usageMeteringContext) {
+        this(aiProperties, objectMapper, createRestTemplate(aiProperties), usageMeteringContext);
     }
 
     DeepSeekAiProvider(AiProperties aiProperties, ObjectMapper objectMapper, RestTemplate restTemplate) {
+        this(aiProperties, objectMapper, restTemplate, new AiUsageMeteringContext());
+    }
+
+    DeepSeekAiProvider(AiProperties aiProperties, ObjectMapper objectMapper, RestTemplate restTemplate, AiUsageMeteringContext usageMeteringContext) {
         this.aiProperties = aiProperties;
         this.objectMapper = objectMapper;
         this.restTemplate = restTemplate;
+        this.usageMeteringContext = usageMeteringContext;
     }
 
     @Override
@@ -92,6 +99,7 @@ public class DeepSeekAiProvider implements AiProvider {
                     String.class);
 
             AiModelResponse modelResponse = parseResponse(response.getBody());
+            usageMeteringContext.record(modelResponse);
             log.debug("AI provider call completed provider={} model={} durationMs={} responseLength={}",
                     PROVIDER_NAME,
                     modelName(),
@@ -138,16 +146,28 @@ public class DeepSeekAiProvider implements AiProvider {
                         null);
             }
 
+            int promptTokens = 0;
+            int completionTokens = 0;
+            int totalTokens = 0;
+            int cachedPromptTokens = 0;
             JsonNode usage = root.path("usage");
             if (!usage.isMissingNode() && !usage.isNull()) {
-                log.debug("AI provider token usage provider={} model={} promptTokens={} completionTokens={} totalTokens={}",
+                promptTokens = usage.path("prompt_tokens").asInt(0);
+                completionTokens = usage.path("completion_tokens").asInt(0);
+                totalTokens = usage.path("total_tokens").asInt(promptTokens + completionTokens);
+                // DeepSeek context cache: prompt_cache_hit_tokens are billed at the
+                // cached-input rate; the remainder of prompt_tokens is a cache miss.
+                cachedPromptTokens = usage.path("prompt_cache_hit_tokens").asInt(0);
+                log.debug("AI provider token usage provider={} model={} promptTokens={} completionTokens={} totalTokens={} cachedPromptTokens={}",
                         PROVIDER_NAME,
                         modelName(),
-                        optionalInt(usage, "prompt_tokens"),
-                        optionalInt(usage, "completion_tokens"),
-                        optionalInt(usage, "total_tokens"));
+                        promptTokens,
+                        completionTokens,
+                        totalTokens,
+                        cachedPromptTokens);
             }
-            return new AiModelResponse(content, modelName(), false, PROVIDER_NAME, AiModelResponse.providerCodeFor(PROVIDER_NAME));
+            return new AiModelResponse(content, modelName(), false, PROVIDER_NAME, AiModelResponse.providerCodeFor(PROVIDER_NAME))
+                    .withUsage(promptTokens, completionTokens, totalTokens, cachedPromptTokens);
         } catch (AiProviderException exception) {
             throw exception;
         } catch (Exception exception) {

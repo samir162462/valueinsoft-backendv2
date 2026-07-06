@@ -13,12 +13,12 @@ public class BillingProperties {
 
     private String paymentProvider = "paymob";
     private String mockCheckoutBaseUrl = "https://mock-billing.valueinsoft.local/checkout";
-    private boolean renewalSchedulerEnabled = false;
+    private boolean renewalSchedulerEnabled = true;
     private String renewalSchedulerCron = "0 10 2 * * *";
-    private int renewalLeadDays = 0;
-    private boolean dunningSchedulerEnabled = false;
+    private int renewalLeadDays = 5;
+    private boolean dunningSchedulerEnabled = true;
     private String dunningSchedulerCron = "0 40 2 * * *";
-    private int dunningGraceDays = 0;
+    private int dunningGraceDays = 3;
     private int dunningMaxAttempts = 3;
     private int manualRetryCooldownMinutes = 15;
     private int manualRetryMaxAttempts = 5;

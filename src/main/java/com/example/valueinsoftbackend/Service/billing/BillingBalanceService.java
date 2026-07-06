@@ -29,6 +29,7 @@ public class BillingBalanceService {
     private static final Set<String> CREDIT_FUNDING_SOURCES = Set.of(
             "BANK_TRANSFER_TOP_UP",
             "CASH_TOP_UP",
+            "ONLINE_TOP_UP",
             "PROMOTIONAL_CREDIT",
             "SUBSCRIPTION_CREDIT",
             "MANUAL_CORRECTION",
@@ -167,6 +168,84 @@ public class BillingBalanceService {
                 creditReason,
                 request.getReference().trim(),
                 approvalStatus
+        );
+    }
+
+    @Transactional
+    public BillingBalanceCreditResponse reverseBalance(int companyId,
+                                                       BillingBalanceCreditRequest request,
+                                                       String actorName) {
+        if (request == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_BALANCE_REVERSAL_REQUEST_REQUIRED", "Reversal request is required");
+        }
+        if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_BALANCE_REVERSAL_AMOUNT_INVALID", "Reversal amount must be positive");
+        }
+        if (request.getReference() == null || request.getReference().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_BALANCE_REVERSAL_REFERENCE_REQUIRED", "reference is required");
+        }
+        if (request.getIdempotencyKey() == null || request.getIdempotencyKey().isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "BILLING_IDEMPOTENCY_KEY_REQUIRED", "idempotencyKey is required");
+        }
+        String currency = normalizeEnabledCurrency(request.getCurrencyCode());
+        ensureBillingAccount(companyId);
+
+        BillingAccountLedgerItem existing = dbBillingWriteModels.findBillingAccountLedgerByIdempotencyKey(
+                companyId,
+                request.getIdempotencyKey().trim()
+        );
+        if (existing != null) {
+            return existingCreditResponse(existing, request);
+        }
+
+        BillingAccountBalanceResponse account = dbBillingWriteModels.lockBillingAccountBalance(companyId, currency);
+        if (account == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "BILLING_ACCOUNT_NOT_FOUND", "Billing account not found");
+        }
+
+        BigDecimal amount = money(request.getAmount());
+        BigDecimal balanceBefore = money(account.getAvailableBalance());
+        BigDecimal balanceAfter = balanceBefore.subtract(amount);
+        if (balanceAfter.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "BILLING_BALANCE_REVERSAL_EXCEEDS_BALANCE",
+                    "Reversal amount exceeds the available balance (" + balanceBefore + ")"
+            );
+        }
+
+        dbBillingWriteModels.updateBillingAccountAvailableBalance(account.getBillingAccountId(), balanceAfter);
+        long ledgerId = dbBillingWriteModels.createBillingAccountLedgerEntry(
+                account.getBillingAccountId(),
+                companyId,
+                "REVERSAL",
+                amount,
+                currency,
+                "DEBIT",
+                balanceBefore,
+                balanceAfter,
+                "billing_balance_reversal",
+                request.getReference().trim(),
+                request.getIdempotencyKey().trim(),
+                "REVERSAL",
+                "REVERSAL",
+                "APPROVED",
+                firstNonBlank(request.getDescription(), request.getNote(), "Billing balance reversal"),
+                "{\"source\":\"billing_balance_reversal\",\"actorName\":\"" + escape(actorName) + "\",\"note\":\"" + escape(request.getNote()) + "\"}"
+        );
+
+        return new BillingBalanceCreditResponse(
+                companyId,
+                account.getBillingAccountId(),
+                ledgerId,
+                amount,
+                currency,
+                balanceBefore,
+                balanceAfter,
+                "REVERSAL",
+                "REVERSAL",
+                request.getReference().trim(),
+                "APPROVED"
         );
     }
 

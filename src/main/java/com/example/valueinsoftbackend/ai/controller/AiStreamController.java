@@ -27,7 +27,7 @@ public class AiStreamController {
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<AiStreamChunk>> chatStream(@Valid @RequestBody AiChatRequest request,
                                                            Principal principal) {
-        return aiChatService.chatStream(request, principal)
+        return Flux.defer(() -> aiChatService.chatStream(request, principal))
                 .map(chunk -> ServerSentEvent.<AiStreamChunk>builder()
                         .data(chunk)
                         .build())

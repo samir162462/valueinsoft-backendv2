@@ -77,7 +77,7 @@ class DeepSeekAiProviderTest {
         assertEquals("deepseek-chat", body.get("model"));
         assertEquals(false, body.get("stream"));
         assertEquals(0.2, body.get("temperature"));
-        assertEquals(800, body.get("max_tokens"));
+        assertEquals(2000, body.get("max_tokens"));
 
         List<Map<String, String>> messages = (List<Map<String, String>>) body.get("messages");
         assertEquals("system", messages.get(0).get("role"));
