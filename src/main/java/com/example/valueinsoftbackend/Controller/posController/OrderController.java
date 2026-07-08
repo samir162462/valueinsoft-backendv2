@@ -7,6 +7,7 @@ import com.example.valueinsoftbackend.Model.Request.BounceBackOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.CreateOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.OrderPeriodRequest;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import com.example.valueinsoftbackend.Service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -26,27 +27,32 @@ public class OrderController {
     private final DbPosOrder dbPosOrder;
     private final OrderService orderService;
     private final AuthorizationService authorizationService;
+    private final TenantScopeGuard tenantScopeGuard;
 
     @Autowired
     public OrderController(DbPosOrder dbPosOrder,
                            OrderService orderService,
-                           AuthorizationService authorizationService) {
+                           AuthorizationService authorizationService,
+                           TenantScopeGuard tenantScopeGuard) {
         this.dbPosOrder = dbPosOrder;
         this.orderService = orderService;
         this.authorizationService = authorizationService;
+        this.tenantScopeGuard = tenantScopeGuard;
     }
 
     @PostMapping("/{companyId}/saveOrder")
     ResponseEntity<Integer> newOrder(@Valid @RequestBody CreateOrderRequest newOrderShiftIn,
                                      @PathVariable @Positive int companyId,
                                      Principal principal) {
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), companyId, newOrderShiftIn.branchId());
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
-                companyId,
+                scope.companyId(),
                 newOrderShiftIn.branchId(),
                 "pos.sale.create"
         );
-        return ResponseEntity.status(201).body(orderService.createOrder(newOrderShiftIn, companyId).orderId());
+        return ResponseEntity.status(201).body(orderService.createOrder(newOrderShiftIn, scope.companyId()).orderId());
     }
 
     @PostMapping("/v2/pos/{companyId}/orders")
@@ -54,13 +60,15 @@ public class OrderController {
             @Valid @RequestBody CreateOrderRequest newOrderShiftIn,
             @PathVariable @Positive int companyId,
             Principal principal) {
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), companyId, newOrderShiftIn.branchId());
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
-                companyId,
+                scope.companyId(),
                 newOrderShiftIn.branchId(),
                 "pos.sale.create"
         );
-        com.example.valueinsoftbackend.Model.Response.CreateOrderResult result = orderService.createOrder(newOrderShiftIn, companyId);
+        com.example.valueinsoftbackend.Model.Response.CreateOrderResult result = orderService.createOrder(newOrderShiftIn, scope.companyId());
         return ResponseEntity.status(result.idempotencyHit() ? 200 : 201).body(result);
     }
 
@@ -71,14 +79,16 @@ public class OrderController {
             @RequestParam(value = "companyId", required = false) Integer queryCompanyId,
             Principal principal
     ) {
-        int companyId = pathCompanyId != null ? pathCompanyId : queryCompanyId == null ? 0 : queryCompanyId;
+        Integer requestedCompanyId = pathCompanyId != null ? pathCompanyId : queryCompanyId;
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), requestedCompanyId, data.branchId());
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
-                companyId,
+                scope.companyId(),
                 data.branchId(),
                 "pos.sale.read"
         );
-        return orderService.getOrdersByPeriod(data, companyId);
+        return orderService.getOrdersByPeriod(data, scope.companyId());
     }
 
     @RequestMapping(path = "/getOrdersByClientId/{companyId}/{branchId}/{clientId}", method = RequestMethod.GET)
@@ -86,8 +96,10 @@ public class OrderController {
                                                 @PathVariable @Positive int branchId,
                                                 @PathVariable @Positive int companyId,
                                                 Principal principal) {
-        authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "pos.sale.read");
-        return dbPosOrder.getOrdersByClientId(clientId, branchId, companyId);
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), companyId, branchId);
+        authorizationService.assertAuthenticatedCapability(principal.getName(), scope.companyId(), branchId, "pos.sale.read");
+        return dbPosOrder.getOrdersByClientId(clientId, branchId, scope.companyId());
     }
 
     @GetMapping("/{companyId}/search/{branchId}")
@@ -96,8 +108,10 @@ public class OrderController {
             @PathVariable @Positive int branchId,
             @RequestParam("q") String receiptNumber,
             Principal principal) {
-        authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "pos.sale.read");
-        Order order = dbPosOrder.getOrderByReceiptNumber(companyId, branchId, receiptNumber);
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), companyId, branchId);
+        authorizationService.assertAuthenticatedCapability(principal.getName(), scope.companyId(), branchId, "pos.sale.read");
+        Order order = dbPosOrder.getOrderByReceiptNumber(scope.companyId(), branchId, receiptNumber);
         if (order == null) {
             return ResponseEntity.notFound().build();
         }
@@ -109,26 +123,30 @@ public class OrderController {
                                                           @PathVariable @Positive int branchId,
                                                           @PathVariable @Positive int companyId,
                                                           Principal principal) {
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), companyId, branchId);
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
-                companyId,
+                scope.companyId(),
                 branchId,
                 "pos.sale.read"
         );
-        return dbPosOrder.getOrdersDetailsByOrderId(orderId, branchId, companyId);
+        return dbPosOrder.getOrdersDetailsByOrderId(orderId, branchId, scope.companyId());
     }
 
     @RequestMapping(value = "/{companyId}/bounceBackProduct", method = RequestMethod.POST)
     String bounceBackProduct(@Valid @RequestBody BounceBackOrderRequest data,
                              @PathVariable @Positive int companyId,
                              Principal principal) {
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), companyId, data.getBranchId());
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
-                companyId,
+                scope.companyId(),
                 data.getBranchId(),
                 "pos.sale.edit"
         );
-        return orderService.bounceBackProduct(data, companyId);
+        return orderService.bounceBackProduct(data, scope.companyId());
     }
 }
 

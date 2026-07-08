@@ -133,6 +133,33 @@ public class DbInventoryProductUnitRepository {
         }
     }
 
+    public Optional<ProductUnit> findByCompanyScanCode(long companyId, String scanCode) {
+        String sql = """
+                SELECT *
+                FROM %s
+                WHERE company_id = :companyId
+                  AND (
+                    lower(unit_identifier) = lower(:scanCode)
+                    OR lower(imei) = lower(:scanCode)
+                    OR lower(serial_number) = lower(:scanCode)
+                  )
+                ORDER BY product_unit_id DESC
+                LIMIT 1
+                """.formatted(TenantSqlIdentifiers.inventoryProductUnitTable(companyId));
+
+        try {
+            return Optional.ofNullable(jdbcTemplate.queryForObject(
+                    sql,
+                    new MapSqlParameterSource()
+                            .addValue("companyId", companyId)
+                            .addValue("scanCode", scanCode),
+                    PRODUCT_UNIT_ROW_MAPPER
+            ));
+        } catch (EmptyResultDataAccessException exception) {
+            return Optional.empty();
+        }
+    }
+
     public Optional<ProductUnit> findAvailableForSaleForUpdate(long companyId,
                                                                long branchId,
                                                                long productId,
@@ -229,6 +256,47 @@ public class DbInventoryProductUnitRepository {
                         .addValue("fromStatus", fromStatus.name())
                         .addValue("toStatus", toStatus.name())
                         .addValue("toBranchId", toBranchId)
+        );
+    }
+
+    public int reactivateForStockIn(ProductUnit productUnit, ProductUnitStatus fromStatus) {
+        String sql = """
+                UPDATE %s
+                SET branch_id = :branchId,
+                    product_id = :productId,
+                    tracking_type = :trackingType,
+                    unit_identifier = :unitIdentifier,
+                    imei = :imei,
+                    serial_number = :serialNumber,
+                    status = 'AVAILABLE',
+                    condition_code = :conditionCode,
+                    condition_notes = :conditionNotes,
+                    supplier_id = :supplierId,
+                    source_party_type = :sourcePartyType,
+                    source_client_id = :sourceClientId,
+                    purchase_reference_type = :purchaseReferenceType,
+                    purchase_reference_id = :purchaseReferenceId,
+                    purchase_line_id = :purchaseLineId,
+                    sale_order_id = NULL,
+                    sale_order_detail_id = NULL,
+                    customer_id = NULL,
+                    current_transfer_id = NULL,
+                    received_at = COALESCE(:receivedAt, CURRENT_TIMESTAMP),
+                    sold_at = NULL,
+                    returned_at = NULL,
+                    status_updated_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP,
+                    version = version + 1
+                WHERE company_id = :companyId
+                  AND product_unit_id = :productUnitId
+                  AND status = :fromStatus
+                """.formatted(TenantSqlIdentifiers.inventoryProductUnitTable(productUnit.getCompanyId()));
+
+        return jdbcTemplate.update(
+                sql,
+                toInsertParams(productUnit)
+                        .addValue("productUnitId", productUnit.getProductUnitId())
+                        .addValue("fromStatus", fromStatus.name())
         );
     }
 

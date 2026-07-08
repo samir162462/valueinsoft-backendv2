@@ -15,6 +15,7 @@ import com.example.valueinsoftbackend.Model.ResponseModel.Inventory.SerializedUn
 import com.example.valueinsoftbackend.Service.SerializedInventoryService;
 import com.example.valueinsoftbackend.Service.inventory.InventoryTransactionService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -51,6 +52,9 @@ class InventoryTransactionEndpointIntegrationTest extends AbstractIntegrationTes
     @MockBean
     private AuthorizationService authorizationService;
 
+    @MockBean
+    private TenantScopeGuard tenantScopeGuard;
+
     @BeforeEach
     void setUp() {
         doNothing().when(authorizationService).assertAuthenticatedCapability(
@@ -59,6 +63,8 @@ class InventoryTransactionEndpointIntegrationTest extends AbstractIntegrationTes
                 nullable(Integer.class),
                 anyString()
         );
+        when(tenantScopeGuard.requireScope(anyString(), nullable(Integer.class), nullable(Integer.class)))
+                .thenReturn(new TenantScopeGuard.ResolvedTenantScope(1074, 1095));
     }
 
     @Test
@@ -306,13 +312,13 @@ class InventoryTransactionEndpointIntegrationTest extends AbstractIntegrationTes
                   "idempotencyKey": "stock-in-001",
                   "units": [
                     {
-                      "unitIdentifier": "IMEI-001",
-                      "imei": "IMEI-001",
+                      "unitIdentifier": "490154203237518",
+                      "imei": "490154203237518",
                       "conditionCode": "NEW"
                     },
                     {
-                      "unitIdentifier": "IMEI-002",
-                      "imei": "IMEI-002",
+                      "unitIdentifier": "356938035643809",
+                      "imei": "356938035643809",
                       "conditionCode": "NEW"
                     }
                   ]
@@ -328,12 +334,15 @@ class InventoryTransactionEndpointIntegrationTest extends AbstractIntegrationTes
                 1095L,
                 41L,
                 TrackingType.IMEI,
-                "IMEI-001",
-                "IMEI-001",
+                "490154203237518",
+                "490154203237518",
                 null,
                 ProductUnitStatus.AVAILABLE,
                 "NEW",
+                null,
                 88L,
+                "SUPPLIER",
+                null,
                 "SUPPLIER_RECEIPT",
                 "SR-1001",
                 null,

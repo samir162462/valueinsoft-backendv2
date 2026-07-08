@@ -842,6 +842,7 @@ public class DbCompany {
         statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_stock_ledger_branch_product_time ON " + schemaName + ".inventory_stock_ledger (branch_id, product_id, created_at DESC)");
         statements.add("SELECT public.create_serialized_inventory_tables_for_tenant('" + schemaName + "', " + companyId + ")");
         statements.add("SELECT public.ensure_serialized_inventory_product_unit_table_for_tenant('" + schemaName + "', " + companyId + ")");
+        statements.add("SELECT public.ensure_serialized_inventory_imei_constraints_for_tenant('" + schemaName + "')");
 
         statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_legacy_product_mapping (" +
                 " branch_id INTEGER NOT NULL," +

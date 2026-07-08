@@ -89,6 +89,25 @@ public class AuthenticatedEffectiveConfigurationService {
     }
 
     /**
+     * SECURITY (P0-2): resolves the identity-bound tenant/branch context for the authenticated user,
+     * validating that any request-supplied companyId/branchId actually belongs to the user. Throws
+     * TENANT_ACCESS_DENIED / BRANCH_ACCESS_DENIED (403) for a scope the user does not belong to.
+     *
+     * <p>Exposed so controllers/guards can derive the authoritative tenant scope from the
+     * authenticated identity instead of trusting request path/body parameters.</p>
+     */
+    public ResolvedTenantContext resolveTenantContextForAuthenticatedUser(String authenticatedName,
+                                                                          Integer requestedTenantId,
+                                                                          Integer requestedBranchId) {
+        String userName = extractBaseUserName(authenticatedName);
+        User user = dbUsers.getUser(userName);
+        if (user == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found");
+        }
+        return resolveTenantContext(user, requestedTenantId, requestedBranchId);
+    }
+
+    /**
      * Resolves tenant and branch context for the authenticated user using the existing
      * legacy company and branch relationships until JWT context becomes richer.
      */
@@ -190,13 +209,21 @@ public class AuthenticatedEffectiveConfigurationService {
         return value == null ? "" : value.trim();
     }
 
-    private static class ResolvedTenantContext {
+    public static class ResolvedTenantContext {
         private final int tenantId;
         private final Integer activeBranchId;
 
         private ResolvedTenantContext(int tenantId, Integer activeBranchId) {
             this.tenantId = tenantId;
             this.activeBranchId = activeBranchId;
+        }
+
+        public int getTenantId() {
+            return tenantId;
+        }
+
+        public Integer getActiveBranchId() {
+            return activeBranchId;
         }
     }
 }

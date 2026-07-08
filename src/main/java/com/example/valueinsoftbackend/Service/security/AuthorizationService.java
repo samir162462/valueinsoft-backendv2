@@ -54,18 +54,28 @@ public class AuthorizationService {
                                              Integer tenantId,
                                              Integer branchId,
                                              String capabilityKey) {
-        if (isOwnerPrincipal(authenticatedName)) {
-            log.info("Capability Check | User: {} | Key: {} | Branch: {} | Allowed: true | Reason: owner_role",
-                    authenticatedName, capabilityKey, branchId);
-            return true;
-        }
-
+        // SECURITY (P0-1 fix): always resolve the tenant/branch context FIRST.
+        // getEffectiveCapabilitiesForAuthenticatedUser -> resolveTenantContext enforces
+        // tenant and branch membership and throws TENANT_ACCESS_DENIED / BRANCH_ACCESS_DENIED
+        // when the authenticated user does not belong to the requested company or branch.
+        // No role -- including Owner -- may skip this check. Previously the Owner branch
+        // short-circuited before this call, allowing an owner of one company to act on
+        // any other company by supplying a foreign companyId.
         ArrayList<ResolvedCapabilityConfig> capabilities =
                 authenticatedEffectiveConfigurationService.getEffectiveCapabilitiesForAuthenticatedUser(
                         authenticatedName,
                         tenantId,
                         branchId
                 );
+
+        // Owners retain broad access, but ONLY within a tenant/branch they belong to
+        // (membership was verified above). This preserves in-tenant owner privileges
+        // while closing the cross-tenant bypass.
+        if (isOwnerPrincipal(authenticatedName)) {
+            log.info("Capability Check | User: {} | Key: {} | Branch: {} | Allowed: true | Reason: owner_role_in_tenant",
+                    authenticatedName, capabilityKey, branchId);
+            return true;
+        }
 
         boolean found = false;
         for (ResolvedCapabilityConfig capability : capabilities) {

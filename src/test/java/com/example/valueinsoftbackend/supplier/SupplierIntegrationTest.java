@@ -18,6 +18,7 @@ import com.example.valueinsoftbackend.Model.Supplier;
 import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.example.valueinsoftbackend.Service.SupplierService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -62,6 +63,9 @@ class SupplierIntegrationTest extends AbstractIntegrationTest {
     @MockBean
     private AuthorizationService authorizationService;
 
+    @MockBean
+    private TenantScopeGuard tenantScopeGuard;
+
     @BeforeEach
     void setUp() {
         doNothing().when(authorizationService).assertAuthenticatedCapability(
@@ -70,6 +74,8 @@ class SupplierIntegrationTest extends AbstractIntegrationTest {
                 nullable(Integer.class),
                 anyString()
         );
+        when(tenantScopeGuard.requireScope(anyString(), nullable(Integer.class), nullable(Integer.class)))
+                .thenReturn(new TenantScopeGuard.ResolvedTenantScope(COMPANY_ID, BRANCH_ID));
     }
 
     @Test

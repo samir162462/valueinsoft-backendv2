@@ -16,6 +16,7 @@ import com.example.valueinsoftbackend.Model.Response.SupplierStatementResponse;
 import com.example.valueinsoftbackend.Model.Supplier;
 import com.example.valueinsoftbackend.Model.SupplierBProduct;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import com.example.valueinsoftbackend.Service.SupplierService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,10 +38,14 @@ public class SupplierController {
 
     private final SupplierService supplierService;
     private final AuthorizationService authorizationService;
+    private final TenantScopeGuard tenantScopeGuard;
 
-    public SupplierController(SupplierService supplierService, AuthorizationService authorizationService) {
+    public SupplierController(SupplierService supplierService,
+                             AuthorizationService authorizationService,
+                             TenantScopeGuard tenantScopeGuard) {
         this.supplierService = supplierService;
         this.authorizationService = authorizationService;
+        this.tenantScopeGuard = tenantScopeGuard;
     }
 
     @GetMapping("/all/{companyId}/{branchId}")
@@ -49,13 +54,15 @@ public class SupplierController {
             @PathVariable @Positive int branchId,
             Principal principal
     ) {
+        TenantScopeGuard.ResolvedTenantScope scope =
+                tenantScopeGuard.requireScope(principal.getName(), companyId, branchId);
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
-                companyId,
+                scope.companyId(),
                 branchId,
                 "suppliers.account.read"
         );
-        return supplierService.getSuppliers(companyId, branchId);
+        return supplierService.getSuppliers(scope.companyId(), branchId);
     }
 
     @GetMapping({"{companyId}{branchId}/remain/{productId}", "{companyId}/{branchId}/remain/{productId}"})

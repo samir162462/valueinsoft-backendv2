@@ -359,6 +359,22 @@ class FlywayMigrationInventoryTest {
     }
 
     @Test
+    void serializedInventoryImeiLuhnConstraintMigrationExists() throws IOException {
+        ClassPathResource migration = new ClassPathResource(
+                "db/migration/V137__serialized_inventory_imei_luhn_constraints.sql"
+        );
+
+        assertTrue(migration.exists(), "Missing serialized inventory IMEI Luhn constraint migration resource");
+
+        String sql = new String(migration.getInputStream().readAllBytes(), StandardCharsets.UTF_8).toUpperCase();
+
+        assertTrue(sql.contains("VLS_IS_VALID_IMEI"));
+        assertTrue(sql.contains("INVENTORY_PRODUCT_UNIT_IMEI_LUHN_CK"));
+        assertTrue(sql.contains("INVENTORY_PRODUCT_UNIT_CANONICAL_IDENTIFIER_CK"));
+        assertTrue(sql.contains("NOT VALID"));
+    }
+
+    @Test
     void billingCreditExpenseFinanceMappingMigrationExists() throws IOException {
         ClassPathResource migration = new ClassPathResource(
                 "db/migration/V116__billing_credit_expense_finance_mapping.sql"

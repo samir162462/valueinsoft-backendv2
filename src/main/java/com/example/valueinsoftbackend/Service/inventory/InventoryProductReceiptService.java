@@ -30,6 +30,7 @@ import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingS
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -468,8 +469,8 @@ public class InventoryProductReceiptService {
             String identifier = trackingType == TrackingType.IMEI
                     ? normalizeRequired(unit.getImei(), "IMEI_REQUIRED", "imei is required")
                     : normalizeRequired(unit.getSerialNumber(), "SERIAL_NUMBER_REQUIRED", "serialNumber is required");
-            if (trackingType == TrackingType.IMEI && !identifier.matches("\\d{14,17}")) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "IMEI_INVALID", "IMEI must be 14 to 17 digits");
+            if (trackingType == TrackingType.IMEI && !isValidImei(identifier)) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "IMEI_INVALID", "IMEI must be a valid 15-digit number");
             }
             if (!uniqueIdentifiers.add(identifier.toLowerCase(Locale.ROOT))) {
                 throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_DUPLICATE_IN_REQUEST", "Duplicate IMEI or serial in request");
@@ -507,7 +508,7 @@ public class InventoryProductReceiptService {
             unit.setSourceClientId(clientTradeIn ? request.getReceipt().getClientId().longValue() : null);
             unit.setPurchaseReferenceType("PRODUCT_RECEIPT");
             unit.setPurchaseReferenceId(referenceId);
-            long unitId = productUnitRepository.insertProductUnit(unit);
+            long unitId = stockInOrReactivateProductUnit(unit);
 
             InventoryStockMovement movement = new InventoryStockMovement();
             movement.setCompanyId(request.getCompanyId());
@@ -523,6 +524,55 @@ public class InventoryProductReceiptService {
             movement.setIdempotencyKey(limit(request.getIdempotencyKey() + ":" + unit.getUnitIdentifier(), 160));
             stockMovementRepository.insertMovement(movement);
         }
+    }
+
+    private long stockInOrReactivateProductUnit(ProductUnit unit) {
+        try {
+            return productUnitRepository.insertProductUnit(unit);
+        } catch (DuplicateKeyException exception) {
+            ProductUnit existingUnit = productUnitRepository.findByCompanyScanCode(unit.getCompanyId(), unit.getUnitIdentifier())
+                    .orElseThrow(() -> new ApiException(
+                            HttpStatus.CONFLICT,
+                            "SERIALIZED_UNIT_DUPLICATE",
+                            "This IMEI or serial already exists for the company"
+                    ));
+
+            validateExistingUnitCanBeReceivedAgain(existingUnit, unit);
+            unit.setProductUnitId(existingUnit.getProductUnitId());
+            int updated = productUnitRepository.reactivateForStockIn(unit, existingUnit.getStatus());
+            if (updated != 1) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "SERIALIZED_UNIT_RESTOCK_CONFLICT",
+                        "This IMEI or serial could not be received again because its status changed"
+                );
+            }
+            return existingUnit.getProductUnitId();
+        }
+    }
+
+    private void validateExistingUnitCanBeReceivedAgain(ProductUnit existingUnit, ProductUnit incomingUnit) {
+        if (existingUnit.getProductId() != incomingUnit.getProductId()
+                || TrackingType.defaultIfNull(existingUnit.getTrackingType()) != TrackingType.defaultIfNull(incomingUnit.getTrackingType())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "SERIALIZED_UNIT_PRODUCT_MISMATCH",
+                    "This IMEI or serial already belongs to another product"
+            );
+        }
+
+        if (existingUnit.getStatus() == ProductUnitStatus.SOLD
+                || existingUnit.getStatus() == ProductUnitStatus.RETURNED
+                || existingUnit.getStatus() == ProductUnitStatus.DAMAGED
+                || existingUnit.getStatus() == ProductUnitStatus.UNDER_REPAIR) {
+            return;
+        }
+
+        throw new ApiException(
+                HttpStatus.CONFLICT,
+                "SERIALIZED_UNIT_ACTIVE_DUPLICATE",
+                "This IMEI or serial already exists as an active inventory unit"
+        );
     }
 
     private Product toProduct(ProductReceiptProductRequest request,
@@ -660,6 +710,27 @@ public class InventoryProductReceiptService {
             throw new ApiException(HttpStatus.BAD_REQUEST, code, message);
         }
         return normalized;
+    }
+
+    private boolean isValidImei(String value) {
+        if (value == null || !value.matches("\\d{15}")) {
+            return false;
+        }
+
+        int sum = 0;
+        boolean doubleDigit = false;
+        for (int index = value.length() - 1; index >= 0; index -= 1) {
+            int digit = value.charAt(index) - '0';
+            if (doubleDigit) {
+                digit *= 2;
+                if (digit > 9) {
+                    digit -= 9;
+                }
+            }
+            sum += digit;
+            doubleDigit = !doubleDigit;
+        }
+        return sum % 10 == 0;
     }
 
     private String firstNonBlank(String preferred, String fallback) {

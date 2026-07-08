@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -66,11 +67,11 @@ class SerializedInventoryServiceTest {
                 "PURCHASE",
                 "P-1",
                 null,
-                "cashier",
-                "idem-1",
-                List.of(
-                        new SerializedUnitInput(null, "356789123456789", null, "NEW"),
-                        new SerializedUnitInput(null, "356789123456789", null, "NEW")
+                        "cashier",
+                        "idem-1",
+                        List.of(
+                        new SerializedUnitInput(null, "490154203237518", null, "NEW"),
+                        new SerializedUnitInput(null, "490154203237518", null, "NEW")
                 )
         );
 
@@ -78,6 +79,102 @@ class SerializedInventoryServiceTest {
 
         assertEquals("SERIALIZED_UNIT_DUPLICATE_IN_REQUEST", exception.getCode());
         verify(productUnitRepository, never()).insertProductUnit(any());
+        verify(stockMovementRepository, never()).insertMovement(any());
+    }
+
+    @Test
+    void stockInSerializedUnitsRejectsInvalidImei() {
+        when(productTrackingRepository.findTrackingMetadata(7, 41)).thenReturn(Optional.of(
+                new ProductTrackingMetadata(TrackingType.IMEI, null, null, 0L)
+        ));
+
+        SerializedUnitStockInRequest request = new SerializedUnitStockInRequest(
+                7,
+                3,
+                41,
+                TrackingType.IMEI,
+                88L,
+                "PURCHASE",
+                "P-1",
+                null,
+                "cashier",
+                "idem-1",
+                List.of(new SerializedUnitInput(null, "356789123456789", null, "NEW"))
+        );
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.stockInSerializedUnits(request));
+
+        assertEquals("IMEI_INVALID", exception.getCode());
+        verify(productUnitRepository, never()).insertProductUnit(any());
+        verify(stockMovementRepository, never()).insertMovement(any());
+    }
+
+    @Test
+    void stockInSerializedUnitsReactivatesSoldDuplicateImei() {
+        when(productTrackingRepository.findTrackingMetadata(7, 41)).thenReturn(Optional.of(
+                new ProductTrackingMetadata(TrackingType.IMEI, null, null, 0L)
+        ));
+        ProductUnit soldUnit = unit(7001, 7, 3, 41, ProductUnitStatus.SOLD);
+        when(productUnitRepository.insertProductUnit(any())).thenThrow(new DuplicateKeyException("duplicate"));
+        when(productUnitRepository.findByCompanyScanCode(7, "490154203237518")).thenReturn(Optional.of(soldUnit));
+        when(productUnitRepository.reactivateForStockIn(any(), Mockito.eq(ProductUnitStatus.SOLD))).thenReturn(1);
+        when(stockMovementRepository.insertMovement(any())).thenReturn(10001L);
+
+        SerializedUnitStockInRequest request = new SerializedUnitStockInRequest(
+                7,
+                3,
+                41,
+                TrackingType.IMEI,
+                88L,
+                "PURCHASE",
+                "P-2",
+                null,
+                "cashier",
+                "idem-2",
+                List.of(new SerializedUnitInput(null, "490154203237518", null, "NEW"))
+        );
+
+        List<Long> unitIds = service.stockInSerializedUnits(request);
+
+        assertEquals(List.of(7001L), unitIds);
+        ArgumentCaptor<ProductUnit> unitCaptor = ArgumentCaptor.forClass(ProductUnit.class);
+        verify(productUnitRepository).reactivateForStockIn(unitCaptor.capture(), Mockito.eq(ProductUnitStatus.SOLD));
+        assertEquals(7001L, unitCaptor.getValue().getProductUnitId());
+        assertEquals(ProductUnitStatus.AVAILABLE, unitCaptor.getValue().getStatus());
+
+        ArgumentCaptor<InventoryStockMovement> movementCaptor = ArgumentCaptor.forClass(InventoryStockMovement.class);
+        verify(stockMovementRepository).insertMovement(movementCaptor.capture());
+        assertEquals(7001L, movementCaptor.getValue().getProductUnitId());
+        assertEquals(InventoryMovementType.STOCK_IN, movementCaptor.getValue().getMovementType());
+    }
+
+    @Test
+    void stockInSerializedUnitsRejectsActiveDuplicateImei() {
+        when(productTrackingRepository.findTrackingMetadata(7, 41)).thenReturn(Optional.of(
+                new ProductTrackingMetadata(TrackingType.IMEI, null, null, 0L)
+        ));
+        ProductUnit activeUnit = unit(7001, 7, 3, 41, ProductUnitStatus.AVAILABLE);
+        when(productUnitRepository.insertProductUnit(any())).thenThrow(new DuplicateKeyException("duplicate"));
+        when(productUnitRepository.findByCompanyScanCode(7, "490154203237518")).thenReturn(Optional.of(activeUnit));
+
+        SerializedUnitStockInRequest request = new SerializedUnitStockInRequest(
+                7,
+                3,
+                41,
+                TrackingType.IMEI,
+                88L,
+                "PURCHASE",
+                "P-3",
+                null,
+                "cashier",
+                "idem-3",
+                List.of(new SerializedUnitInput(null, "490154203237518", null, "NEW"))
+        );
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.stockInSerializedUnits(request));
+
+        assertEquals("SERIALIZED_UNIT_ACTIVE_DUPLICATE", exception.getCode());
+        verify(productUnitRepository, never()).reactivateForStockIn(any(), any());
         verify(stockMovementRepository, never()).insertMovement(any());
     }
 
@@ -169,7 +266,7 @@ class SerializedInventoryServiceTest {
         assertEquals(3L, transferOut.getFromBranchId());
         assertEquals(4L, transferOut.getToBranchId());
         assertEquals(0, BigDecimal.ONE.negate().compareTo(transferOut.getQuantityDelta()));
-        assertEquals("transfer-1:356789123456789:out", transferOut.getIdempotencyKey());
+        assertEquals("transfer-1:490154203237518:out", transferOut.getIdempotencyKey());
 
         InventoryStockMovement transferIn = movements.get(1);
         assertEquals(InventoryMovementType.TRANSFER_IN, transferIn.getMovementType());
@@ -177,7 +274,7 @@ class SerializedInventoryServiceTest {
         assertEquals(3L, transferIn.getFromBranchId());
         assertEquals(4L, transferIn.getToBranchId());
         assertEquals(0, BigDecimal.ONE.compareTo(transferIn.getQuantityDelta()));
-        assertEquals("transfer-1:356789123456789:in", transferIn.getIdempotencyKey());
+        assertEquals("transfer-1:490154203237518:in", transferIn.getIdempotencyKey());
     }
 
     private ProductUnit unit(long productUnitId, long companyId, long branchId, long productId, ProductUnitStatus status) {
@@ -187,8 +284,8 @@ class SerializedInventoryServiceTest {
         unit.setBranchId(branchId);
         unit.setProductId(productId);
         unit.setTrackingType(TrackingType.IMEI);
-        unit.setUnitIdentifier("356789123456789");
-        unit.setImei("356789123456789");
+        unit.setUnitIdentifier("490154203237518");
+        unit.setImei("490154203237518");
         unit.setStatus(status);
         unit.setConditionCode("NEW");
         return unit;

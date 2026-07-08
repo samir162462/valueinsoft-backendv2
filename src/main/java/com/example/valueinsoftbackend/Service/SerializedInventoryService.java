@@ -173,12 +173,7 @@ public class SerializedInventoryService {
 
         List<Long> insertedUnitIds = new ArrayList<>();
         for (ProductUnit productUnit : productUnits) {
-            long productUnitId;
-            try {
-                productUnitId = productUnitRepository.insertProductUnit(productUnit);
-            } catch (DuplicateKeyException exception) {
-                throw new ApiException(HttpStatus.CONFLICT, "SERIALIZED_UNIT_DUPLICATE", "This IMEI or serial already exists for the company");
-            }
+            long productUnitId = stockInOrReactivateProductUnit(productUnit);
 
             insertedUnitIds.add(productUnitId);
             InventoryStockMovement stockInMovement = buildMovement(
@@ -200,6 +195,59 @@ public class SerializedInventoryService {
             stockMovementRepository.insertHistoryLedgerMovement(stockInMovement, 0, "Add", 0);
         }
         return insertedUnitIds;
+    }
+
+    private long stockInOrReactivateProductUnit(ProductUnit productUnit) {
+        try {
+            return productUnitRepository.insertProductUnit(productUnit);
+        } catch (DuplicateKeyException exception) {
+            ProductUnit existingUnit = productUnitRepository.findByCompanyScanCode(
+                            productUnit.getCompanyId(),
+                            productUnit.getUnitIdentifier()
+                    )
+                    .orElseThrow(() -> new ApiException(
+                            HttpStatus.CONFLICT,
+                            "SERIALIZED_UNIT_DUPLICATE",
+                            "This IMEI or serial already exists for the company"
+                    ));
+
+            validateExistingUnitCanBeReceivedAgain(existingUnit, productUnit);
+            productUnit.setProductUnitId(existingUnit.getProductUnitId());
+
+            int updated = productUnitRepository.reactivateForStockIn(productUnit, existingUnit.getStatus());
+            if (updated != 1) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "SERIALIZED_UNIT_RESTOCK_CONFLICT",
+                        "This IMEI or serial could not be received again because its status changed"
+                );
+            }
+            return existingUnit.getProductUnitId();
+        }
+    }
+
+    private void validateExistingUnitCanBeReceivedAgain(ProductUnit existingUnit, ProductUnit incomingUnit) {
+        if (existingUnit.getProductId() != incomingUnit.getProductId()
+                || TrackingType.defaultIfNull(existingUnit.getTrackingType()) != TrackingType.defaultIfNull(incomingUnit.getTrackingType())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "SERIALIZED_UNIT_PRODUCT_MISMATCH",
+                    "This IMEI or serial already belongs to another product"
+            );
+        }
+
+        if (existingUnit.getStatus() == ProductUnitStatus.SOLD
+                || existingUnit.getStatus() == ProductUnitStatus.RETURNED
+                || existingUnit.getStatus() == ProductUnitStatus.DAMAGED
+                || existingUnit.getStatus() == ProductUnitStatus.UNDER_REPAIR) {
+            return;
+        }
+
+        throw new ApiException(
+                HttpStatus.CONFLICT,
+                "SERIALIZED_UNIT_ACTIVE_DUPLICATE",
+                "This IMEI or serial already exists as an active inventory unit"
+        );
     }
 
     public ProductUnit requireAvailableUnitForSale(long companyId, long branchId, long productId, long productUnitId) {
@@ -715,10 +763,31 @@ public class SerializedInventoryService {
 
     private String normalizeImei(String imei) {
         String normalizedImei = requireNonBlank(imei, "imei");
-        if (!normalizedImei.matches("\\d{14,17}")) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "IMEI_INVALID", "IMEI must be 14 to 17 digits");
+        if (!isValidImei(normalizedImei)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMEI_INVALID", "IMEI must be a valid 15-digit number");
         }
         return normalizedImei;
+    }
+
+    private boolean isValidImei(String value) {
+        if (value == null || !value.matches("\\d{15}")) {
+            return false;
+        }
+
+        int sum = 0;
+        boolean doubleDigit = false;
+        for (int index = value.length() - 1; index >= 0; index -= 1) {
+            int digit = value.charAt(index) - '0';
+            if (doubleDigit) {
+                digit *= 2;
+                if (digit > 9) {
+                    digit -= 9;
+                }
+            }
+            sum += digit;
+            doubleDigit = !doubleDigit;
+        }
+        return sum % 10 == 0;
     }
 
     private String buildUnitIdempotencyKey(String requestIdempotencyKey, String unitIdentifier) {

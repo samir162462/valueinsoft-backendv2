@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.pos;
 
 import com.example.valueinsoftbackend.AbstractIntegrationTest;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +16,7 @@ import java.util.Locale;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 public class PosOrderIntegrationTest extends AbstractIntegrationTest {
@@ -29,11 +31,16 @@ public class PosOrderIntegrationTest extends AbstractIntegrationTest {
     @MockBean
     private AuthorizationService authorizationService;
 
+    @MockBean
+    private TenantScopeGuard tenantScopeGuard;
+
     @BeforeEach
     void setup() {
         doNothing().when(authorizationService).assertAuthenticatedCapability(
                 anyString(), anyInt(), nullable(Integer.class), anyString()
         );
+        when(tenantScopeGuard.requireScope(anyString(), nullable(Integer.class), nullable(Integer.class)))
+                .thenReturn(new TenantScopeGuard.ResolvedTenantScope(COMPANY_ID, BRANCH_ID));
 
         ensurePublicFixtures();
         ensureTenantSchema();

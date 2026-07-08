@@ -5,6 +5,7 @@
 package com.example.valueinsoftbackend.Controller.posController;
 
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import com.example.valueinsoftbackend.Model.Inventory.ProductUnitStatus;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Request.CreateInventoryTransactionRequest;
@@ -31,18 +32,25 @@ public class InventoryTransactionController {
     private final InventoryTransactionService inventoryTransactionService;
     private final SerializedInventoryService serializedInventoryService;
     private final AuthorizationService authorizationService;
+    private final TenantScopeGuard tenantScopeGuard;
 
     public InventoryTransactionController(InventoryTransactionService inventoryTransactionService,
                                           SerializedInventoryService serializedInventoryService,
-                                          AuthorizationService authorizationService) {
+                                          AuthorizationService authorizationService,
+                                          TenantScopeGuard tenantScopeGuard) {
         this.inventoryTransactionService = inventoryTransactionService;
         this.serializedInventoryService = serializedInventoryService;
         this.authorizationService = authorizationService;
+        this.tenantScopeGuard = tenantScopeGuard;
     }
 
     @PostMapping("/AddTransaction")
     public ResponseEntity<Object> newTransaction(@Valid @RequestBody CreateInventoryTransactionRequest body,
                                                  Principal principal) {
+        // P0-2: validate the request-supplied company/branch against the authenticated identity
+        // before any capability check or service work. The service reads companyId from the body;
+        // this guard guarantees that value belongs to the caller.
+        tenantScopeGuard.requireScope(principal.getName(), body.getCompanyId(), body.getBranchId());
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
                 body.getCompanyId(),
