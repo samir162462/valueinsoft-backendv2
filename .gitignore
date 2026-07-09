@@ -37,6 +37,9 @@ config/*.local.properties
 config/*.secret.properties
 config/*.secrets.properties
 config/secrets/
+# Keep the safe, secret-free template trackable:
+!config/application-dev.local.properties.example
+!config/*.example
 .env
 .env.*
 !.env.example

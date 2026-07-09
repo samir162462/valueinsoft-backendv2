@@ -18,16 +18,22 @@ public class LegacyAwareBcryptPasswordEncoder implements PasswordEncoder {
             return false;
         }
 
+        // P1-4: only bcrypt-hashed passwords are accepted. The legacy plaintext-compatibility
+        // branch has been removed so that a plaintext value stored at rest can NEVER authenticate.
+        // Any pre-existing plaintext passwords are migrated to bcrypt in place by Flyway migration
+        // V138 (which also flags those accounts with password_reset_required = TRUE).
         if (isBcryptHash(encodedPassword)) {
             return delegate.matches(rawPassword, encodedPassword);
         }
 
-        return encodedPassword.contentEquals(rawPassword);
+        return false;
     }
 
     @Override
     public boolean upgradeEncoding(String encodedPassword) {
-        return !isBcryptHash(encodedPassword);
+        // Post-migration all stored passwords are bcrypt; a non-bcrypt value is rejected by
+        // matches() rather than being silently accepted and re-hashed. Nothing to upgrade.
+        return false;
     }
 
     private boolean isBcryptHash(String encodedPassword) {

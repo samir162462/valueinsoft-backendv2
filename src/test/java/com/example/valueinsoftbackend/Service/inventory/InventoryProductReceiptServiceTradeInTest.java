@@ -186,7 +186,7 @@ class InventoryProductReceiptServiceTradeInTest {
         request.getReceipt().setClientId(88);
         request.getReceipt().setConditionCode("USED");
         SerializedUnitInput unit = new SerializedUnitInput();
-        unit.setImei("35692005149810");
+        unit.setImei("490154203237518");
         request.setSerializedUnits(List.of(unit));
 
         service.receiveProduct("cashier", request);

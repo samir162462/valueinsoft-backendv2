@@ -1,0 +1,34 @@
+# =====================================================================
+# TEMPLATE for config/application-dev.local.properties  (SAFE TO COMMIT)
+# =====================================================================
+# Copy this file to  config/application-dev.local.properties  and fill in real values.
+# The real file is git-ignored and must NEVER be committed or pushed.
+#
+# The dev profile imports it automatically via:
+#   spring.config.import=optional:file:./config/application-dev.local.properties
+#
+# Prod does NOT read this file — set the equivalent values as environment variables
+# / platform secrets in production instead.
+# =====================================================================
+
+# Local database (localhost)
+spring.datasource.url=jdbc:postgresql://localhost:5432/localvls
+spring.datasource.username=postgres
+spring.datasource.password=CHANGE_ME
+spring.flyway.enabled=true
+
+# S3-compatible object storage
+vls.s3.access-key=CHANGE_ME
+vls.s3.secret-key=CHANGE_ME
+vls.s3.bucket-name=CHANGE_ME
+vls.s3.endpoint=https://your-s3-endpoint
+
+# Google Gemini / Spring AI
+spring.ai.google.genai.api-key=CHANGE_ME
+vls.ai.embedding.google.api-key=CHANGE_ME
+
+# DeepSeek (optional)
+vls.ai.deepseek.api-key=CHANGE_ME
+
+# WhatsApp token encryption key (32 bytes)
+vls.whatsapp.encryption-key=CHANGE_ME_32_BYTE_KEY

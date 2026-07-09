@@ -18,6 +18,9 @@
 		<lombok.version>1.18.36</lombok.version>
 		<aws.sdk.version>2.25.35</aws.sdk.version>
 		<spring-ai.version>1.1.6</spring-ai.version>
+		<!-- P1-9: Postgres/Testcontainers tests are excluded from the default build (need Docker).
+		     Run them with: mvn test -Dsurefire.excludedGroups= -Dgroups=postgres -->
+		<surefire.excludedGroups>postgres</surefire.excludedGroups>
 	</properties>
 	<dependencyManagement>
 		<dependencies>
@@ -183,6 +186,17 @@
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- P1-9: real-Postgres integration tests (versions managed by the Spring Boot BOM) -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -197,6 +211,13 @@
 							<artifactId>lombok</artifactId>
 						</exclude>
 					</excludes>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<excludedGroups>${surefire.excludedGroups}</excludedGroups>
 				</configuration>
 			</plugin>
 			<plugin>
