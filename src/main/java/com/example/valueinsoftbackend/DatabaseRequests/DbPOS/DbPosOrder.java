@@ -281,9 +281,12 @@ public class DbPosOrder {
 
         String sql = "SELECT detail.\"orderDetailsId\", detail.\"itemId\", detail.\"itemName\", detail.quantity, detail.price, detail.total, " +
                 "detail.\"productId\", detail.\"bouncedBack\", " +
+                "COALESCE(NULLIF(TRIM(product.serial),''),'') AS serial, " +
                 "COALESCE(serialized.product_unit_ids, ARRAY[]::bigint[]) AS product_unit_ids, " +
                 "COALESCE(serialized.unit_identifiers, ARRAY[]::text[]) AS unit_identifiers " +
                 "FROM " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) + " detail " +
+                "LEFT JOIN " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " product " +
+                "ON product.product_id=detail.\"productId\" " +
                 "LEFT JOIN LATERAL (" +
                 " SELECT array_agg(unit.product_unit_id ORDER BY unit.product_unit_id) AS product_unit_ids, " +
                 "        array_agg(unit.unit_identifier ORDER BY unit.product_unit_id) AS unit_identifiers " +
@@ -292,18 +295,22 @@ public class DbPosOrder {
                 ") serialized ON true " +
                 "WHERE detail.\"orderId\" = ? ORDER BY detail.\"orderDetailsId\" ASC";
 
-        return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> new OrderDetails(
-                rs.getInt("orderDetailsId"),
-                rs.getInt("itemId"),
-                rs.getString("itemName"),
-                rs.getInt("quantity"),
-                rs.getInt("price"),
-                rs.getInt("total"),
-                rs.getInt("productId"),
-                rs.getInt("bouncedBack"),
-                toLongList(rs.getArray("product_unit_ids")),
-                toStringList(rs.getArray("unit_identifiers"))
-        ), branchId, orderId));
+        return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> {
+            OrderDetails detail = new OrderDetails(
+                    rs.getInt("orderDetailsId"),
+                    rs.getInt("itemId"),
+                    rs.getString("itemName"),
+                    rs.getInt("quantity"),
+                    rs.getInt("price"),
+                    rs.getInt("total"),
+                    rs.getInt("productId"),
+                    rs.getInt("bouncedBack"),
+                    toLongList(rs.getArray("product_unit_ids")),
+                    toStringList(rs.getArray("unit_identifiers"))
+            );
+            detail.setSerial(rs.getString("serial"));
+            return detail;
+        }, branchId, orderId));
     }
 
     public OrderBounceBackContext getBounceBackContext(int odId, int branchId, int companyId) {
@@ -314,7 +321,7 @@ public class DbPosOrder {
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String sql = "SELECT od.\"orderDetailsId\", od.\"orderId\", od.quantity, od.total, od.\"productId\", " +
                 "COALESCE(od.\"bouncedBack\", 0) AS \"bouncedBack\", ord.\"salesUser\", ord.\"clientId\", COALESCE(ord.\"orderDiscount\", 0) AS \"orderDiscount\", " +
-                "COALESCE(ord.\"orderTotal\", 0) AS \"orderTotal\", " +
+                "COALESCE(ord.\"orderTotal\", 0) AS \"orderTotal\", ord.\"orderType\", " +
                 "COALESCE(prod.buying_price, 0) AS \"buyingPrice\", " +
                 "EXISTS (" +
                 " SELECT 1 FROM " + detailTable + " other " +
@@ -336,6 +343,7 @@ public class DbPosOrder {
                 rs.getObject("clientId") != null ? rs.getInt("clientId") : null,
                 rs.getInt("orderDiscount"),
                 rs.getInt("orderTotal"),
+                rs.getString("orderType"),
                 rs.getInt("buyingPrice"),
                 rs.getBoolean("hasOtherActiveItems")
         ), odId);
@@ -737,8 +745,14 @@ public class DbPosOrder {
     private String buildOrdersWithDetailsSelect(int companyId, int branchId) {
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String detailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
+        String arOpenItems = TenantSqlIdentifiers.arOpenItemTable(companyId);
+        String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         return "SELECT ord.\"orderId\", ord.\"orderTime\", ord.\"clientName\", ord.\"orderType\", ord.\"orderDiscount\", ord.\"orderTotal\", " +
-                "ord.\"salesUser\", ord.\"clientId\", ord.\"orderIncome\", ord.\"orderBouncedBack\", ord.receipt_number, ord.idempotency_key, details.orderDetails " +
+                "ord.\"salesUser\", ord.\"clientId\", ord.\"orderIncome\", ord.\"orderBouncedBack\", ord.receipt_number, ord.idempotency_key, details.orderDetails, " +
+                "COALESCE((SELECT SUM(oi.remaining_amount) FROM " + arOpenItems + " oi " +
+                "WHERE oi.company_id=" + companyId + " AND oi.branch_id=" + branchId + " " +
+                "AND oi.source_id=ord.\"orderId\" AND oi.source_type IN ('POS_ORDER','POS_SUPPLIER_ORDER') " +
+                "AND oi.status IN ('OPEN','PARTIALLY_SETTLED')),0) AS receivable_remaining_amount " +
                 "FROM " + orderTable + " ord " +
                 "LEFT JOIN (" +
                 " SELECT array_to_json(array_agg(json_build_object(" +
@@ -750,10 +764,12 @@ public class DbPosOrder {
                 "   'total', detail.total, " +
                 "   'productId', detail.\"productId\", " +
                 "   'bouncedBack', detail.\"bouncedBack\", " +
+                "   'serial', product.serial, " +
                 "   'productUnitIds', COALESCE(serialized.product_unit_ids, ARRAY[]::bigint[]), " +
                 "   'unitIdentifiers', COALESCE(serialized.unit_identifiers, ARRAY[]::text[])" +
                 " ))) AS orderDetails, detail.\"orderId\" AS order_id " +
                 " FROM " + detailTable + " detail " +
+                " LEFT JOIN " + productTable + " product ON product.product_id=detail.\"productId\" " +
                 " LEFT JOIN LATERAL (" +
                 "   SELECT array_agg(unit.product_unit_id ORDER BY unit.product_unit_id) AS product_unit_ids, " +
                 "          array_agg(unit.unit_identifier ORDER BY unit.product_unit_id) AS unit_identifiers " +
@@ -781,6 +797,7 @@ public class DbPosOrder {
         );
         o.setReceiptNumber(rs.getString("receipt_number"));
         o.setIdempotencyKey(rs.getString("idempotency_key"));
+        o.setReceivableRemainingAmount(rs.getBigDecimal("receivable_remaining_amount"));
         return o;
     }
 
@@ -848,12 +865,20 @@ public class DbPosOrder {
         private final Integer clientId;
         private final int orderDiscount;
         private final int orderTotal;
+        private final String orderType;
         private final int buyingPrice;
         private final boolean hasOtherActiveItems;
 
         public OrderBounceBackContext(int orderDetailId, int orderId, int quantity, int total, int productId,
                                       int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int orderTotal, int buyingPrice,
                                       boolean hasOtherActiveItems) {
+            this(orderDetailId, orderId, quantity, total, productId, bouncedBack, salesUser, clientId,
+                    orderDiscount, orderTotal, null, buyingPrice, hasOtherActiveItems);
+        }
+
+        public OrderBounceBackContext(int orderDetailId, int orderId, int quantity, int total, int productId,
+                                      int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int orderTotal,
+                                      String orderType, int buyingPrice, boolean hasOtherActiveItems) {
             this.orderDetailId = orderDetailId;
             this.orderId = orderId;
             this.quantity = quantity;
@@ -864,6 +889,7 @@ public class DbPosOrder {
             this.clientId = clientId;
             this.orderDiscount = orderDiscount;
             this.orderTotal = orderTotal;
+            this.orderType = orderType;
             this.buyingPrice = buyingPrice;
             this.hasOtherActiveItems = hasOtherActiveItems;
         }
@@ -906,6 +932,10 @@ public class DbPosOrder {
 
         public int getOrderTotal() {
             return orderTotal;
+        }
+
+        public String getOrderType() {
+            return orderType;
         }
 
         public int getBuyingPrice() {

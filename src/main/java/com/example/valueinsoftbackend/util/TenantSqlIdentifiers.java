@@ -216,6 +216,42 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".\"ClientReceipts\"";
     }
 
+    public static String arOpenItemTable(int companyId) {
+        return companySchema(companyId) + ".ar_open_item";
+    }
+
+    public static String arReceiptAllocationTable(int companyId) {
+        return companySchema(companyId) + ".ar_receipt_allocation";
+    }
+
+    public static String arSupplierReceiptTable(int companyId) {
+        return companySchema(companyId) + ".ar_supplier_receipt";
+    }
+
+    public static String arSupplierReceiptAllocationTable(int companyId) {
+        return companySchema(companyId) + ".ar_supplier_receipt_allocation";
+    }
+
+    public static String arCreditNoteTable(int companyId) {
+        return companySchema(companyId) + ".ar_credit_note";
+    }
+
+    public static String apOpenItemTable(int companyId) {
+        return companySchema(companyId) + ".ap_open_item";
+    }
+
+    public static String apPaymentAllocationTable(int companyId) {
+        return companySchema(companyId) + ".ap_payment_allocation";
+    }
+
+    public static String apDebitNoteTable(int companyId) {
+        return companySchema(companyId) + ".ap_debit_note";
+    }
+
+    public static String openItemsOpeningImportRunTable(int companyId) {
+        return companySchema(companyId) + ".openitems_opening_import_run";
+    }
+
     public static String clientTradeInReceiptTable(int companyId) {
         return companySchema(companyId) + ".client_tradein_receipt";
     }
@@ -473,4 +509,3 @@ public final class TenantSqlIdentifiers {
         }
     }
 }
-

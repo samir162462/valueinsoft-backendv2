@@ -11,11 +11,16 @@ import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -46,14 +51,36 @@ public class FinancePostingRequestService {
     private final FinanceAuditService financeAuditService;
     private final ObjectMapper objectMapper;
     private final List<FinancePostingAdapter> postingAdapters;
+    private final TransactionOperations postingAttemptTransactions;
 
+    @Autowired
     public FinancePostingRequestService(DbFinancePostingRequest dbFinancePostingRequest,
                                         DbFinanceSetup dbFinanceSetup,
                                         DbFinanceJournal dbFinanceJournal,
                                         AuthorizationService authorizationService,
                                         FinanceAuditService financeAuditService,
                                         ObjectMapper objectMapper,
-                                        List<FinancePostingAdapter> postingAdapters) {
+                                        List<FinancePostingAdapter> postingAdapters,
+                                        PlatformTransactionManager transactionManager) {
+        this(
+                dbFinancePostingRequest,
+                dbFinanceSetup,
+                dbFinanceJournal,
+                authorizationService,
+                financeAuditService,
+                objectMapper,
+                postingAdapters,
+                nestedTransactionOperations(transactionManager));
+    }
+
+    FinancePostingRequestService(DbFinancePostingRequest dbFinancePostingRequest,
+                                 DbFinanceSetup dbFinanceSetup,
+                                 DbFinanceJournal dbFinanceJournal,
+                                 AuthorizationService authorizationService,
+                                 FinanceAuditService financeAuditService,
+                                 ObjectMapper objectMapper,
+                                 List<FinancePostingAdapter> postingAdapters,
+                                 TransactionOperations postingAttemptTransactions) {
         this.dbFinancePostingRequest = dbFinancePostingRequest;
         this.dbFinanceSetup = dbFinanceSetup;
         this.dbFinanceJournal = dbFinanceJournal;
@@ -61,6 +88,7 @@ public class FinancePostingRequestService {
         this.financeAuditService = financeAuditService;
         this.objectMapper = objectMapper.copy().configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
         this.postingAdapters = postingAdapters;
+        this.postingAttemptTransactions = postingAttemptTransactions;
     }
 
     @Transactional
@@ -301,7 +329,7 @@ public class FinancePostingRequestService {
                                                                        Integer actorUserId) {
         try {
             FinancePostingAdapter adapter = resolveAdapter(claimed.getSourceModule());
-            UUID journalEntryId = adapter.post(claimed);
+            UUID journalEntryId = postingAttemptTransactions.execute(status -> adapter.post(claimed));
             if (journalEntryId == null) {
                 throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "FINANCE_POSTING_ADAPTER_NO_JOURNAL",
                         "Posting adapter did not return a journal id");
@@ -331,6 +359,12 @@ public class FinancePostingRequestService {
                     "Posting request processing failed");
             return processResponse(failed, true, exception.getMessage(), correlationId);
         }
+    }
+
+    private static TransactionOperations nestedTransactionOperations(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
+        return template;
     }
 
     private FinancePostingAdapter resolveAdapter(String sourceModule) {

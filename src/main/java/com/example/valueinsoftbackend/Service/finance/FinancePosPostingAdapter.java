@@ -243,7 +243,7 @@ public class FinancePosPostingAdapter implements FinancePostingAdapter {
         if (payments != null && payments.isArray() && !payments.isEmpty()) {
             BigDecimal paymentTotal = ZERO;
             for (JsonNode payment : payments) {
-                String method = normalizePaymentMethod(text(payment, "method", "cash"));
+                String method = PaymentTypeClassifier.classify(text(payment, "method", "cash")).mappingKey();
                 BigDecimal amount = requiredAmount(payment, "amount");
                 paymentTotal = paymentTotal.add(amount);
                 lines.add(debitLine(
@@ -263,7 +263,7 @@ public class FinancePosPostingAdapter implements FinancePostingAdapter {
             return;
         }
 
-        String method = normalizePaymentMethod(text(payload, "paymentMethod", "cash"));
+        String method = PaymentTypeClassifier.classify(text(payload, "paymentMethod", "cash")).mappingKey();
         lines.add(debitLine(
                 resolveMapping(request, "pos." + method),
                 request,
@@ -283,7 +283,7 @@ public class FinancePosPostingAdapter implements FinancePostingAdapter {
         if (refunds != null && refunds.isArray() && !refunds.isEmpty()) {
             BigDecimal refundTotal = ZERO;
             for (JsonNode refund : refunds) {
-                String method = normalizePaymentMethod(text(refund, "method", "cash"));
+                String method = PaymentTypeClassifier.classify(text(refund, "method", "cash")).mappingKey();
                 BigDecimal amount = requiredAmount(refund, "amount");
                 refundTotal = refundTotal.add(amount);
                 lines.add(creditLine(
@@ -303,7 +303,8 @@ public class FinancePosPostingAdapter implements FinancePostingAdapter {
             return;
         }
 
-        String method = normalizePaymentMethod(text(payload, "refundMethod", text(payload, "paymentMethod", "cash")));
+        String method = PaymentTypeClassifier.classify(
+                text(payload, "refundMethod", text(payload, "paymentMethod", "cash"))).mappingKey();
         lines.add(creditLine(
                 resolveMapping(request, "pos." + method),
                 request,
@@ -650,23 +651,6 @@ public class FinancePosPostingAdapter implements FinancePostingAdapter {
             }
         }
         return null;
-    }
-
-    private String normalizePaymentMethod(String value) {
-        String method = value == null ? "cash" : value.trim().toLowerCase();
-        if ("direct".equals(method) || "dirict".equals(method)) {
-            return "cash";
-        }
-        if ("credit".equals(method)) {
-            return "receivable";
-        }
-        if ("card".equals(method) || "visa".equals(method) || "mastercard".equals(method)) {
-            return "card";
-        }
-        if ("instapay".equals(method) || "wallet".equals(method)) {
-            return "wallet";
-        }
-        return method;
     }
 
     private BigDecimal totalDebit(List<DbFinanceJournal.PostedSourceJournalLineCommand> lines) {

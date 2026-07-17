@@ -23,7 +23,8 @@ public class DBMClientReceipt {
 
     public ArrayList<ClientReceipt> getClientReceipts(int companyId, int clientId) {
         String sql = "SELECT \"crId\", type, amount::money::numeric AS amount, \"time\", \"userName\", \"clientId\", \"branchId\" " +
-                "FROM " + TenantSqlIdentifiers.clientReceiptsTable(companyId) + " WHERE \"clientId\" = ?";
+                "FROM " + TenantSqlIdentifiers.clientReceiptsTable(companyId) +
+                " WHERE \"clientId\" = ? ORDER BY \"time\" DESC, \"crId\" DESC";
 
         return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> new ClientReceipt(
                 rs.getInt("crId"),
@@ -39,7 +40,8 @@ public class DBMClientReceipt {
     public ArrayList<ClientReceipt> getClientReceiptsByTime(int companyId, int branchId, Timestamp startTime, Timestamp endTime) {
         String sql = "SELECT \"crId\", type, amount::money::numeric AS amount, \"time\", \"userName\", \"clientId\", \"branchId\" " +
                 "FROM " + TenantSqlIdentifiers.clientReceiptsTable(companyId) +
-                " WHERE \"branchId\" = ? AND \"time\" BETWEEN ? AND ?";
+                " WHERE \"branchId\" = ? AND \"time\" BETWEEN ? AND ?" +
+                " ORDER BY \"time\" DESC, \"crId\" DESC";
 
         return new ArrayList<>(jdbcTemplate.query(sql, (rs, rowNum) -> new ClientReceipt(
                 rs.getInt("crId"),

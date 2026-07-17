@@ -5,6 +5,8 @@ import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Request.SupplierReceiptCreateRequest;
 import com.example.valueinsoftbackend.Model.Sales.SupplierReceipt;
 import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
+import com.example.valueinsoftbackend.Service.openitems.ApOpenItemService;
+import com.example.valueinsoftbackend.Model.OpenItems.OpenItemsWriteModels;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -31,12 +33,20 @@ class SupplierReceiptServiceTest {
     private DBMSupplierReceipt supplierReceiptRepository;
     private FinanceOperationalPostingService financeOperationalPostingService;
     private SupplierReceiptService supplierReceiptService;
+    private ApOpenItemService apOpenItemService;
 
     @BeforeEach
     void setUp() {
         supplierReceiptRepository = Mockito.mock(DBMSupplierReceipt.class);
         financeOperationalPostingService = Mockito.mock(FinanceOperationalPostingService.class);
-        supplierReceiptService = new SupplierReceiptService(supplierReceiptRepository, financeOperationalPostingService);
+        apOpenItemService = Mockito.mock(ApOpenItemService.class);
+        when(apOpenItemService.purchaseRemaining(COMPANY_ID, BRANCH_ID, 88, 7001)).thenReturn(BigDecimal.ZERO);
+        when(apOpenItemService.companyCurrency(COMPANY_ID)).thenReturn("EGP");
+        when(apOpenItemService.allocateReceipt(eq(COMPANY_ID), eq(BRANCH_ID), eq(88), eq(91), any(), eq("sam")))
+                .thenReturn(new OpenItemsWriteModels.AllocationResult(
+                        91, BigDecimal.valueOf(500), BigDecimal.ZERO, java.util.List.of(), false));
+        supplierReceiptService = new SupplierReceiptService(
+                supplierReceiptRepository, financeOperationalPostingService, apOpenItemService, true);
     }
 
     @Test

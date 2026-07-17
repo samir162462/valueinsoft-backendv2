@@ -34,7 +34,7 @@ public class PosReceiptNumberingIntegrationTest extends AbstractIntegrationTest 
         jdbcTemplate.execute("CREATE TABLE c_9999.\"PosOrderDetail_1082\" (\"orderDetailsId\" SERIAL PRIMARY KEY, \"itemId\" INTEGER, \"itemName\" VARCHAR, quantity INTEGER, price INTEGER, total INTEGER, \"orderId\" INTEGER REFERENCES c_9999.\"PosOrder_1082\" (\"orderId\") ON DELETE CASCADE ON UPDATE CASCADE, \"productId\" INTEGER, \"bouncedBack\" INTEGER)");
 
         OrderItemRequest item = new OrderItemRequest(1, "Product 1", 1, 100, 100, 0, Collections.emptyList(), Collections.emptyList(), null);
-        CreateOrderRequest request = new CreateOrderRequest(0, null, "Test", "Direct", 0, 100, "user", 1082, 1, 100, List.of(item), null, null, null, null, null, UUID.randomUUID().toString());
+        CreateOrderRequest request = new CreateOrderRequest(0, null, "Test", "Direct", 0, 100, "user", 1082, 1, 100, List.of(item), null, null, null, null, null, null, null, null, UUID.randomUUID().toString());
         
         CreateOrderResult result = orderService.createOrder(request, 9999);
         assertNotNull(result);
@@ -43,4 +43,3 @@ public class PosReceiptNumberingIntegrationTest extends AbstractIntegrationTest 
         assertTrue(result.receiptNumber().contains("1082000001"));
     }
 }
-

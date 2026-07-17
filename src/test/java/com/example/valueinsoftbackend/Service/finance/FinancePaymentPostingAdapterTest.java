@@ -192,7 +192,7 @@ class FinancePaymentPostingAdapterTest {
                 """));
 
         DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
-        assertEquals("receipt", command.journalType());
+        assertEquals("payment", command.journalType());
         assertEquals("customer_receipt", command.sourceType());
         assertEquals("RC-000001", command.journalNumber());
         assertEquals(money("275.0000"), command.totalDebit());
@@ -216,7 +216,7 @@ class FinancePaymentPostingAdapterTest {
                 """));
 
         DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
-        assertEquals("billing_balance_settlement", command.journalType());
+        assertEquals("payment", command.journalType());
         assertEquals("billing_balance_settlement", command.sourceType());
         assertEquals("BB-000001", command.journalNumber());
         assertEquals(money("600.0000"), command.totalDebit());
@@ -240,7 +240,7 @@ class FinancePaymentPostingAdapterTest {
                 """));
 
         DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
-        assertEquals("billing_balance_credit", command.journalType());
+        assertEquals("payment", command.journalType());
         assertEquals("billing_balance_credit", command.sourceType());
         assertEquals("BC-000001", command.journalNumber());
         assertEquals(money("600.0000"), command.totalDebit());
@@ -264,7 +264,7 @@ class FinancePaymentPostingAdapterTest {
                 """));
 
         DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
-        assertEquals("billing_balance_credit", command.journalType());
+        assertEquals("payment", command.journalType());
         assertEquals("billing_balance_credit", command.sourceType());
         assertEquals("BC-000001", command.journalNumber());
         assertEquals(money("125.0000"), command.totalDebit());
@@ -286,7 +286,7 @@ class FinancePaymentPostingAdapterTest {
                 """));
 
         DbFinanceJournal.PostedSourceJournalCommand command = capturedCommand();
-        assertEquals("supplier_payment", command.journalType());
+        assertEquals("payment", command.journalType());
         assertEquals("supplier_payment", command.sourceType());
         assertEquals("SP-000001", command.journalNumber());
         assertEquals(money("410.0000"), command.totalDebit());

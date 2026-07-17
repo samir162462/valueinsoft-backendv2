@@ -57,6 +57,21 @@ public record CreateOrderRequest(
         @PositiveOrZero(message = "loyaltyNetAmount must be zero or greater")
         BigDecimal loyaltyNetAmount,
 
+        @jakarta.validation.constraints.Pattern(regexp = "CLIENT|SUPPLIER", flags = jakarta.validation.constraints.Pattern.Flag.CASE_INSENSITIVE,
+                message = "receivablePartyType must be CLIENT or SUPPLIER")
+        String receivablePartyType,
+
+        @PositiveOrZero(message = "receivableSupplierId must be zero or greater")
+        Integer receivableSupplierId,
+
+        /**
+         * Cash received at checkout when the sale is partly paid and the balance
+         * is posted to the selected client's receivable account. Null means the
+         * legacy/full-payment flow.
+         */
+        @PositiveOrZero(message = "paidNowAmount must be zero or greater")
+        BigDecimal paidNowAmount,
+
         /**
          * Optional idempotency token to ensure safe retries without duplicate processing.
          * A UUID format is strongly recommended.

@@ -15,6 +15,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -65,7 +68,8 @@ class FinancePostingRequestServiceTest {
                 authorizationService,
                 financeAuditService,
                 new ObjectMapper(),
-                List.of(postingAdapter));
+                List.of(postingAdapter),
+                immediateTransactions());
 
         when(dbFinanceSetup.companyExists(COMPANY_ID)).thenReturn(true);
         when(dbFinanceSetup.branchBelongsToCompany(COMPANY_ID, BRANCH_ID)).thenReturn(true);
@@ -310,5 +314,14 @@ class FinancePostingRequestServiceTest {
                 15,
                 Instant.now(),
                 17);
+    }
+
+    private TransactionOperations immediateTransactions() {
+        return new TransactionOperations() {
+            @Override
+            public <T> T execute(TransactionCallback<T> action) {
+                return action.doInTransaction(Mockito.mock(TransactionStatus.class));
+            }
+        };
     }
 }

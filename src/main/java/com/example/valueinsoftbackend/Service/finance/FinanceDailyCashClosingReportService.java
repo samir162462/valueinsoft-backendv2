@@ -108,11 +108,11 @@ public class FinanceDailyCashClosingReportService {
 
         for (DailyCashClosingPaymentBreakdownRow row : paymentBreakdown) {
             BigDecimal net = scale(row.getNetAmount());
-            switch (classifyPaymentMethod(row.getPaymentMethod())) {
-                case "cash" -> cashSales = cashSales.add(net);
-                case "card" -> cardSales = cardSales.add(net);
-                case "wallet" -> walletSales = walletSales.add(net);
-                case "credit" -> creditSales = creditSales.add(net);
+            switch (PaymentTypeClassifier.classify(row.getPaymentMethod()).category()) {
+                case CASH -> cashSales = cashSales.add(net);
+                case CARD -> cardSales = cardSales.add(net);
+                case WALLET -> walletSales = walletSales.add(net);
+                case RECEIVABLE -> creditSales = creditSales.add(net);
                 default -> {
                 }
             }
@@ -407,23 +407,6 @@ public class FinanceDailyCashClosingReportService {
     private BigDecimal firstNonZero(BigDecimal preferred, BigDecimal fallback) {
         BigDecimal scaledPreferred = scale(preferred);
         return scaledPreferred.compareTo(BigDecimal.ZERO) == 0 ? scale(fallback) : scaledPreferred;
-    }
-
-    private String classifyPaymentMethod(String value) {
-        String normalized = nullToEmpty(value).toLowerCase(Locale.ROOT);
-        if (normalized.contains("cash") || normalized.contains("direct") || normalized.contains("dirict") || normalized.contains("مباشر")) {
-            return "cash";
-        }
-        if (normalized.contains("card") || normalized.contains("visa") || normalized.contains("master")) {
-            return "card";
-        }
-        if (normalized.contains("wallet") || normalized.contains("vodafone") || normalized.contains("instapay")) {
-            return "wallet";
-        }
-        if (normalized.contains("credit") || normalized.contains("later") || normalized.contains("debt") || normalized.contains("receivable")) {
-            return "credit";
-        }
-        return "other";
     }
 
     private String formatMoney(BigDecimal value) {

@@ -13,6 +13,7 @@ public class OrderDetails {
     int total;
     int productId;
     int bouncedBack;
+    String serial;
     List<Long> productUnitIds;
     List<String> unitIdentifiers;
 
@@ -96,6 +97,14 @@ public class OrderDetails {
 
     public void setBouncedBack(int bouncedBack) {
         this.bouncedBack = bouncedBack;
+    }
+
+    public String getSerial() {
+        return serial;
+    }
+
+    public void setSerial(String serial) {
+        this.serial = serial;
     }
 
     public List<Long> getProductUnitIds() {

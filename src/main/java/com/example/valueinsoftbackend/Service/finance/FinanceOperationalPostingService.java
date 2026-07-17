@@ -31,11 +31,71 @@ public class FinanceOperationalPostingService {
 
     private final DbFinanceSetup dbFinanceSetup;
     private final FinancePostingRequestService financePostingRequestService;
+    private final com.example.valueinsoftbackend.DatabaseRequests.DbFinancePostingRequest dbFinancePostingRequest;
 
     public FinanceOperationalPostingService(DbFinanceSetup dbFinanceSetup,
-                                            FinancePostingRequestService financePostingRequestService) {
+                                            FinancePostingRequestService financePostingRequestService,
+                                            com.example.valueinsoftbackend.DatabaseRequests.DbFinancePostingRequest dbFinancePostingRequest) {
         this.dbFinanceSetup = dbFinanceSetup;
         this.financePostingRequestService = financePostingRequestService;
+        this.dbFinancePostingRequest = dbFinancePostingRequest;
+    }
+
+    /**
+     * Stage 4.2/4.7 (open items): enqueue the GL reversal for a subledger document
+     * (client/supplier receipt, credit/debit note) whose issuance posted through the
+     * posting-request pipeline.
+     *
+     * <p>Resolution rules (financial safety):
+     * <ul>
+     *   <li>No posting request for the original document -> returns {@code null}. Nothing
+     *       ever hit the GL (e.g. receipts predating the finance module), so a subledger-only
+     *       reversal is correct and complete.</li>
+     *   <li>Original request exists but is not {@code posted} with a journal -> CONFLICT.
+     *       A pending or failed request could still post later; reversing the subledger now
+     *       would let the GL diverge. Ops must resolve the request state first.</li>
+     *   <li>Original posted -> a {@code payment/subledger_reversal} request is created whose
+     *       adapter mirrors the original journal exactly and flips it to {@code reversed}.
+     *       {@code reversalSourceId} must be deterministic per document so the pipeline's
+     *       source dedupe makes the reversal idempotent.</li>
+     * </ul></p>
+     */
+    public FinancePostingRequestItem enqueueSubledgerGlReversal(int companyId,
+                                                                int branchId,
+                                                                String originalSourceModule,
+                                                                String originalSourceType,
+                                                                String originalSourceId,
+                                                                String reversalSourceId,
+                                                                String reason,
+                                                                String actorName) {
+        FinancePostingRequestItem original = dbFinancePostingRequest.findPostingRequestBySource(
+                companyId, originalSourceModule, originalSourceType, originalSourceId);
+        if (original == null) {
+            return null;
+        }
+        if (original.getJournalEntryId() == null || !"posted".equalsIgnoreCase(original.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_REVERSAL_SOURCE_NOT_POSTED",
+                    "The original document's posting request is " + original.getStatus()
+                            + "; resolve it before reversing (it could still post after the reversal)");
+        }
+
+        LocalDate postingDate = LocalDate.now();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open fiscal period exists for the reversal posting date");
+        }
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("originalJournalEntryId", original.getJournalEntryId().toString());
+        payload.put("originalSourceModule", originalSourceModule);
+        payload.put("originalSourceType", originalSourceType);
+        payload.put("originalSourceId", originalSourceId);
+        payload.put("reason", reason == null || reason.isBlank() ? "Subledger document reversed" : reason.trim());
+
+        return financePostingRequestService.createPostingRequestFromSystem(actorName,
+                new FinancePostingRequestCreateRequest(companyId, branchId, "payment", "subledger_reversal",
+                        reversalSourceId, postingDate, fiscalPeriodId, payload));
     }
 
     public void enqueuePosSale(int companyId,
@@ -580,17 +640,65 @@ public class FinanceOperationalPostingService {
                     "No open or soft-locked finance fiscal period exists for customer receipt posting date");
         }
 
+        boolean payout = receipt.getType() != null
+                && receipt.getType().replaceAll("[^A-Za-z0-9]", "").equalsIgnoreCase("ClientPayout");
         FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
                 companyId,
                 receipt.getBranchId(),
                 "payment",
-                "customer_receipt",
+                payout ? "customer_payout" : "customer_receipt",
                 "client-receipt-" + receipt.getCrId(),
                 postingDate,
                 fiscalPeriodId,
                 buildClientReceiptPayload(receipt));
 
         financePostingRequestService.createPostingRequestFromSystem(receipt.getUserName(), request);
+    }
+
+    public FinancePostingRequestItem enqueueArCreditNote(int companyId, int branchId, int clientId,
+                                                          long noteId, BigDecimal amount, String currencyCode,
+                                                          String actorName) {
+        LocalDate postingDate = LocalDate.now();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open fiscal period exists for credit-note posting date");
+        }
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", currencyCode);
+        payload.put("customerId", clientId);
+        payload.put("refundAmount", money(amount));
+        payload.put("salesReturnAmount", money(amount));
+        payload.put("taxAmount", money(0));
+        payload.put("refundMethod", "receivable");
+        payload.put("returnedToStock", false);
+        payload.put("items", List.of());
+        return financePostingRequestService.createPostingRequestFromSystem(actorName,
+                new FinancePostingRequestCreateRequest(companyId, branchId, "pos", "sale_return",
+                        "ar-credit-note-" + noteId, postingDate, fiscalPeriodId, payload));
+    }
+
+    public FinancePostingRequestItem enqueueApDebitNote(int companyId, int branchId, int supplierId,
+                                                         long noteId, BigDecimal amount, String currencyCode,
+                                                         String actorName) {
+        LocalDate postingDate = LocalDate.now();
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open fiscal period exists for debit-note posting date");
+        }
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", currencyCode);
+        payload.put("supplierId", supplierId);
+        payload.put("inventoryAmount", money(amount));
+        payload.put("returnAmount", money(amount));
+        payload.put("paidAmount", money(0));
+        payload.put("remainingAmount", money(amount));
+        payload.put("paymentMethod", "cash");
+        payload.put("items", List.of());
+        return financePostingRequestService.createPostingRequestFromSystem(actorName,
+                new FinancePostingRequestCreateRequest(companyId, branchId, "purchase", "purchase_return",
+                        "ap-debit-note-" + noteId, postingDate, fiscalPeriodId, payload));
     }
 
     public com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem enqueueSupplierPayment(int companyId, SupplierReceipt receipt) {
@@ -846,7 +954,10 @@ public class FinanceOperationalPostingService {
         payload.put("refundAmount", money(refundAmount));
         payload.put("salesReturnAmount", money(refundAmount));
         payload.put("taxAmount", money(0));
-        payload.put("refundMethod", "cash");
+        String returnMethod = context.getOrderType() == null || context.getOrderType().isBlank()
+                ? "cash"
+                : PaymentTypeClassifier.classify(context.getOrderType()).mappingKey();
+        payload.put("refundMethod", returnMethod);
         payload.put("returnedToStock", returnedToStock);
         payload.put("paymentId", cashMovementId == null ? null : "cash-movement-" + cashMovementId);
         payload.put("inventoryMovementId", inventoryMovementId);
@@ -1242,5 +1353,3 @@ public class FinanceOperationalPostingService {
         return value.setScale(4, RoundingMode.HALF_UP);
     }
 }
-
-

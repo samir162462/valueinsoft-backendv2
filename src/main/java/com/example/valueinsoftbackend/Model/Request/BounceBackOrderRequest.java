@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.Model.Request;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 
 public class BounceBackOrderRequest {
 
@@ -15,6 +16,9 @@ public class BounceBackOrderRequest {
     @Min(value = 1, message = "toWho must be 1 or 2")
     @Max(value = 2, message = "toWho must be 1 or 2")
     private int toWho;
+
+    @Size(max = 240, message = "reason must be 240 characters or fewer")
+    private String reason;
 
     public BounceBackOrderRequest() {
     }
@@ -41,5 +45,13 @@ public class BounceBackOrderRequest {
 
     public void setToWho(int toWho) {
         this.toWho = toWho;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
     }
 }

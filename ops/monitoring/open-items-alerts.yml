@@ -1,0 +1,29 @@
+groups:
+  - name: valueinsoft-open-items
+    rules:
+      - alert: OpenItemsReconciliationDrift
+        expr: valueinsoft_openitems_reconciliation_drift > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AR/AP reconciliation drift for company {{ $labels.company_id }}"
+          description: "{{ $labels.side }} subledger-to-control drift is {{ $value }}. Investigate before further rollout."
+
+      - alert: OpenItemsTriggerRejections
+        expr: increase(valueinsoft_openitems_trigger_rejections_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Open-items database integrity guard rejected a write"
+          description: "A {{ $labels.side }} {{ $labels.source }} allocation bypassed or violated the service protocol."
+
+      - alert: OpenItemsAllocationLatencyP95
+        expr: histogram_quantile(0.95, sum by (le, side) (rate(valueinsoft_openitems_allocation_latency_seconds_bucket[10m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Open-items allocation p95 exceeds one second"
+          description: "{{ $labels.side }} allocation p95 is {{ $value }} seconds; inspect lock waits and deadlocks."

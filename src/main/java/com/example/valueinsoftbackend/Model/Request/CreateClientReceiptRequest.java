@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
+import java.util.List;
+import com.example.valueinsoftbackend.Model.OpenItems.OpenItemsWriteModels;
 
 public class CreateClientReceiptRequest {
 
@@ -21,6 +23,10 @@ public class CreateClientReceiptRequest {
 
     @Positive(message = "branchId must be greater than zero")
     private int branchId;
+
+    private String currencyCode;
+    private String idempotencyKey;
+    private List<OpenItemsWriteModels.AllocationTarget> allocations;
 
     public CreateClientReceiptRequest() {
     }
@@ -64,4 +70,11 @@ public class CreateClientReceiptRequest {
     public void setBranchId(int branchId) {
         this.branchId = branchId;
     }
+
+    public String getCurrencyCode() { return currencyCode; }
+    public void setCurrencyCode(String currencyCode) { this.currencyCode = currencyCode; }
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
+    public List<OpenItemsWriteModels.AllocationTarget> getAllocations() { return allocations; }
+    public void setAllocations(List<OpenItemsWriteModels.AllocationTarget> allocations) { this.allocations = allocations; }
 }

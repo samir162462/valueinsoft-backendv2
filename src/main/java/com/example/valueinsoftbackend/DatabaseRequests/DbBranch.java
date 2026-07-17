@@ -207,6 +207,7 @@ public class DbBranch {
                 "    \"suplierMajor\" VARCHAR(20)," +
                 "    \"supplierRemainig\" INTEGER DEFAULT 0," +
                 "    \"supplierTotalSales\" INTEGER DEFAULT 0," +
+                "    payment_terms_days INTEGER NOT NULL DEFAULT 0," +
                 "    \"supplierStatus\" VARCHAR(32) NOT NULL DEFAULT 'active'," +
                 "    \"archivedAt\" TIMESTAMP NULL," +
                 "    \"archivedBy\" INTEGER NULL," +

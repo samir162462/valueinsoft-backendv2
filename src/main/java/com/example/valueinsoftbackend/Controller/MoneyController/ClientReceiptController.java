@@ -63,7 +63,7 @@ public class ClientReceiptController {
     }
 
     @PostMapping("/{companyId}")
-    public String addClientReceipts(
+    public ClientReceipt addClientReceipts(
             @Valid @RequestBody CreateClientReceiptRequest clientReceipt,
             @PathVariable @Positive int companyId,
             Principal principal

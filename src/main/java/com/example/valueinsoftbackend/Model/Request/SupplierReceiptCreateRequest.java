@@ -4,6 +4,8 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
+import java.util.List;
+import com.example.valueinsoftbackend.Model.OpenItems.OpenItemsWriteModels;
 
 public class SupplierReceiptCreateRequest {
 
@@ -27,6 +29,10 @@ public class SupplierReceiptCreateRequest {
 
     @Positive(message = "branchId must be positive")
     private int branchId;
+
+    private String currencyCode;
+    private String idempotencyKey;
+    private List<OpenItemsWriteModels.AllocationTarget> allocations;
 
     public SupplierReceiptCreateRequest() {
     }
@@ -86,4 +92,11 @@ public class SupplierReceiptCreateRequest {
     public void setBranchId(int branchId) {
         this.branchId = branchId;
     }
+
+    public String getCurrencyCode() { return currencyCode; }
+    public void setCurrencyCode(String currencyCode) { this.currencyCode = currencyCode; }
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
+    public List<OpenItemsWriteModels.AllocationTarget> getAllocations() { return allocations; }
+    public void setAllocations(List<OpenItemsWriteModels.AllocationTarget> allocations) { this.allocations = allocations; }
 }

@@ -1,6 +1,9 @@
 package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
+import com.example.valueinsoftbackend.Service.finance.PaymentTypeClassifier;
+import com.example.valueinsoftbackend.Service.openitems.ArCreditNoteService;
+import com.example.valueinsoftbackend.Model.OpenItems.OpenItemsWriteModels;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranchSettings;
@@ -19,6 +22,7 @@ import com.example.valueinsoftbackend.util.RequestTimestampParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -37,6 +41,7 @@ public class OrderService {
     private final PosSalePostingService posSalePostingService;
     private final DbBranchSettings dbBranchSettings;
     private final LoyaltyService loyaltyService;
+    private ArCreditNoteService arCreditNoteService;
 
     public OrderService(DbPosOrder dbPosOrder,
             com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod,
@@ -50,6 +55,11 @@ public class OrderService {
         this.posSalePostingService = posSalePostingService;
         this.dbBranchSettings = dbBranchSettings;
         this.loyaltyService = loyaltyService;
+    }
+
+    @Autowired
+    void setArCreditNoteService(ArCreditNoteService arCreditNoteService) {
+        this.arCreditNoteService = arCreditNoteService;
     }
 
     @Transactional
@@ -162,6 +172,9 @@ public class OrderService {
     @Transactional
     public String bounceBackProduct(BounceBackOrderRequest request, int companyId) {
         TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        String returnReason = request.getReason() == null || request.getReason().isBlank()
+                ? "Reason not provided"
+                : request.getReason().trim();
         if (request.getToWho() == 2 && !isSupplierReturnsEnabled(companyId, request.getBranchId())) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
@@ -191,6 +204,8 @@ public class OrderService {
         Timestamp returnTime = new Timestamp(System.currentTimeMillis());
         Long inventoryMovementId = null;
         Long cashMovementId = null;
+        boolean creditReturn = PaymentTypeClassifier.classify(context.getOrderType()).category()
+                == PaymentTypeClassifier.Category.RECEIVABLE;
 
         int markedRows = dbPosOrder.markOrderDetailBouncedBack(request.getOdId(), request.getBranchId(), companyId,
                 request.getToWho());
@@ -223,14 +238,29 @@ public class OrderService {
             }
         }
 
-        // If a shift is active, record the refund in the shift ledger
+        if (creditReturn && context.getClientId() != null && context.getClientId() > 0 && arCreditNoteService != null) {
+            String currency = arCreditNoteService.companyCurrency(companyId);
+            OpenItemsWriteModels.NoteResult note = arCreditNoteService.create(companyId,
+                    new OpenItemsWriteModels.NoteCreateCommand(
+                            request.getBranchId(), context.getClientId(), "POS credit return",
+                            "ORDER_DETAIL", (long) context.getOrderDetailId(), currency,
+                            java.math.BigDecimal.valueOf(refundAmount),
+                            "bounce:" + context.getOrderDetailId(),
+                            "Return for order " + context.getOrderId() + ": " + returnReason),
+                    context.getSalesUser());
+            arCreditNoteService.apply(companyId, request.getBranchId(), context.getClientId(), note.noteId(),
+                    new OpenItemsWriteModels.AllocationCommand(currency,
+                            "bounce-apply:" + context.getOrderDetailId(), List.of()), context.getSalesUser());
+        }
+
+        // Cash movement exists only when money was actually refunded.
         com.example.valueinsoftbackend.Model.Shift.Shift activeShift = dbPosShiftPeriod.getActiveShift(companyId,
                 request.getBranchId());
-        if (activeShift != null) {
+        if (activeShift != null && !creditReturn) {
             cashMovementId = dbPosShiftPeriod.insertCashMovement(
                     companyId, activeShift.getShiftId(), request.getBranchId(),
                     "CASH_REFUND", java.math.BigDecimal.valueOf(refundAmount),
-                    context.getSalesUser(), "Refund for Order Detail #" + request.getOdId(),
+                    context.getSalesUser(), "Refund for Order Detail #" + request.getOdId() + ": " + returnReason,
                     (context.getClientId() != null && context.getClientId() > 0) ? context.getClientId() : null,
                     null, "ORDER", String.valueOf(context.getOrderId()));
         }
@@ -258,11 +288,12 @@ public class OrderService {
                 returnTime);
 
         log.info(
-                "Bounced back order detail {} for company {} branch {} to {}",
+                "Bounced back order detail {} for company {} branch {} to {}. Reason: {}",
                 request.getOdId(),
                 companyId,
                 request.getBranchId(),
-                request.getToWho());
+                request.getToWho(),
+                returnReason);
         return "Bounce back successful";
     }
 
@@ -405,6 +436,9 @@ public class OrderService {
         order.setLoyaltyPointsEarned(request.loyaltyPointsEarned() == null ? 0 : request.loyaltyPointsEarned());
         order.setLoyaltyDiscountAmount(request.loyaltyDiscountAmount());
         order.setLoyaltyNetAmount(request.loyaltyNetAmount());
+        order.setPaidNowAmount(request.paidNowAmount());
+        order.setReceivablePartyType(request.receivablePartyType());
+        order.setReceivableSupplierId(request.receivableSupplierId());
         return order;
     }
 }

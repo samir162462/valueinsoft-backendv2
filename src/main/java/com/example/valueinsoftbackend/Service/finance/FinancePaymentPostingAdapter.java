@@ -36,6 +36,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
             "customer_receipt",
             "customer_payment",
             "client_receipt");
+    private static final Set<String> CUSTOMER_PAYOUT_SOURCE_TYPES = Set.of("customer_payout", "client_payout");
     private static final Set<String> BILLING_BALANCE_SOURCE_TYPES = Set.of(
             "billing_balance_settlement",
             "billing_balance_credit",
@@ -46,6 +47,16 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
             "vendor_payment");
     private static final Set<String> CLIENT_TRADEIN_PAYMENT_SOURCE_TYPES = Set.of(
             "client_tradein_payment");
+    /**
+     * Stage 4.2/4.7 (open items): generic GL reversal for subledger documents
+     * (client/supplier receipts, credit/debit notes). Instead of re-deriving
+     * account mappings per document type, the reversal loads the ORIGINAL posted
+     * journal, mirrors every line (debit<->credit), and marks the original
+     * reversed — so the reversal is the exact opposite by construction and the
+     * V139 immutability trigger's single permitted posted->reversed transition
+     * is used as designed.
+     */
+    private static final Set<String> SUBLEDGER_REVERSAL_SOURCE_TYPES = Set.of("subledger_reversal");
 
     private final DbFinanceSetup dbFinanceSetup;
     private final DbFinanceJournal dbFinanceJournal;
@@ -68,9 +79,11 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
     public UUID post(FinancePostingRequestItem request) {
         if (!SETTLEMENT_SOURCE_TYPES.contains(request.getSourceType())
                 && !CUSTOMER_RECEIPT_SOURCE_TYPES.contains(request.getSourceType())
+                && !CUSTOMER_PAYOUT_SOURCE_TYPES.contains(request.getSourceType())
                 && !BILLING_BALANCE_SOURCE_TYPES.contains(request.getSourceType())
                 && !SUPPLIER_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())
-                && !CLIENT_TRADEIN_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())) {
+                && !CLIENT_TRADEIN_PAYMENT_SOURCE_TYPES.contains(request.getSourceType())
+                && !SUBLEDGER_REVERSAL_SOURCE_TYPES.contains(request.getSourceType())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_PAYMENT_SOURCE_TYPE_UNSUPPORTED",
                     "Payment posting adapter currently supports settlement, customer receipt, billing balance settlement, supplier payment, and client trade-in payment source types only");
         }
@@ -82,8 +95,14 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                     "Currency code must use three uppercase letters");
         }
 
+        if (SUBLEDGER_REVERSAL_SOURCE_TYPES.contains(request.getSourceType())) {
+            return postSubledgerReversal(request, payload);
+        }
         if (CUSTOMER_RECEIPT_SOURCE_TYPES.contains(request.getSourceType())) {
             return postCustomerReceipt(request, payload, currencyCode);
+        }
+        if (CUSTOMER_PAYOUT_SOURCE_TYPES.contains(request.getSourceType())) {
+            return postCustomerPayout(request, payload, currencyCode);
         }
         if (BILLING_BALANCE_SOURCE_TYPES.contains(request.getSourceType())) {
             if ("billing_balance_credit".equals(request.getSourceType())) {
@@ -229,9 +248,27 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 currencyCode,
                 "payment.customer_receipt",
                 "RC-",
-                "receipt",
+                "payment",
                 "Customer receipt " + request.getSourceId(),
                 lines);
+    }
+
+    private UUID postCustomerPayout(FinancePostingRequestItem request, JsonNode payload, String currencyCode) {
+        Integer customerId = firstIntegerValue(payload, "customerId", "clientId");
+        BigDecimal amount = firstOptionalAmount(payload, "amount", "grossAmount", "netAmount");
+        if (customerId == null || amount.compareTo(ZERO) <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_CUSTOMER_PAYOUT_INVALID",
+                    "Customer payout requires a customer and positive amount");
+        }
+        String paymentMethod = normalizePaymentMethod(text(payload, "paymentMethod", "cash"));
+        String paymentId = firstText(payload, "paymentId", "receiptId", "clientReceiptId");
+        ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
+        lines.add(debitLine(resolveMapping(request, "pos.receivable", null), request, amount,
+                "Customer payout receivable reopening", paymentId, customerId, null));
+        lines.add(creditLine(resolveMapping(request, paymentInstrumentMappingKey(paymentMethod), null), request, amount,
+                "Customer payout " + paymentMethod, paymentId, customerId, null));
+        return createPostedPaymentJournal(request, currencyCode, "payment.customer_payout", "CP-", "payment",
+                "Customer payout " + request.getSourceId(), lines);
     }
 
     private UUID postBillingBalanceSettlement(FinancePostingRequestItem request, JsonNode payload, String currencyCode) {
@@ -265,7 +302,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 currencyCode,
                 "payment.billing_balance_settlement",
                 "BB-",
-                "billing_balance_settlement",
+                "payment",
                 "Billing balance settlement " + request.getSourceId(),
                 lines);
     }
@@ -302,7 +339,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 currencyCode,
                 "payment.billing_balance_credit",
                 "BC-",
-                "billing_balance_credit",
+                "payment",
                 "Billing balance credit " + request.getSourceId(),
                 lines);
     }
@@ -340,7 +377,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 currencyCode,
                 "payment.billing_payment_reversal",
                 "BR-",
-                "billing_payment_reversal",
+                "reversal",
                 "Billing payment reversal " + request.getSourceId(),
                 lines);
     }
@@ -383,7 +420,7 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 currencyCode,
                 "payment.supplier_payment",
                 "SP-",
-                "supplier_payment",
+                "payment",
                 "Supplier payment " + request.getSourceId(),
                 lines);
     }
@@ -429,6 +466,84 @@ public class FinancePaymentPostingAdapter implements FinancePostingAdapter {
                 "payment",
                 "Client trade-in payment " + request.getSourceId(),
                 lines);
+    }
+
+    /**
+     * Mirrors the original posted journal line-by-line (debit<->credit) and marks the
+     * original {@code reversed}. Party references (customer/supplier/payment id) are kept
+     * on the mirrored lines so party-filtered GL queries see both sides.
+     */
+    private UUID postSubledgerReversal(FinancePostingRequestItem request, JsonNode payload) {
+        String originalJournalText = firstText(payload, "originalJournalEntryId");
+        if (originalJournalText == null || originalJournalText.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_REVERSAL_ORIGINAL_REQUIRED",
+                    "Subledger reversal posting requires originalJournalEntryId");
+        }
+        UUID originalJournalId;
+        try {
+            originalJournalId = UUID.fromString(originalJournalText.trim());
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "FINANCE_REVERSAL_ORIGINAL_INVALID",
+                    "originalJournalEntryId must be a UUID");
+        }
+
+        com.example.valueinsoftbackend.Model.Finance.FinanceJournalEntryItem original;
+        try {
+            original = dbFinanceJournal.getJournalById(request.getCompanyId(), originalJournalId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException missing) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_REVERSAL_ORIGINAL_NOT_FOUND",
+                    "Original journal was not found for this company");
+        }
+        if (original == null) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_REVERSAL_ORIGINAL_NOT_FOUND",
+                    "Original journal was not found for this company");
+        }
+        if (!"posted".equals(original.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_REVERSAL_ORIGINAL_NOT_POSTED",
+                    "Original journal is " + original.getStatus() + " and cannot be reversed");
+        }
+
+        ArrayList<com.example.valueinsoftbackend.Model.Finance.FinanceJournalLineItem> originalLines =
+                dbFinanceJournal.getJournalLines(request.getCompanyId(), originalJournalId);
+        if (originalLines.isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_REVERSAL_ORIGINAL_EMPTY",
+                    "Original journal has no lines to reverse");
+        }
+
+        String reason = text(payload, "reason", "Subledger document reversed");
+        ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> mirrored = new ArrayList<>();
+        for (com.example.valueinsoftbackend.Model.Finance.FinanceJournalLineItem line : originalLines) {
+            mirrored.add(new DbFinanceJournal.PostedSourceJournalLineCommand(
+                    line.getAccountId(),
+                    line.getBranchId(),
+                    line.getCreditAmount(),   // swap: original credit becomes debit
+                    line.getDebitAmount(),    // swap: original debit becomes credit
+                    "Reversal: " + (line.getDescription() == null ? original.getJournalNumber() : line.getDescription()),
+                    line.getCustomerId(),
+                    line.getSupplierId(),
+                    line.getProductId(),
+                    line.getInventoryMovementId(),
+                    line.getPaymentId(),
+                    line.getCostCenterId(),
+                    line.getTaxCodeId()));
+        }
+
+        UUID reversalJournalId = createPostedPaymentJournal(
+                request,
+                original.getCurrencyCode(),
+                "payment.subledger_reversal",
+                "RV-",
+                "reversal",
+                "Reversal of " + original.getJournalNumber() + ": " + reason,
+                mirrored);
+
+        int rows = dbFinanceJournal.markOriginalJournalReversed(
+                request.getCompanyId(), originalJournalId, reversalJournalId, original.getVersion());
+        if (rows == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "FINANCE_REVERSAL_VERSION_CONFLICT",
+                    "Original journal changed concurrently; reversal was not linked");
+        }
+        return reversalJournalId;
     }
 
     private UUID createPostedPaymentJournal(FinancePostingRequestItem request,

@@ -27,12 +27,14 @@ import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductRece
 import com.example.valueinsoftbackend.Model.Response.InventoryReceipt.ProductReceiptResponse;
 import com.example.valueinsoftbackend.Service.CategoryService;
 import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
+import com.example.valueinsoftbackend.Service.openitems.ApOpenItemService;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -62,6 +64,7 @@ public class InventoryProductReceiptService {
     private final CategoryService categoryService;
     private final BranchTaxonomyResolver branchTaxonomyResolver;
     private final ObjectMapper objectMapper;
+    private ApOpenItemService apOpenItemService;
 
     public InventoryProductReceiptService(DbInventoryProductReceiptRepository receiptRepository,
                                           DbPosProductCommandRepository productCommandRepository,
@@ -79,6 +82,11 @@ public class InventoryProductReceiptService {
         this.categoryService = categoryService;
         this.branchTaxonomyResolver = branchTaxonomyResolver;
         this.objectMapper = objectMapper;
+    }
+
+    @Autowired
+    void setApOpenItemService(ApOpenItemService apOpenItemService) {
+        this.apOpenItemService = apOpenItemService;
     }
 
     @Transactional
@@ -113,8 +121,6 @@ public class InventoryProductReceiptService {
             return replay;
         }
 
-        ProductReceiptProductSnapshot product = resolveProduct(request);
-        TrackingType trackingType = TrackingType.defaultIfNull(product.trackingType());
         ProductReceiptDetailsRequest receipt = request.getReceipt();
         AcquisitionSource acquisitionSource = AcquisitionSource.defaultIfNull(receipt.getAcquisitionSource());
         String conditionCode = normalizeConditionCode(receipt.getConditionCode());
@@ -123,8 +129,16 @@ public class InventoryProductReceiptService {
         BigDecimal remainingAmount = totalCost.subtract(paidAmount).max(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
         Timestamp receiptTime = Timestamp.valueOf((receipt.getReceiptDate() == null ? LocalDate.now() : receipt.getReceiptDate()).atStartOfDay());
 
-        validateReceiptPayload(request, product, trackingType, totalCost, paidAmount);
+        if (paidAmount.compareTo(totalCost) > 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_PAID_AMOUNT_INVALID", "paidAmount cannot exceed receipt total cost");
+        }
         validatePaymentOption(receipt, totalCost, paidAmount);
+
+        // Template, tracking-type, attribute and serialized-unit validation now happens
+        // inside resolveProduct BEFORE any product row is inserted, so a bad payload
+        // (e.g. an invalid IMEI) never creates-then-rolls-back a product record.
+        ProductReceiptProductSnapshot product = resolveProduct(request);
+        TrackingType trackingType = TrackingType.defaultIfNull(product.trackingType());
 
         DbInventoryProductReceiptRepository.ClientSnapshot tradeInClient = null;
         if (acquisitionSource.isClientTradeIn()) {
@@ -161,6 +175,12 @@ public class InventoryProductReceiptService {
                 blankToNull(receipt.getConditionNotes()));
 
         insertSerializedUnitsIfRequired(request, product, trackingType, referenceId, actorName, acquisitionSource, conditionCode);
+
+        if (!acquisitionSource.isClientTradeIn() && remainingAmount.signum() > 0 && apOpenItemService != null) {
+            apOpenItemService.createPurchaseOpenItem(
+                    request.getCompanyId(), request.getBranchId(), receipt.getSupplierId(), ledgerId,
+                    remainingAmount, receiptTime.toLocalDateTime(), idempotencyKey, actorName);
+        }
 
         int legacyTransactionId = 0;
         FinancePostingRequestItem financeRequest;
@@ -254,8 +274,11 @@ public class InventoryProductReceiptService {
             if (request.getExistingProductId() == null || request.getExistingProductId() <= 0) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "EXISTING_PRODUCT_ID_REQUIRED", "existingProductId is required for existing product receipts");
             }
-            return receiptRepository.findProductForUpdate(request.getCompanyId(), request.getExistingProductId())
+            ProductReceiptProductSnapshot existing = receiptRepository.findProductForUpdate(request.getCompanyId(), request.getExistingProductId())
                     .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product was not found for this tenant"));
+            TrackingType trackingType = TrackingType.defaultIfNull(existing.trackingType());
+            validateTemplateAndSerializedUnits(request, trackingType, existing.businessLineKey(), existing.templateKey(), null);
+            return existing;
         }
 
         ProductReceiptProductRequest productRequest = request.getProduct();
@@ -264,11 +287,43 @@ public class InventoryProductReceiptService {
         }
         BranchTaxonomyResolver.ResolvedClassification classification =
                 validateCreateProductPayload(request.getCompanyId(), request.getBranchId(), productRequest);
+
+        // Validate template support, attribute schema and serialized units (e.g. IMEI format)
+        // using the request payload BEFORE inserting the product row, so an invalid request
+        // never has to create-then-roll-back a product.
+        TrackingType trackingType = TrackingType.defaultIfNull(productRequest.getTrackingType());
+        validateTemplateAndSerializedUnits(request, trackingType, productRequest.getBusinessLineKey(),
+                productRequest.getTemplateKey(), productRequest.getAttributes());
+
         Product product = toProduct(productRequest, request.getReceipt().getSupplierId(), classification,
                 request.getReceipt().getConditionCode());
         long productId = productCommandRepository.addProduct(product, String.valueOf(request.getBranchId()), request.getCompanyId());
         return receiptRepository.findProductForUpdate(request.getCompanyId(), productId)
                 .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "PRODUCT_CREATE_RELOAD_FAILED", "Created product could not be reloaded"));
+    }
+
+    /**
+     * Resolves the active template for the given business line/template key, checks that the
+     * template supports the requested tracking type, validates dynamic attributes for new
+     * products (attributesForNewProduct == null skips this for existing products, whose
+     * attributes were already validated when they were created), and validates any
+     * serializedUnits (IMEI/serial) on the request. Called before any product row is written.
+     */
+    private void validateTemplateAndSerializedUnits(ProductReceiptRequest request,
+                                                     TrackingType trackingType,
+                                                     String businessLineKey,
+                                                     String templateKey,
+                                                     Map<String, Object> attributesForNewProduct) {
+        InventoryTemplateDefinition template = receiptRepository.findActiveTemplate(
+                        request.getCompanyId(),
+                        normalizeBusinessLine(businessLineKey),
+                        normalizeTemplate(templateKey))
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVENTORY_TEMPLATE_INVALID", "Product template is missing or inactive"));
+        validateTrackingAgainstTemplate(trackingType, template);
+        if (attributesForNewProduct != null) {
+            validateAttributes(request.getCompanyId(), template, attributesForNewProduct);
+        }
+        validateSerializedUnits(request, trackingType);
     }
 
     private void validateRequestEnvelope(ProductReceiptRequest request) {
@@ -372,26 +427,6 @@ public class InventoryProductReceiptService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "PRODUCT_PRICE_ORDER_INVALID", "retailPrice must be greater than or equal to lowestPrice, and lowestPrice must be greater than or equal to buyingPrice");
         }
         return branchTaxonomyResolver.resolveForProduct(companyId, branchId, product);
-    }
-
-    private void validateReceiptPayload(ProductReceiptRequest request,
-                                        ProductReceiptProductSnapshot product,
-                                        TrackingType trackingType,
-                                        BigDecimal totalCost,
-                                        BigDecimal paidAmount) {
-        if (paidAmount.compareTo(totalCost) > 0) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "RECEIPT_PAID_AMOUNT_INVALID", "paidAmount cannot exceed receipt total cost");
-        }
-        InventoryTemplateDefinition template = receiptRepository.findActiveTemplate(
-                        request.getCompanyId(),
-                        normalizeBusinessLine(product.businessLineKey()),
-                        normalizeTemplate(product.templateKey()))
-                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "INVENTORY_TEMPLATE_INVALID", "Product template is missing or inactive"));
-        validateTrackingAgainstTemplate(trackingType, template);
-        if (request.getOperationMode() == ProductReceiptOperationMode.CREATE_PRODUCT_AND_RECEIVE) {
-            validateAttributes(request.getCompanyId(), template, request.getProduct() == null ? Map.of() : request.getProduct().getAttributes());
-        }
-        validateSerializedUnits(request, trackingType);
     }
 
     private void validateTrackingAgainstTemplate(TrackingType trackingType, InventoryTemplateDefinition template) {

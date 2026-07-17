@@ -1,10 +1,13 @@
 package com.example.valueinsoftbackend.Service.inventory;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductReceiptRepository;
+import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductReceiptRepository.InventoryTemplateDefinition;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryProductUnitRepository;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbInventoryStockMovementRepository;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProductCommandRepository;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
+import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitInput;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptDetailsRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptOperationMode;
 import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptProductRequest;
@@ -18,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -69,6 +73,49 @@ class InventoryProductReceiptServiceTest {
         verify(receiptRepository, never()).increaseBranchStockBalance(anyInt(), anyInt(), anyLong(), anyInt());
         verify(receiptRepository, never()).insertReceiptLedger(
                 anyInt(), anyInt(), anyLong(), anyInt(), anyInt(), any(), anyString(), any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void invalidImeiOnCreateAndReceiveDoesNotCreateProduct() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        DbInventoryProductReceiptRepository receiptRepository = mock(DbInventoryProductReceiptRepository.class);
+        DbPosProductCommandRepository productCommandRepository = mock(DbPosProductCommandRepository.class);
+        BranchTaxonomyResolver branchTaxonomyResolver = mock(BranchTaxonomyResolver.class);
+
+        ProductReceiptRequest request = createRequest();
+        request.getProduct().setTrackingType(TrackingType.IMEI);
+        SerializedUnitInput unit = new SerializedUnitInput();
+        unit.setImei("not-a-valid-imei");
+        request.setSerializedUnits(List.of(unit));
+
+        when(receiptRepository.findIdempotencyForUpdate(anyInt(), anyInt(), anyString(), anyString()))
+                .thenReturn(Optional.of(new DbInventoryProductReceiptRepository.IdempotencyRecord(
+                        1L,
+                        hashRequest(objectMapper, request),
+                        "PENDING",
+                        null,
+                        "operation-1"
+                )));
+        when(receiptRepository.findActiveTemplate(anyInt(), anyString(), anyString()))
+                .thenReturn(Optional.of(new InventoryTemplateDefinition(1L, "MOBILE", "mobile_device", true, false, false, false, true)));
+
+        InventoryProductReceiptService service = new InventoryProductReceiptService(
+                receiptRepository,
+                productCommandRepository,
+                mock(DbInventoryProductUnitRepository.class),
+                mock(DbInventoryStockMovementRepository.class),
+                mock(FinanceOperationalPostingService.class),
+                mock(CategoryService.class),
+                branchTaxonomyResolver,
+                objectMapper);
+
+        ApiException exception = assertThrows(ApiException.class, () -> service.receiveProduct("tester", request));
+
+        assertEquals("IMEI_INVALID", exception.getCode());
+        // The product row must never be inserted when serializedUnits validation fails -
+        // validation now runs before productCommandRepository.addProduct is called.
+        verify(productCommandRepository, never()).addProduct(any(), anyString(), anyInt());
+        verify(receiptRepository, never()).increaseBranchStockBalance(anyInt(), anyInt(), anyLong(), anyInt());
     }
 
     private ProductReceiptRequest createRequest() {

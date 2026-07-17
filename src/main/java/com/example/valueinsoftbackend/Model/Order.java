@@ -22,6 +22,10 @@ public class Order {
     int loyaltyPointsEarned;
     BigDecimal loyaltyDiscountAmount;
     BigDecimal loyaltyNetAmount;
+    BigDecimal paidNowAmount;
+    BigDecimal receivableRemainingAmount;
+    String receivablePartyType;
+    Integer receivableSupplierId;
     String idempotencyKey;
     String receiptNumber;
     ArrayList<OrderDetails> orderDetails;
@@ -47,6 +51,8 @@ public class Order {
         this.loyaltyPointsEarned = 0;
         this.loyaltyDiscountAmount = BigDecimal.ZERO;
         this.loyaltyNetAmount = null;
+        this.paidNowAmount = null;
+        this.receivableRemainingAmount = BigDecimal.ZERO;
         this.orderDetails = orderDetails;
     }
 
@@ -185,6 +191,27 @@ public class Order {
     public void setLoyaltyNetAmount(BigDecimal loyaltyNetAmount) {
         this.loyaltyNetAmount = loyaltyNetAmount;
     }
+
+    public BigDecimal getPaidNowAmount() {
+        return paidNowAmount;
+    }
+
+    public void setPaidNowAmount(BigDecimal paidNowAmount) {
+        this.paidNowAmount = paidNowAmount;
+    }
+
+    public BigDecimal getReceivableRemainingAmount() {
+        return receivableRemainingAmount;
+    }
+
+    public void setReceivableRemainingAmount(BigDecimal receivableRemainingAmount) {
+        this.receivableRemainingAmount = receivableRemainingAmount;
+    }
+
+    public String getReceivablePartyType() { return receivablePartyType; }
+    public void setReceivablePartyType(String value) { this.receivablePartyType = value; }
+    public Integer getReceivableSupplierId() { return receivableSupplierId; }
+    public void setReceivableSupplierId(Integer value) { this.receivableSupplierId = value; }
 
     public ArrayList<OrderDetails> getOrderDetails() {
         return orderDetails;

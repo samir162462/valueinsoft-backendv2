@@ -36,13 +36,15 @@ class FinanceOperationalPostingServiceTest {
 
     private DbFinanceSetup dbFinanceSetup;
     private FinancePostingRequestService financePostingRequestService;
+    private com.example.valueinsoftbackend.DatabaseRequests.DbFinancePostingRequest dbFinancePostingRequest;
     private FinanceOperationalPostingService service;
 
     @BeforeEach
     void setUp() {
         dbFinanceSetup = Mockito.mock(DbFinanceSetup.class);
         financePostingRequestService = Mockito.mock(FinancePostingRequestService.class);
-        service = new FinanceOperationalPostingService(dbFinanceSetup, financePostingRequestService);
+        dbFinancePostingRequest = Mockito.mock(com.example.valueinsoftbackend.DatabaseRequests.DbFinancePostingRequest.class);
+        service = new FinanceOperationalPostingService(dbFinanceSetup, financePostingRequestService, dbFinancePostingRequest);
     }
 
     @Test
@@ -645,5 +647,70 @@ class FinanceOperationalPostingServiceTest {
                 300,
                 300,
                 false);
+    }
+
+    // =====================================================================
+    // Stage 4.2/4.7: generic subledger GL reversal
+    // =====================================================================
+
+    @Test
+    void subledgerGlReversalReturnsNullWhenOriginalNeverPosted() {
+        when(dbFinancePostingRequest.findPostingRequestBySource(
+                COMPANY_ID, "payment", "customer_receipt", "client-receipt-42")).thenReturn(null);
+
+        assertEquals(null, service.enqueueSubledgerGlReversal(COMPANY_ID, BRANCH_ID,
+                "payment", "customer_receipt", "client-receipt-42",
+                "client-receipt-reversal-42", "test", "sam"));
+
+        verify(financePostingRequestService, never()).createPostingRequestFromSystem(
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void subledgerGlReversalRejectsPendingOriginal() {
+        com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem original =
+                Mockito.mock(com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem.class);
+        when(original.getJournalEntryId()).thenReturn(null);
+        when(original.getStatus()).thenReturn("pending");
+        when(dbFinancePostingRequest.findPostingRequestBySource(
+                COMPANY_ID, "payment", "supplier_payment", "supplier-receipt-9")).thenReturn(original);
+
+        ApiException exception = assertThrows(ApiException.class, () ->
+                service.enqueueSubledgerGlReversal(COMPANY_ID, BRANCH_ID,
+                        "payment", "supplier_payment", "supplier-receipt-9",
+                        "supplier-receipt-reversal-9", "test", "sam"));
+
+        assertEquals("FINANCE_REVERSAL_SOURCE_NOT_POSTED", exception.getCode());
+    }
+
+    @Test
+    void subledgerGlReversalEnqueuesMirrorRequestForPostedOriginal() {
+        UUID originalJournal = UUID.fromString("00000000-0000-0000-0000-000000007001");
+        com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem original =
+                Mockito.mock(com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem.class);
+        when(original.getJournalEntryId()).thenReturn(originalJournal);
+        when(original.getStatus()).thenReturn("posted");
+        when(dbFinancePostingRequest.findPostingRequestBySource(
+                COMPANY_ID, "pos", "sale_return", "ar-credit-note-5")).thenReturn(original);
+        when(dbFinanceSetup.findPostingFiscalPeriodIdForDate(
+                org.mockito.ArgumentMatchers.eq(COMPANY_ID), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(FISCAL_PERIOD_ID);
+
+        service.enqueueSubledgerGlReversal(COMPANY_ID, BRANCH_ID,
+                "pos", "sale_return", "ar-credit-note-5",
+                "ar-credit-note-reversal-5", "Credit note reversed", "sam");
+
+        ArgumentCaptor<FinancePostingRequestCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(FinancePostingRequestCreateRequest.class);
+        verify(financePostingRequestService).createPostingRequestFromSystem(
+                org.mockito.ArgumentMatchers.eq("sam"), requestCaptor.capture());
+
+        FinancePostingRequestCreateRequest request = requestCaptor.getValue();
+        assertEquals("payment", request.getSourceModule());
+        assertEquals("subledger_reversal", request.getSourceType());
+        assertEquals("ar-credit-note-reversal-5", request.getSourceId());
+        Map<String, Object> payload = request.getRequestPayload();
+        assertEquals(originalJournal.toString(), payload.get("originalJournalEntryId"));
+        assertEquals("Credit note reversed", payload.get("reason"));
     }
 }

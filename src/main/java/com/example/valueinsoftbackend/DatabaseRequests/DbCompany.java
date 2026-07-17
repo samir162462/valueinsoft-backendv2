@@ -224,6 +224,16 @@ public class DbCompany {
         // Client trade-in foundation (party/condition columns, payable subledger,
         // payments, condition audit). Defined in V133; safe to re-run.
         statements.add("SELECT public.ensure_client_tradein_foundation_for_tenant('" + schemaName + "', " + companyId + ")");
+        // AR/AP open-items foundation and receipt hardening. These functions are
+        // defined by V141-V144 and must run for tenants created after Flyway has
+        // already applied those migrations.
+        statements.add("SELECT public.ensure_ar_open_items_foundation_for_tenant('" + schemaName + "', " + companyId + ")");
+        statements.add("SELECT public.ensure_ap_open_items_foundation_for_tenant('" + schemaName + "', " + companyId + ")");
+        statements.add("SELECT public.ensure_receipt_hardening_for_tenant('" + schemaName + "', " + companyId + ")");
+        statements.add("SELECT public.ensure_credit_debit_notes_for_tenant('" + schemaName + "', " + companyId + ")");
+        statements.add("SELECT public.ensure_supplier_receivables_for_tenant('" + schemaName + "', " + companyId + ")");
+        // Opening-balance import audit (V147).
+        statements.add("SELECT public.ensure_openitems_opening_import_audit_for_tenant('" + schemaName + "', " + companyId + ")");
         return statements;
     }
 
