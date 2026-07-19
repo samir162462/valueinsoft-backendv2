@@ -340,6 +340,7 @@ class InventoryTransactionEndpointIntegrationTest extends AbstractIntegrationTes
                 ProductUnitStatus.AVAILABLE,
                 "NEW",
                 null,
+                new BigDecimal("70000.0000"),
                 88L,
                 "SUPPLIER",
                 null,

@@ -33,6 +33,7 @@ public class DbInventoryProductUnitRepository {
             ProductUnitStatus.valueOf(rs.getString("status")),
             rs.getString("condition_code"),
             rs.getString("condition_notes"),
+            rs.getBigDecimal("acquisition_cost"),
             getLongOrNull(rs, "supplier_id"),
             rs.getString("source_party_type"),
             getLongOrNull(rs, "source_client_id"),
@@ -62,13 +63,13 @@ public class DbInventoryProductUnitRepository {
         String sql = """
                 INSERT INTO %s (
                     company_id, branch_id, product_id, tracking_type, unit_identifier,
-                    imei, serial_number, status, condition_code, condition_notes, supplier_id,
+                    imei, serial_number, status, condition_code, condition_notes, acquisition_cost, supplier_id,
                     source_party_type, source_client_id,
                     purchase_reference_type, purchase_reference_id, purchase_line_id,
                     received_at, status_updated_at, created_at, updated_at, version
                 ) VALUES (
                     :companyId, :branchId, :productId, :trackingType, :unitIdentifier,
-                    :imei, :serialNumber, :status, :conditionCode, :conditionNotes, :supplierId,
+                    :imei, :serialNumber, :status, :conditionCode, :conditionNotes, :acquisitionCost, :supplierId,
                     :sourcePartyType, :sourceClientId,
                     :purchaseReferenceType, :purchaseReferenceId, :purchaseLineId,
                     :receivedAt, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0
@@ -271,6 +272,7 @@ public class DbInventoryProductUnitRepository {
                     status = 'AVAILABLE',
                     condition_code = :conditionCode,
                     condition_notes = :conditionNotes,
+                    acquisition_cost = :acquisitionCost,
                     supplier_id = :supplierId,
                     source_party_type = :sourcePartyType,
                     source_client_id = :sourceClientId,
@@ -475,6 +477,7 @@ public class DbInventoryProductUnitRepository {
                 .addValue("status", status.name())
                 .addValue("conditionCode", productUnit.getConditionCode() == null ? "NEW" : productUnit.getConditionCode())
                 .addValue("conditionNotes", productUnit.getConditionNotes())
+                .addValue("acquisitionCost", productUnit.getAcquisitionCost() == null ? java.math.BigDecimal.ZERO : productUnit.getAcquisitionCost())
                 .addValue("supplierId", productUnit.getSupplierId())
                 .addValue("sourcePartyType", productUnit.getSourcePartyType() == null ? "SUPPLIER" : productUnit.getSourcePartyType())
                 .addValue("sourceClientId", productUnit.getSourceClientId())

@@ -15,10 +15,13 @@ public class PayrollRunLine {
     private int companyId;
     private long payrollRunId;
     private int employeeId;
+    private Integer userId;
     private long salaryProfileId;
     private BigDecimal baseSalary;
     private BigDecimal totalAllowances;
     private BigDecimal totalDeductions;
+    private BigDecimal wageReductionTotal;
+    private BigDecimal withholdingTotal;
     private BigDecimal grossSalary;
     private BigDecimal netSalary;
     private BigDecimal paidAmount;

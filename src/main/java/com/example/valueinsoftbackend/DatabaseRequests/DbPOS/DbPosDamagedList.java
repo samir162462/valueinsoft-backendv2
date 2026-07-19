@@ -33,7 +33,11 @@ public class DbPosDamagedList {
                     rs.getInt("AmountTP"),
                     rs.getBoolean("Paid"),
                     rs.getInt("branchId"),
-                    rs.getInt("quantity")
+                    rs.getInt("quantity"),
+                    rs.getString("Status"),
+                    rs.getTimestamp("ReversedAt"),
+                    rs.getString("ReversedBy"),
+                    rs.getString("ReversalReason")
             );
         }
     };
@@ -48,7 +52,8 @@ public class DbPosDamagedList {
 
     public List<DamagedItem> getDamagedList(int companyId, int branchId) {
         String sql = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", " +
-                "\"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\", \"quantity\" " +
+                "\"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\", \"quantity\", " +
+                "COALESCE(\"Status\", 'POSTED') AS \"Status\", \"ReversedAt\", \"ReversedBy\", \"ReversalReason\" " +
                 "FROM " + TenantSqlIdentifiers.damagedListTable(companyId) + " WHERE \"branchId\" = ?";
         return jdbcTemplate.query(sql, DAMAGED_ITEM_ROW_MAPPER, branchId);
     }
@@ -153,13 +158,14 @@ public class DbPosDamagedList {
 
     public boolean updateDamagedItemPaymentStatus(int companyId, int branchId, int damagedId, boolean paid) {
         String sql = "UPDATE " + TenantSqlIdentifiers.damagedListTable(companyId) +
-                " SET \"Paid\" = ? WHERE \"DId\" = ? AND \"branchId\" = ?";
+                " SET \"Paid\" = ? WHERE \"DId\" = ? AND \"branchId\" = ? AND COALESCE(\"Status\", 'POSTED') = 'POSTED'";
         return jdbcTemplate.update(sql, paid, damagedId, branchId) == 1;
     }
 
     public DamagedItem getDamagedItemById(int companyId, int branchId, int damagedId) {
         String sql = "SELECT \"DId\", \"ProductId\", \"ProductName\", \"Time\", \"Reason\", \"Damaged by\", " +
-                "\"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\", \"quantity\" " +
+                "\"Cashier user\", \"AmountTP\", \"Paid\", \"branchId\", \"quantity\", " +
+                "COALESCE(\"Status\", 'POSTED') AS \"Status\", \"ReversedAt\", \"ReversedBy\", \"ReversalReason\" " +
                 "FROM " + TenantSqlIdentifiers.damagedListTable(companyId) + " WHERE \"branchId\" = ? AND \"DId\" = ?";
         List<DamagedItem> items = jdbcTemplate.query(sql, DAMAGED_ITEM_ROW_MAPPER, branchId, damagedId);
         return items.isEmpty() ? null : items.get(0);

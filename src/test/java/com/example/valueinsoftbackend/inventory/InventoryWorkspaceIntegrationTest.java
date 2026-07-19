@@ -18,9 +18,14 @@ import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.Inventory
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryQuickFindRequest;
 import com.example.valueinsoftbackend.Service.inventory.InventoryAuditService;
 import com.example.valueinsoftbackend.Service.inventory.InventoryWorkspaceService;
+import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
@@ -32,6 +37,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -46,6 +52,18 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
 
     @MockBean
     private InventoryAuditService inventoryAuditService;
+
+    @MockBean
+    private AuthorizationService authorizationService;
+
+    @MockBean
+    private TenantScopeGuard tenantScopeGuard;
+
+    @BeforeEach
+    void configureInventoryScope() {
+        when(tenantScopeGuard.requireScope(eq(AUTHENTICATED_USER), any(), any()))
+                .thenReturn(new TenantScopeGuard.ResolvedTenantScope(1074, 1095));
+    }
 
     @Test
     void shouldRequireAuthenticationForInventoryWorkspace() throws Exception {
@@ -83,49 +101,57 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.summary.resultCount").value(1));
 
         verify(inventoryWorkspaceService).quickFind(eq(AUTHENTICATED_USER), any(InventoryQuickFindRequest.class));
+        verify(tenantScopeGuard).requireScope(AUTHENTICATED_USER, 1074, 1095);
+        verify(authorizationService).assertAuthenticatedCapability(
+                AUTHENTICATED_USER,
+                1074,
+                1095,
+                "inventory.item.read"
+        );
+    }
+
+    @Test
+    @WithMockUser(username = AUTHENTICATED_USER, roles = {"USER"})
+    void shouldRejectCrossTenantWorkspaceRequestBeforeServiceCall() throws Exception {
+        doThrow(new ApiException(
+                HttpStatus.FORBIDDEN,
+                "TENANT_ACCESS_DENIED",
+                "User does not belong to the requested tenant"
+        )).when(tenantScopeGuard).requireScope(AUTHENTICATED_USER, 9999, 1095);
+
+        String payload = """
+                {
+                  "companyId": 9999,
+                  "branchId": 1095,
+                  "query": "IPH-001",
+                  "exactType": "auto",
+                  "limit": 10
+                }
+                """;
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/inventory/quick-find")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("TENANT_ACCESS_DENIED"));
+
+        verify(inventoryWorkspaceService, never()).quickFind(any(), any(InventoryQuickFindRequest.class));
+        verify(authorizationService, never()).assertAuthenticatedCapability(any(), any(), any(), any());
     }
 
     @Test
     @WithMockUser(username = AUTHENTICATED_USER, roles = {"USER"})
     void shouldBrowseInventoryCatalog() throws Exception {
-        ArrayList<InventoryCatalogItem> items = new ArrayList<>();
-        items.add(catalogItem());
-        LinkedHashMap<String, Integer> chipCounts = new LinkedHashMap<>();
-        chipCounts.put("low_stock", 1);
         when(inventoryWorkspaceService.browseCatalog(eq(AUTHENTICATED_USER), any(InventoryCatalogBrowseRequest.class)))
-                .thenReturn(new InventoryCatalogBrowseResponse(
-                        "catalog",
-                        "phone",
-                        1,
-                        25,
-                        new InventorySort("updatedAt", "desc"),
-                        items,
-                        new InventoryPagination(1, 25, 1L, 1, false),
-                        summary(),
-                        chipCounts
-                ));
-
-        String payload = """
-                {
-                  "companyId": 1074,
-                  "branchId": 1095,
-                  "query": "phone",
-                  "page": 1,
-                  "pageSize": 25,
-                  "sort": {
-                    "field": "updatedAt",
-                    "direction": "desc"
-                  },
-                  "chips": ["low_stock"]
-                }
-                """;
+                .thenReturn(catalogBrowseResponse());
 
         mockMvc.perform(MockMvcRequestBuilders.post("/api/inventory/catalog/search")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
+                        .content(browsePayload()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].productId").value(41))
                 .andExpect(jsonPath("$.data[0].stockStatus").value("LOW_STOCK"))
+                .andExpect(jsonPath("$.data[0].buyPrice").doesNotExist())
                 .andExpect(jsonPath("$.pagination.totalRows").value(1))
                 .andExpect(jsonPath("$.chipCounts.low_stock").value(1));
 
@@ -134,10 +160,59 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     @WithMockUser(username = AUTHENTICATED_USER, roles = {"USER"})
+    void shouldExposeInventoryCostOnlyWithCostCapability() throws Exception {
+        when(authorizationService.hasAuthenticatedCapability(
+                AUTHENTICATED_USER,
+                1074,
+                1095,
+                "inventory.pricing.cost.read"
+        )).thenReturn(true);
+        when(inventoryWorkspaceService.browseCatalog(eq(AUTHENTICATED_USER), any(InventoryCatalogBrowseRequest.class)))
+                .thenReturn(catalogBrowseResponse());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/inventory/catalog/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(browsePayload()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].buyPrice").value(50000));
+    }
+
+    @Test
+    @WithMockUser(username = AUTHENTICATED_USER, roles = {"USER"})
+    void shouldRejectCostFiltersWithoutCostCapability() throws Exception {
+        String payload = """
+                {
+                  "companyId": 1074,
+                  "branchId": 1095,
+                  "query": "phone",
+                  "page": 1,
+                  "pageSize": 25,
+                  "filters": {
+                    "buyPriceMin": 10000
+                  }
+                }
+                """;
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/inventory/catalog/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("INVENTORY_COST_ACCESS_DENIED"));
+
+        verify(inventoryWorkspaceService, never()).browseCatalog(any(), any(InventoryCatalogBrowseRequest.class));
+    }
+
+    @Test
+    @WithMockUser(username = AUTHENTICATED_USER, roles = {"USER"})
     void shouldCreateInventoryPreset() throws Exception {
         LinkedHashMap<String, Object> queryState = new LinkedHashMap<>();
         queryState.put("query", "low stock");
-        when(inventoryWorkspaceService.createPreset(eq(AUTHENTICATED_USER), any(InventoryPresetCreateRequest.class)))
+        when(inventoryWorkspaceService.createPreset(
+                eq(AUTHENTICATED_USER),
+                eq(1074),
+                eq(1095),
+                any(InventoryPresetCreateRequest.class)
+        ))
                 .thenReturn(new InventoryPresetResponse(
                         "preset-1",
                         "Low stock phones",
@@ -171,7 +246,12 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.canManage").value(true))
                 .andExpect(jsonPath("$.queryState.query").value("low stock"));
 
-        verify(inventoryWorkspaceService).createPreset(eq(AUTHENTICATED_USER), any(InventoryPresetCreateRequest.class));
+        verify(inventoryWorkspaceService).createPreset(
+                eq(AUTHENTICATED_USER),
+                eq(1074),
+                eq(1095),
+                any(InventoryPresetCreateRequest.class)
+        );
     }
 
     @Test
@@ -248,6 +328,23 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
                 """;
     }
 
+    private String browsePayload() {
+        return """
+                {
+                  "companyId": 1074,
+                  "branchId": 1095,
+                  "query": "phone",
+                  "page": 1,
+                  "pageSize": 25,
+                  "sort": {
+                    "field": "updatedAt",
+                    "direction": "desc"
+                  },
+                  "chips": ["low_stock"]
+                }
+                """;
+    }
+
     private String auditSearchPayload() {
         return """
                 {
@@ -275,6 +372,7 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
                 List.of(),
                 List.of(),
                 List.of(),
+                List.of(),
                 "electronics",
                 "mobile-phone",
                 88,
@@ -288,6 +386,24 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
                 50000,
                 "2026-01-15T10:00:00Z",
                 "2026-01-15T10:00:00Z"
+        );
+    }
+
+    private InventoryCatalogBrowseResponse catalogBrowseResponse() {
+        ArrayList<InventoryCatalogItem> items = new ArrayList<>();
+        items.add(catalogItem());
+        LinkedHashMap<String, Integer> chipCounts = new LinkedHashMap<>();
+        chipCounts.put("low_stock", 1);
+        return new InventoryCatalogBrowseResponse(
+                "catalog",
+                "phone",
+                1,
+                25,
+                new InventorySort("updatedAt", "desc"),
+                items,
+                new InventoryPagination(1, 25, 1L, 1, false),
+                summary(),
+                chipCounts
         );
     }
 

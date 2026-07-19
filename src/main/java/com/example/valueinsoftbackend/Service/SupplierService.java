@@ -1,7 +1,6 @@
 package com.example.valueinsoftbackend.Service;
 
 import com.example.valueinsoftbackend.Service.finance.FinanceOperationalPostingService;
-import com.example.valueinsoftbackend.Service.inventory.InventoryTransactionService;
 import lombok.extern.slf4j.Slf4j;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbBranchSettings;
@@ -9,7 +8,6 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
-import com.example.valueinsoftbackend.Model.Request.CreateInventoryTransactionRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierArchiveRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierProductCreateRequest;
@@ -43,21 +41,18 @@ public class SupplierService {
     private final DbSupplier dbSupplier;
     private final DbBranchSettings dbBranchSettings;
     private final FinanceOperationalPostingService financeOperationalPostingService;
-    private final InventoryTransactionService inventoryTransactionService;
 
     public SupplierService(DbSupplier dbSupplier) {
-        this(dbSupplier, null, null, null);
+        this(dbSupplier, null, null);
     }
 
     @Autowired
     public SupplierService(DbSupplier dbSupplier,
                            DbBranchSettings dbBranchSettings,
-                           FinanceOperationalPostingService financeOperationalPostingService,
-                           InventoryTransactionService inventoryTransactionService) {
+                           FinanceOperationalPostingService financeOperationalPostingService) {
         this.dbSupplier = dbSupplier;
         this.dbBranchSettings = dbBranchSettings;
         this.financeOperationalPostingService = financeOperationalPostingService;
-        this.inventoryTransactionService = inventoryTransactionService;
     }
 
     public List<Supplier> getSuppliers(int companyId, int branchId) {
@@ -375,6 +370,12 @@ public class SupplierService {
                     "SUPPLIER_RETURNS_DISABLED",
                     "Supplier returns are disabled for this branch");
         }
+        if (request.isAdjustInventory()) {
+            throw new ApiException(
+                    HttpStatus.GONE,
+                    "TYPED_SUPPLIER_RETURN_COMMAND_REQUIRED",
+                    "Inventory-affecting supplier returns must use POST /api/inventory/supplier-returns");
+        }
 
         Timestamp time = RequestTimestampParser.parse(request.getTime(), "time");
         SupplierBProduct supplierBProduct = new SupplierBProduct(
@@ -393,11 +394,7 @@ public class SupplierService {
         if (created == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "SUPPLIER_PRODUCT_TARGET_NOT_FOUND", "Product not found for supplier product entry");
         }
-        if (request.isAdjustInventory()) {
-            createSupplierReturnInventoryTransaction(companyId, branchId, created);
-        } else {
-            enrichFinanceSupplierReturn(companyId, branchId, created);
-        }
+        enrichFinanceSupplierReturn(companyId, branchId, created);
 
         log.info("Created supplier bought-product row for company {} branch {} product {}", companyId, branchId, productId);
         return created;
@@ -448,35 +445,6 @@ public class SupplierService {
                     exception.getMessage()
             );
         }
-    }
-
-    private void createSupplierReturnInventoryTransaction(int companyId, int branchId, SupplierBProduct returnedProduct) {
-        if (inventoryTransactionService == null || returnedProduct == null) {
-            return;
-        }
-
-        CreateInventoryTransactionRequest transactionRequest = new CreateInventoryTransactionRequest();
-        transactionRequest.setCompanyId(companyId);
-        transactionRequest.setBranchId(branchId);
-        transactionRequest.setProductId(returnedProduct.getProductId());
-        transactionRequest.setSupplierId(returnedProduct.getSupplierId());
-        transactionRequest.setUserName(limitInventoryTransactionUserName(returnedProduct.getUserName()));
-        transactionRequest.setTransactionType("BounceBackInv");
-        transactionRequest.setNumItems(-Math.abs(returnedProduct.getQuantity()));
-        transactionRequest.setTransTotal(-Math.abs(returnedProduct.getQuantity() * returnedProduct.getCost()));
-        transactionRequest.setPayType(returnedProduct.getsPaid() > 0 ? "cash" : "credit");
-        transactionRequest.setTime(returnedProduct.getTime().toString());
-        transactionRequest.setRemainingAmount(0);
-
-        inventoryTransactionService.addTransaction(transactionRequest);
-    }
-
-    private String limitInventoryTransactionUserName(String userName) {
-        String normalizedUserName = normalize(userName);
-        if (normalizedUserName.isBlank()) {
-            return "system";
-        }
-        return normalizedUserName.length() <= 15 ? normalizedUserName : normalizedUserName.substring(0, 15);
     }
 
     private String normalize(String value) {

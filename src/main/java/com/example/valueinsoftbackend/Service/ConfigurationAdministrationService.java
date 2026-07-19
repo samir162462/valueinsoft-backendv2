@@ -10,6 +10,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbPlatformModules;
 import com.example.valueinsoftbackend.DatabaseRequests.DbRoleDefinitions;
 import com.example.valueinsoftbackend.DatabaseRequests.DbRoleGrants;
 import com.example.valueinsoftbackend.DatabaseRequests.DbTenants;
+import com.example.valueinsoftbackend.DatabaseRequests.DbTenantAccessAuditEvents;
 import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Branch;
@@ -23,6 +24,7 @@ import com.example.valueinsoftbackend.Model.Configuration.RoleDefinitionConfig;
 import com.example.valueinsoftbackend.Model.Configuration.RoleGrantConfig;
 import com.example.valueinsoftbackend.Model.Configuration.TenantAdminPortalConfig;
 import com.example.valueinsoftbackend.Model.Configuration.TenantConfig;
+import com.example.valueinsoftbackend.Model.Configuration.TenantUserGrantOverrideConfig;
 import com.example.valueinsoftbackend.Model.Request.Configuration.SaveRoleGrantRequest;
 import com.example.valueinsoftbackend.Model.Request.Configuration.SaveTenantRoleAssignmentRequest;
 import com.example.valueinsoftbackend.Model.Request.Configuration.SaveUserGrantOverrideRequest;
@@ -32,9 +34,11 @@ import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class ConfigurationAdministrationService {
@@ -52,6 +56,7 @@ public class ConfigurationAdministrationService {
     private final DbConfigurationAdmin dbConfigurationAdmin;
     private final EffectiveConfigurationService effectiveConfigurationService;
     private final AuthorizationService authorizationService;
+    private final DbTenantAccessAuditEvents dbTenantAccessAuditEvents;
 
     public ConfigurationAdministrationService(DbUsers dbUsers,
                                               DbCompany dbCompany,
@@ -65,7 +70,8 @@ public class ConfigurationAdministrationService {
                                               DbRoleGrants dbRoleGrants,
                                               DbConfigurationAdmin dbConfigurationAdmin,
                                               EffectiveConfigurationService effectiveConfigurationService,
-                                              AuthorizationService authorizationService) {
+                                              AuthorizationService authorizationService,
+                                              DbTenantAccessAuditEvents dbTenantAccessAuditEvents) {
         this.dbUsers = dbUsers;
         this.dbCompany = dbCompany;
         this.dbBranch = dbBranch;
@@ -79,6 +85,7 @@ public class ConfigurationAdministrationService {
         this.dbConfigurationAdmin = dbConfigurationAdmin;
         this.effectiveConfigurationService = effectiveConfigurationService;
         this.authorizationService = authorizationService;
+        this.dbTenantAccessAuditEvents = dbTenantAccessAuditEvents;
     }
 
     public TenantAdminPortalConfig getPortalForAuthenticatedUser(String authenticatedName,
@@ -195,7 +202,7 @@ public class ConfigurationAdministrationService {
                                                                                 long assignmentId) {
         ResolvedAdminContext context = resolveAdminContext(authenticatedName, requestedTenantId, requestedBranchId);
         authorizationService.assertAuthenticatedCapability(authenticatedName, context.tenantId, context.activeBranchId, "users.account.edit");
-        dbConfigurationAdmin.deactivateTenantRoleAssignment(assignmentId);
+        dbConfigurationAdmin.deactivateTenantRoleAssignment(context.tenantId, assignmentId);
         return getPortalForAuthenticatedUser(authenticatedName, context.tenantId, context.activeBranchId);
     }
 
@@ -245,6 +252,7 @@ public class ConfigurationAdministrationService {
         return getPortalForAuthenticatedUser(authenticatedName, context.tenantId, context.activeBranchId);
     }
 
+    @Transactional
     public TenantAdminPortalConfig saveUserGrantOverrideForAuthenticatedUser(String authenticatedName,
                                                                              Integer requestedTenantId,
                                                                              Integer requestedBranchId,
@@ -272,20 +280,36 @@ public class ConfigurationAdministrationService {
 
         ensureUserBelongsToTenant(context.tenantId, targetUserId);
 
+        String normalizedGrantMode = normalizeGrantMode(request.getGrantMode());
+        String normalizedReason = normalizeReason(request.getReason(), "user_override");
         dbConfigurationAdmin.upsertTenantUserGrantOverride(
                 context.tenantId,
                 targetUserId,
                 capability.getCapabilityKey(),
-                normalizeGrantMode(request.getGrantMode()),
+                normalizedGrantMode,
                 normalizedScopeType,
                 scopeBranchId,
-                normalizeReason(request.getReason(), "user_override"),
+                normalizedReason,
                 "admin"
+        );
+
+        assertSelfLockoutNotCreated(authenticatedName, context, targetUserId, capability.getCapabilityKey());
+        dbTenantAccessAuditEvents.insertEvent(
+                context.tenantId,
+                context.user.getUserId(),
+                targetUserId,
+                capability.getCapabilityKey(),
+                "OVERRIDE_UPSERTED",
+                normalizedGrantMode,
+                normalizedScopeType,
+                scopeBranchId,
+                normalizedReason
         );
 
         return getPortalForAuthenticatedUser(authenticatedName, context.tenantId, context.activeBranchId);
     }
 
+    @Transactional
     public TenantAdminPortalConfig removeUserGrantOverrideForAuthenticatedUser(String authenticatedName,
                                                                                Integer requestedTenantId,
                                                                                Integer requestedBranchId,
@@ -312,7 +336,14 @@ public class ConfigurationAdministrationService {
             ensureBranchBelongsToTenant(context.tenantId, normalizedScopeBranchId);
         }
 
-        dbConfigurationAdmin.deleteTenantUserGrantOverride(
+        TenantUserGrantOverrideConfig existingOverride = findUserOverride(
+                context.tenantId,
+                targetUserId,
+                capability.getCapabilityKey(),
+                normalizedScopeType,
+                normalizedScopeBranchId
+        );
+        int deletedRows = dbConfigurationAdmin.deleteTenantUserGrantOverride(
                 context.tenantId,
                 targetUserId,
                 capability.getCapabilityKey(),
@@ -320,7 +351,60 @@ public class ConfigurationAdministrationService {
                 normalizedScopeBranchId
         );
 
+        assertSelfLockoutNotCreated(authenticatedName, context, targetUserId, capability.getCapabilityKey());
+        if (deletedRows > 0) {
+            dbTenantAccessAuditEvents.insertEvent(
+                    context.tenantId,
+                    context.user.getUserId(),
+                    targetUserId,
+                    capability.getCapabilityKey(),
+                    "OVERRIDE_REMOVED",
+                    existingOverride != null ? existingOverride.getGrantMode() : null,
+                    normalizedScopeType,
+                    normalizedScopeBranchId,
+                    existingOverride != null ? existingOverride.getReason() : null
+            );
+        }
+
         return getPortalForAuthenticatedUser(authenticatedName, context.tenantId, context.activeBranchId);
+    }
+
+    private void assertSelfLockoutNotCreated(String authenticatedName,
+                                             ResolvedAdminContext context,
+                                             int targetUserId,
+                                             String capabilityKey) {
+        if (targetUserId != context.user.getUserId()
+                || !"users.account.edit".equals(capabilityKey)
+                || "Owner".equalsIgnoreCase(context.user.getRole())) {
+            return;
+        }
+        if (!authorizationService.hasAuthenticatedCapability(
+                authenticatedName,
+                context.tenantId,
+                context.activeBranchId,
+                "users.account.edit")) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "SELF_LOCKOUT_PROTECTED",
+                    "This change would remove your last users.account.edit access path"
+            );
+        }
+    }
+
+    private TenantUserGrantOverrideConfig findUserOverride(int tenantId,
+                                                            int userId,
+                                                            String capabilityKey,
+                                                            String scopeType,
+                                                            Integer scopeBranchId) {
+        for (TenantUserGrantOverrideConfig override : dbConfigurationAdmin.getTenantUserGrantOverrides(tenantId, null)) {
+            if (override.getUserId() == userId
+                    && capabilityKey.equals(override.getCapabilityKey())
+                    && scopeType.equals(override.getScopeType())
+                    && Objects.equals(scopeBranchId, override.getScopeBranchId())) {
+                return override;
+            }
+        }
+        return null;
     }
 
     private void assertPortalReadable(String authenticatedName, int tenantId, Integer activeBranchId) {

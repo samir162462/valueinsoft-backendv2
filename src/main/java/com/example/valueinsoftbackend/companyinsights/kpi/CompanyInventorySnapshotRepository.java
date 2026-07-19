@@ -34,6 +34,7 @@ public class CompanyInventorySnapshotRepository {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         String branchProductTable = TenantSqlIdentifiers.inventoryBranchProductTable(companyId);
         String ledgerTable = TenantSqlIdentifiers.inventoryStockLedgerTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
 
         String sql = """
                 INSERT INTO public.company_inventory_snapshot
@@ -43,7 +44,12 @@ public class CompanyInventorySnapshotRepository {
                 WITH stock AS (
                     SELECT s.product_id,
                            SUM(COALESCE(s.quantity, 0))::numeric AS total_qty,
-                           SUM(COALESCE(s.quantity, 0) * COALESCE(p.buying_price, 0))::numeric AS total_value,
+                           COALESCE((
+                               SELECT SUM(unit.acquisition_cost)
+                               FROM %s unit
+                               WHERE unit.product_id = s.product_id
+                                 AND unit.status = 'AVAILABLE'
+                           ), SUM(COALESCE(s.quantity, 0) * COALESCE(p.buying_price, 0)))::numeric AS total_value,
                            COUNT(*) FILTER (WHERE s.quantity > 0) AS branch_count_with_stock,
                            COUNT(*) FILTER (WHERE s.quantity <= 0) AS branches_out_of_stock,
                            COUNT(*) FILTER (WHERE ibp.reorder_level IS NOT NULL AND s.quantity <= ibp.reorder_level) AS branches_below_reorder
@@ -79,7 +85,7 @@ public class CompanyInventorySnapshotRepository {
                      last_movement_date = EXCLUDED.last_movement_date,
                      is_dead_stock = EXCLUDED.is_dead_stock,
                      computed_at = now()
-                """.formatted(stockTable, productTable, branchProductTable, ledgerTable);
+                """.formatted(unitTable, stockTable, productTable, branchProductTable, ledgerTable);
 
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("companyId", companyId)

@@ -1,7 +1,9 @@
 package com.example.valueinsoftbackend.Service.payroll;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPayroll;
+import com.example.valueinsoftbackend.DatabaseRequests.DbHR;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.HR.Employee;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollSalaryProfile;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollSalaryComponent;
 import org.springframework.http.HttpStatus;
@@ -15,13 +17,16 @@ import java.util.List;
 public class PayrollSalaryProfileService {
 
     private final DbPayroll dbPayroll;
+    private final DbHR dbHR;
     private final PayrollValidationService validationService;
     private final PayrollAuditService auditService;
 
     public PayrollSalaryProfileService(DbPayroll dbPayroll,
+                                       DbHR dbHR,
                                        PayrollValidationService validationService,
                                        PayrollAuditService auditService) {
         this.dbPayroll = dbPayroll;
+        this.dbHR = dbHR;
         this.validationService = validationService;
         this.auditService = auditService;
     }
@@ -42,10 +47,20 @@ public class PayrollSalaryProfileService {
         return dbPayroll.listSalaryProfiles(companyId, null, employeeId, true).stream().findFirst().orElse(null);
     }
 
+    public PayrollSalaryProfile getByUser(int companyId, int userId) {
+        return dbPayroll.listSalaryProfiles(companyId, null, null, true).stream()
+                .filter(profile -> profile.getUserId() != null && profile.getUserId() == userId)
+                .findFirst()
+                .orElse(null);
+    }
+
     @Transactional
     public PayrollSalaryProfile create(String actor, PayrollSalaryProfile profile) {
+        resolveAuthoritativeIdentity(profile);
+        dbPayroll.lockPayrollUser(profile.getCompanyId(), profile.getUserId());
         applyDefaults(profile);
         validationService.validateNoOverlap(profile, null);
+        validationService.validateAccounts(profile.getCompanyId(), profile, dbPayroll.getSettings(profile.getCompanyId()));
         profile.setCreatedBy(actor);
         profile.setUpdatedBy(actor);
         long id = dbPayroll.createSalaryProfile(profile);
@@ -59,9 +74,13 @@ public class PayrollSalaryProfileService {
         PayrollSalaryProfile existing = get(profile.getCompanyId(), id);
         profile.setId(id);
         profile.setEmployeeId(existing.getEmployeeId());
+        profile.setUserId(existing.getUserId());
+        profile.setBranchId(existing.getBranchId());
+        dbPayroll.lockPayrollUser(profile.getCompanyId(), profile.getUserId());
         profile.setVersion(existing.getVersion());
         applyDefaults(profile);
         validationService.validateNoOverlap(profile, id);
+        validationService.validateAccounts(profile.getCompanyId(), profile, dbPayroll.getSettings(profile.getCompanyId()));
         profile.setUpdatedBy(actor);
         int rows = dbPayroll.updateSalaryProfile(profile);
         if (rows == 0) {
@@ -102,5 +121,23 @@ public class PayrollSalaryProfileService {
             profile.setBaseSalary(BigDecimal.ZERO);
         }
         profile.setActive(true);
+    }
+
+    private void resolveAuthoritativeIdentity(PayrollSalaryProfile profile) {
+        Employee employee;
+        if (profile.getUserId() != null) {
+            employee = dbHR.getEmployeeByUser(profile.getCompanyId(), profile.getUserId());
+        } else if (profile.getEmployeeId() > 0 && profile.getBranchId() > 0) {
+            employee = dbHR.getEmployeeById(profile.getCompanyId(), profile.getBranchId(), profile.getEmployeeId());
+        } else {
+            employee = null;
+        }
+        if (employee == null || !employee.isActive() || employee.getUserId() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYROLL_COMPANY_USER_REQUIRED",
+                    "Compensation can only be configured for an active user assigned to this company");
+        }
+        profile.setEmployeeId(employee.getId());
+        profile.setUserId(employee.getUserId());
+        profile.setBranchId(employee.getBranchId());
     }
 }

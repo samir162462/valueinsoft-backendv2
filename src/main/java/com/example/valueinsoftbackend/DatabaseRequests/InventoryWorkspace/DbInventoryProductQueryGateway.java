@@ -36,6 +36,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         item.setTrackingType(rs.getString("trackingType"));
         item.setProductUnitIds(toLongList(rs.getArray("productUnitIds")));
         item.setUnitIdentifiers(toStringList(rs.getArray("unitIdentifiers")));
+        item.setUnitCosts(toBigDecimalList(rs.getArray("unitCosts")));
         item.setUnitSupplierIds(toLongList(rs.getArray("unitSupplierIds")));
         item.setUnitSupplierNames(toStringList(rs.getArray("unitSupplierNames")));
         item.setBusinessLineKey(rs.getString("businessLineKey"));
@@ -53,6 +54,8 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
         item.setSupplierId(rs.getInt("supplierId"));
         item.setSupplierName(rs.getString("supplierName"));
         item.setQuantityOnHand(rs.getInt("quantity"));
+        item.setReservedQuantity(rs.getInt("reservedQuantity"));
+        item.setBalanceVersion(rs.getLong("balanceVersion"));
         
         int qty = item.getQuantityOnHand();
         item.setStockStatus(qty > 0 ? "IN_STOCK" : "OUT_OF_STOCK");
@@ -113,6 +116,26 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
             return result;
         }
         return new ArrayList<>();
+    }
+
+    private static List<java.math.BigDecimal> toBigDecimalList(Array sqlArray) throws SQLException {
+        if (sqlArray == null) {
+            return new ArrayList<>();
+        }
+        Object value = sqlArray.getArray();
+        List<java.math.BigDecimal> result = new ArrayList<>();
+        if (value instanceof Object[] costs) {
+            for (Object cost : costs) {
+                if (cost instanceof java.math.BigDecimal decimal) {
+                    result.add(decimal);
+                } else if (cost instanceof Number number) {
+                    result.add(java.math.BigDecimal.valueOf(number.doubleValue()));
+                } else if (cost != null) {
+                    result.add(new java.math.BigDecimal(cost.toString()));
+                }
+            }
+        }
+        return result;
     }
 
     @Override
@@ -182,6 +205,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
            .append("COALESCE(p.tracking_type, 'QUANTITY') AS \"trackingType\", ")
            .append("COALESCE(serialized_stock.product_unit_ids, ARRAY[]::bigint[]) AS \"productUnitIds\", ")
            .append("COALESCE(serialized_stock.unit_identifiers, ARRAY[]::text[]) AS \"unitIdentifiers\", ")
+           .append("COALESCE(serialized_stock.unit_costs, ARRAY[]::numeric[]) AS \"unitCosts\", ")
            .append("COALESCE(serialized_stock.unit_supplier_ids, ARRAY[]::bigint[]) AS \"unitSupplierIds\", ")
            .append("COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", ")
            .append("p.business_line_key AS \"businessLineKey\", ")
@@ -199,6 +223,8 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
            .append("ibp.default_supplier_id AS \"supplierId\", ")
            .append("s.\"SupplierName\" AS \"supplierName\", ")
            .append(effectiveQuantitySql).append(" AS quantity, ")
+           .append("COALESCE(st.reserved_qty, 0) AS \"reservedQuantity\", ")
+           .append("COALESCE(st.version, 0) AS \"balanceVersion\", ")
            .append("p.product_state AS \"pState\", ")
            .append("p.retail_price AS \"sellPrice\", ")
            .append("p.buying_price AS \"buyPrice\", ")
@@ -385,6 +411,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                "p.barcode AS barcode, COALESCE(p.tracking_type, 'QUANTITY') AS \"trackingType\", " +
                "COALESCE(serialized_stock.product_unit_ids, ARRAY[]::bigint[]) AS \"productUnitIds\", " +
                "COALESCE(serialized_stock.unit_identifiers, ARRAY[]::text[]) AS \"unitIdentifiers\", " +
+               "COALESCE(serialized_stock.unit_costs, ARRAY[]::numeric[]) AS \"unitCosts\", " +
                "COALESCE(serialized_stock.unit_supplier_ids, ARRAY[]::bigint[]) AS \"unitSupplierIds\", " +
                "COALESCE(serialized_stock.unit_supplier_names, ARRAY[]::text[]) AS \"unitSupplierNames\", " +
                "p.business_line_key AS \"businessLineKey\", p.template_key AS \"templateKey\", " +
@@ -393,7 +420,8 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                "COALESCE(ibp.subcategory_name, p.product_type) AS \"subcategoryName\", ibp.brand AS brand, " +
                "ibp.model AS model, ibp.manufacturer AS manufacturer, COALESCE(ibp.taxonomy_version, 0) AS \"taxonomyVersion\", " +
                "ibp.default_supplier_id AS \"supplierId\", s.\"SupplierName\" AS \"supplierName\", " +
-               effectiveQuantitySql + " AS quantity, p.product_state AS \"pState\", " +
+               effectiveQuantitySql + " AS quantity, COALESCE(st.reserved_qty, 0) AS \"reservedQuantity\", " +
+               "COALESCE(st.version, 0) AS \"balanceVersion\", p.product_state AS \"pState\", " +
                "p.retail_price AS \"sellPrice\", p.buying_price AS \"buyPrice\", p.updated_at " +
                "FROM " + productTable + " p " +
                "INNER JOIN " + branchProductTable + " ibp ON ibp.product_id = p.product_id AND ibp.branch_id = :branchId AND ibp.is_active = TRUE " +
@@ -459,6 +487,7 @@ public class DbInventoryProductQueryGateway implements InventoryProductQueryGate
                 "ARRAY_AGG(product_unit_id ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE') AS product_unit_ids, " +
                 "ARRAY_AGG(COALESCE(NULLIF(imei, ''), NULLIF(serial_number, '')) ORDER BY product_unit_id) " +
                 "FILTER (WHERE status = 'AVAILABLE' AND COALESCE(NULLIF(imei, ''), NULLIF(serial_number, '')) IS NOT NULL) AS unit_identifiers, " +
+                "ARRAY_AGG(unit.acquisition_cost ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE') AS unit_costs, " +
                 "ARRAY_AGG(unit.supplier_id::bigint ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE' AND unit.supplier_id IS NOT NULL) AS unit_supplier_ids, " +
                 "ARRAY_AGG(unit_supplier.\"SupplierName\" ORDER BY product_unit_id) FILTER (WHERE status = 'AVAILABLE' AND unit_supplier.\"SupplierName\" IS NOT NULL) AS unit_supplier_names " +
                 "FROM " + unitTable + " unit " +

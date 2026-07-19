@@ -23,6 +23,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.sql.Timestamp;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
 
@@ -119,6 +121,10 @@ public class InventoryTransactionService {
                     "INVENTORY_TRANSACTION",
                     String.valueOf(insertedTransaction.transactionId()),
                     null,
+                    BigDecimal.valueOf(request.getTransTotal()).divide(
+                            BigDecimal.valueOf(request.getNumItems()),
+                            4,
+                            RoundingMode.HALF_UP),
                     request.getUserName(),
                     request.getIdempotencyKey(),
                     request.getSerializedUnits()
@@ -352,6 +358,16 @@ public class InventoryTransactionService {
                 || normalized.contains("return vendor")
                 || normalized.contains("return to supplier")
                 || normalized.contains("return to vendor");
+    }
+
+    public List<com.example.valueinsoftbackend.Model.Response.ProductPurchaseHistoryResponse> getProductPurchaseHistory(int companyId,
+                                                                                                                        int branchId,
+                                                                                                                        int productId,
+                                                                                                                        int limit) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        TenantSqlIdentifiers.requirePositive(branchId, "branchId");
+        TenantSqlIdentifiers.requirePositive(productId, "productId");
+        return dbPosInventoryTransaction.getProductPurchaseHistory(companyId, branchId, productId, limit);
     }
 
     public List<InventoryTransaction> getTransactions(InventoryTransactionQueryRequest request) {

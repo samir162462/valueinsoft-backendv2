@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.Service.payroll;
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPayroll;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Finance.FinanceAccountItem;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollSalaryProfile;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollSettings;
 import org.springframework.http.HttpStatus;
@@ -29,14 +30,16 @@ public class PayrollValidationService {
 
     public void validateNoOverlap(PayrollSalaryProfile profile, Long excludeProfileId) {
         validatePeriod(profile.getEffectiveFrom(), profile.getEffectiveTo());
-        if (profile.isActive() && dbPayroll.hasOverlappingActiveProfile(
-                profile.getCompanyId(),
-                profile.getEmployeeId(),
-                profile.getEffectiveFrom(),
-                profile.getEffectiveTo(),
-                excludeProfileId)) {
+        boolean overlap = profile.getUserId() != null
+                ? dbPayroll.hasOverlappingActiveProfileByUser(profile.getCompanyId(), profile.getUserId(), profile.getEffectiveFrom(), profile.getEffectiveTo(), excludeProfileId)
+                : dbPayroll.hasOverlappingActiveProfile(profile.getCompanyId(), profile.getEmployeeId(), profile.getEffectiveFrom(), profile.getEffectiveTo(), excludeProfileId);
+        if (profile.isActive() && overlap) {
             throw new ApiException(HttpStatus.CONFLICT, "PAYROLL_PROFILE_OVERLAP",
                     "Employee already has an active salary profile for this period");
+        }
+        if (profile.getBaseSalary() != null && profile.getBaseSalary().compareTo(BigDecimal.ZERO) < 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYROLL_BASE_SALARY_INVALID",
+                    "Base salary cannot be negative");
         }
     }
 
@@ -56,12 +59,26 @@ public class PayrollValidationService {
         if (payableAccount == null && settings != null) {
             payableAccount = settings.getSalaryPayableAccountId();
         }
-        validateAccountExists(companyId, expenseAccount, "PAYROLL_SALARY_EXPENSE_ACCOUNT_REQUIRED");
-        validateAccountExists(companyId, payableAccount, "PAYROLL_SALARY_PAYABLE_ACCOUNT_REQUIRED");
+        validatePostingAccount(companyId, expenseAccount, "expense", "debit",
+                "PAYROLL_SALARY_EXPENSE_ACCOUNT_REQUIRED", "PAYROLL_SALARY_EXPENSE_ACCOUNT_TYPE_INVALID");
+        validatePostingAccount(companyId, payableAccount, "liability", "credit",
+                "PAYROLL_SALARY_PAYABLE_ACCOUNT_REQUIRED", "PAYROLL_SALARY_PAYABLE_ACCOUNT_TYPE_INVALID");
     }
 
     public void validatePaymentAccount(int companyId, PayrollSettings settings) {
-        validateAccountExists(companyId, settings == null ? null : settings.getCashBankAccountId(), "PAYROLL_CASH_BANK_ACCOUNT_REQUIRED");
+        validatePostingAccount(companyId, settings == null ? null : settings.getCashBankAccountId(), "asset", "debit",
+                "PAYROLL_CASH_BANK_ACCOUNT_REQUIRED", "PAYROLL_CASH_BANK_ACCOUNT_TYPE_INVALID");
+    }
+
+    public void validateSettingsAccounts(PayrollSettings settings) {
+        if (settings == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYROLL_SETTINGS_REQUIRED", "Payroll settings are required");
+        }
+        validateAccounts(settings.getCompanyId(), null, settings);
+        validateOptionalPostingAccount(settings.getCompanyId(), settings.getDeductionPayableAccountId(), "liability", "credit",
+                "PAYROLL_DEDUCTION_PAYABLE_ACCOUNT_TYPE_INVALID");
+        validateOptionalPostingAccount(settings.getCompanyId(), settings.getCashBankAccountId(), "asset", "debit",
+                "PAYROLL_CASH_BANK_ACCOUNT_TYPE_INVALID");
     }
 
     public void validateRunEditable(String status) {
@@ -79,9 +96,32 @@ public class PayrollValidationService {
         }
     }
 
-    private void validateAccountExists(int companyId, UUID accountId, String code) {
+    private void validateOptionalPostingAccount(int companyId,
+                                                UUID accountId,
+                                                String expectedType,
+                                                String expectedNormalBalance,
+                                                String typeCode) {
+        if (accountId != null) {
+            validatePostingAccount(companyId, accountId, expectedType, expectedNormalBalance, typeCode, typeCode);
+        }
+    }
+
+    private void validatePostingAccount(int companyId,
+                                        UUID accountId,
+                                        String expectedType,
+                                        String expectedNormalBalance,
+                                        String missingCode,
+                                        String typeCode) {
         if (accountId == null || !dbFinanceSetup.accountExists(companyId, accountId)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Required payroll finance account is missing or invalid");
+            throw new ApiException(HttpStatus.BAD_REQUEST, missingCode, "Required payroll finance account is missing or invalid");
+        }
+        FinanceAccountItem account = dbFinanceSetup.getAccountById(companyId, accountId);
+        if (!expectedType.equalsIgnoreCase(account.getAccountType())
+                || !expectedNormalBalance.equalsIgnoreCase(account.getNormalBalance())
+                || !account.isPostable()
+                || !"active".equalsIgnoreCase(account.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, typeCode,
+                    "Payroll account must be an active, postable " + expectedType + " account with a " + expectedNormalBalance + " balance");
         }
     }
 }

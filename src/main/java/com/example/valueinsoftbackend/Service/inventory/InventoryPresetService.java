@@ -7,6 +7,7 @@ import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.Inventory
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 
 @Service
 public class InventoryPresetService {
@@ -21,21 +22,36 @@ public class InventoryPresetService {
         return inventoryPresetGateway.getPresets(actorName, companyId, branchId);
     }
 
-    public InventoryPresetResponse createPreset(String actorName, InventoryPresetCreateRequest request) {
-        // Resolve companyId from queryState or a default if not present
-        Integer companyId = (Integer) request.getQueryState().get("companyId");
-        if (companyId == null) {
-            // Fallback or error? For now fallback to a safe default if available or throw
-            throw new IllegalArgumentException("companyId must be present in queryState for preset creation");
+    public InventoryPresetResponse createPreset(String actorName,
+                                                Integer companyId,
+                                                Integer branchId,
+                                                InventoryPresetCreateRequest request) {
+        LinkedHashMap<String, Object> queryState = request.getQueryState() == null
+                ? new LinkedHashMap<>()
+                : request.getQueryState();
+        request.setQueryState(queryState);
+        queryState.put("companyId", companyId);
+        if (branchId == null) {
+            queryState.remove("branchId");
+        } else {
+            queryState.put("branchId", branchId);
         }
-        return inventoryPresetGateway.createPreset(actorName, companyId, request);
+        return inventoryPresetGateway.createPreset(actorName, companyId, branchId, request);
     }
 
-    public InventoryPresetResponse updatePreset(String actorName, String presetId, InventoryPresetUpdateRequest request) {
-        return inventoryPresetGateway.updatePreset(actorName, presetId, request);
+    public InventoryPresetResponse updatePreset(String actorName,
+                                                Integer companyId,
+                                                String presetId,
+                                                InventoryPresetUpdateRequest request) {
+        LinkedHashMap<String, Object> queryState = request.getQueryState() == null
+                ? new LinkedHashMap<>()
+                : request.getQueryState();
+        request.setQueryState(queryState);
+        queryState.put("companyId", companyId);
+        return inventoryPresetGateway.updatePreset(actorName, companyId, presetId, request);
     }
 
-    public void deletePreset(String actorName, String presetId) {
-        inventoryPresetGateway.deletePreset(actorName, presetId);
+    public void deletePreset(String actorName, Integer companyId, String presetId) {
+        inventoryPresetGateway.deletePreset(actorName, companyId, presetId);
     }
 }

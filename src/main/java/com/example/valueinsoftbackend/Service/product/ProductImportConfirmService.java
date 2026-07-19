@@ -5,6 +5,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.InventoryImport.ProductIm
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportConfirmResponse;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportStagedRow;
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.Product;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.slf4j.Logger;
@@ -86,7 +87,7 @@ public class ProductImportConfirmService {
                         }
                         Product product = toProduct(row.data(), supplierIds);
                         product.setProductId(row.existingProductId().intValue());
-                        productCommandRepository.updateProduct(product, String.valueOf(branchId), companyId);
+                        productCommandRepository.updateProductMetadata(product, String.valueOf(branchId), companyId);
                         importRepository.markRowUpdated(companyId, row.rowId(), row.existingProductId());
                         return row.existingProductId();
                     });
@@ -184,7 +185,7 @@ public class ProductImportConfirmService {
         product.setMajor(required(data, "category"));
         product.setType(defaultValue(data.get("subcategory"), "General"));
         product.setCompanyName(defaultValue(data.get("brand"), product.getMajor()));
-        product.setBaseUomCode(defaultValue(data.get("unit_code"), "PCS"));
+        applyUnitCodeAndTracking(product, data);
         product.setBPrice(toInteger(data.get("purchase_price"), "purchase_price"));
         product.setRPrice(toInteger(data.get("selling_price"), "selling_price"));
         product.setLPrice(toInteger(defaultValue(data.get("wholesale_price"), data.get("purchase_price")), "wholesale_price"));
@@ -200,6 +201,31 @@ public class ProductImportConfirmService {
         product.setOnlineDescription(blankToNull(data.get("description")));
         product.setOnlineActive(toBoolean(data.get("active"), true));
         return product;
+    }
+
+    /**
+     * unit_code carrying a tracking type (IMEI / SERIAL) is a common CSV mistake:
+     * store base UOM PCS and apply the intended serialized tracking instead of
+     * persisting a wrong unit code. serial_required=true also enables SERIAL tracking.
+     */
+    private void applyUnitCodeAndTracking(Product product, Map<String, String> data) {
+        String normalizedUnitCode = normalize(data.get("unit_code"));
+        switch (normalizedUnitCode) {
+            case "IMEI" -> {
+                product.setBaseUomCode("PCS");
+                product.setTrackingType(TrackingType.IMEI);
+            }
+            case "SERIAL" -> {
+                product.setBaseUomCode("PCS");
+                product.setTrackingType(TrackingType.SERIAL);
+            }
+            default -> {
+                product.setBaseUomCode(defaultValue(data.get("unit_code"), "PCS"));
+                product.setTrackingType(toBoolean(data.get("serial_required"), false)
+                        ? TrackingType.SERIAL
+                        : TrackingType.QUANTITY);
+            }
+        }
     }
 
     private int resolveSupplierId(Map<String, String> data, Map<String, Integer> supplierIds) {

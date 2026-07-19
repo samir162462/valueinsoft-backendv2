@@ -289,6 +289,57 @@ public class FinanceOperationalPostingService {
         financePostingRequestService.createPostingRequestFromSystem(transaction.getUserName(), request);
     }
 
+    public FinancePostingRequestItem enqueueInventoryAdjustmentCommand(int companyId,
+                                                                       int branchId,
+                                                                       String actorName,
+                                                                       String operationId,
+                                                                       long productId,
+                                                                       int quantityDelta,
+                                                                       BigDecimal adjustmentAmount,
+                                                                       Long inventoryMovementId,
+                                                                       String reasonCode,
+                                                                       String reason,
+                                                                       LocalDate postingDate) {
+        if (quantityDelta == 0 || adjustmentAmount == null || adjustmentAmount.signum() <= 0) {
+            return null;
+        }
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for inventory adjustment posting date"
+            );
+        }
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("operationId", operationId);
+        payload.put("direction", quantityDelta > 0 ? "increase" : "decrease");
+        payload.put("quantityDelta", quantityDelta);
+        payload.put("adjustmentAmount", money(adjustmentAmount));
+        payload.put("reasonCode", reasonCode);
+        payload.put("reason", reason);
+        payload.put("inventoryMovementId", inventoryMovementId);
+        payload.put("items", buildInventoryAdjustmentItemPayload(
+                productId,
+                quantityDelta,
+                money(adjustmentAmount),
+                inventoryMovementId));
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "inventory",
+                "inventory_adjustment",
+                "inventory-adjustment-" + operationId,
+                postingDate,
+                fiscalPeriodId,
+                payload
+        );
+        return financePostingRequestService.createPostingRequestFromSystem(actorName, request);
+    }
+
     public void enqueueDamagedItem(int companyId,
                                    int branchId,
                                    DamagedItem damagedItem,
@@ -318,6 +369,51 @@ public class FinanceOperationalPostingService {
                 buildDamagedItemPayload(damagedItem, damagedItemId, inventoryMovementId));
 
         financePostingRequestService.createPostingRequestFromSystem(damagedItem.getCashierUser(), request);
+    }
+
+    public FinancePostingRequestItem enqueueInventoryDamageCommand(int companyId,
+                                                                    int branchId,
+                                                                    String actorName,
+                                                                    long damagedItemId,
+                                                                    long productId,
+                                                                    int quantity,
+                                                                    BigDecimal inventoryValue,
+                                                                    long inventoryMovementId,
+                                                                    String reason,
+                                                                    LocalDate postingDate) {
+        if (quantity <= 0 || inventoryValue == null || inventoryValue.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        UUID fiscalPeriodId = dbFinanceSetup.findPostingFiscalPeriodIdForDate(companyId, postingDate);
+        if (fiscalPeriodId == null) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FINANCE_POSTING_PERIOD_NOT_FOUND",
+                    "No open or soft-locked finance fiscal period exists for damaged inventory posting date");
+        }
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
+        payload.put("damagedItemId", damagedItemId);
+        payload.put("direction", "decrease");
+        payload.put("quantityDelta", -quantity);
+        payload.put("adjustmentAmount", money(inventoryValue));
+        payload.put("reasonCode", "damage");
+        payload.put("reason", reason);
+        payload.put("inventoryMovementId", inventoryMovementId);
+        payload.put("items", buildInventoryAdjustmentItemPayload(
+                productId, -quantity, money(inventoryValue), inventoryMovementId));
+
+        FinancePostingRequestCreateRequest request = new FinancePostingRequestCreateRequest(
+                companyId,
+                branchId,
+                "inventory",
+                "damage",
+                "damaged-item-" + damagedItemId,
+                postingDate,
+                fiscalPeriodId,
+                payload);
+        return financePostingRequestService.createPostingRequestFromSystem(actorName, request);
     }
 
     public void enqueueDamagedItemSettlement(int companyId,
@@ -944,7 +1040,7 @@ public class FinanceOperationalPostingService {
                                                           boolean returnedToStock,
                                                           Long inventoryMovementId,
                                                           Long cashMovementId) {
-        BigDecimal returnedCost = money(BigDecimal.valueOf((long) context.getBuyingPrice() * context.getQuantity()));
+        BigDecimal returnedCost = money(context.getInventoryCost());
 
         LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
         payload.put("currencyCode", DEFAULT_CURRENCY_CODE);
@@ -975,7 +1071,10 @@ public class FinanceOperationalPostingService {
         LinkedHashMap<String, Object> item = new LinkedHashMap<>();
         item.put("productId", context.getProductId());
         item.put("quantity", context.getQuantity());
-        item.put("unitCost", money(context.getBuyingPrice()));
+        item.put("unitCost", returnedCost.divide(
+                BigDecimal.valueOf(context.getQuantity()),
+                4,
+                RoundingMode.HALF_UP));
         item.put("totalCost", returnedCost);
         item.put("inventoryMovementId", inventoryMovementId);
         return List.of(item);
@@ -1175,7 +1274,7 @@ public class FinanceOperationalPostingService {
         return List.of(item);
     }
 
-    private List<Map<String, Object>> buildInventoryAdjustmentItemPayload(int productId,
+    private List<Map<String, Object>> buildInventoryAdjustmentItemPayload(long productId,
                                                                          int quantityDelta,
                                                                          BigDecimal adjustmentAmount,
                                                                          Long inventoryMovementId) {

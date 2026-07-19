@@ -1,8 +1,10 @@
 package com.example.valueinsoftbackend.Service.payroll;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPayroll;
+import com.example.valueinsoftbackend.DatabaseRequests.DbHR;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollAdjustment;
+import com.example.valueinsoftbackend.Model.HR.Employee;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,10 +17,12 @@ import java.util.List;
 public class PayrollAdjustmentService {
 
     private final DbPayroll dbPayroll;
+    private final DbHR dbHR;
     private final PayrollAuditService auditService;
 
-    public PayrollAdjustmentService(DbPayroll dbPayroll, PayrollAuditService auditService) {
+    public PayrollAdjustmentService(DbPayroll dbPayroll, DbHR dbHR, PayrollAuditService auditService) {
         this.dbPayroll = dbPayroll;
+        this.dbHR = dbHR;
         this.auditService = auditService;
     }
 
@@ -36,6 +40,19 @@ public class PayrollAdjustmentService {
 
     @Transactional
     public PayrollAdjustment create(String actor, PayrollAdjustment adjustment) {
+        Employee employee = adjustment.getUserId() == null
+                ? null
+                : dbHR.getEmployeeByUser(adjustment.getCompanyId(), adjustment.getUserId());
+        if (employee == null && adjustment.getBranchId() != null && adjustment.getEmployeeId() > 0) {
+            employee = dbHR.getEmployeeById(adjustment.getCompanyId(), adjustment.getBranchId(), adjustment.getEmployeeId());
+        }
+        if (employee == null || !employee.isActive() || employee.getUserId() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYROLL_COMPANY_USER_REQUIRED",
+                    "Adjustments can only be created for an active user assigned to this company");
+        }
+        adjustment.setEmployeeId(employee.getId());
+        adjustment.setUserId(employee.getUserId());
+        adjustment.setBranchId(employee.getBranchId());
         adjustment.setStatus(adjustment.getStatus() == null ? "PENDING" : adjustment.getStatus());
         adjustment.setCreatedBy(actor);
         adjustment.setUpdatedBy(actor);

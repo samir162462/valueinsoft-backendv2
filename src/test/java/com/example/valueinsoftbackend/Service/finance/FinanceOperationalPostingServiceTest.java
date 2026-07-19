@@ -227,7 +227,8 @@ class FinanceOperationalPostingServiceTest {
         List<Map<String, Object>> items = (List<Map<String, Object>>) payload.get("items");
         assertEquals(1, items.size());
         assertEquals(41, items.get(0).get("productId"));
-        assertEquals(BigDecimal.valueOf(600).setScale(4), items.get(0).get("totalCost"));
+        assertEquals(new BigDecimal("550.5000"), items.get(0).get("totalCost"));
+        assertEquals(new BigDecimal("275.2500"), items.get(0).get("unitCost"));
     }
 
     @Test
@@ -645,7 +646,9 @@ class FinanceOperationalPostingServiceTest {
                 55,
                 100,
                 300,
+                "cash",
                 300,
+                new BigDecimal("550.5000"),
                 false);
     }
 

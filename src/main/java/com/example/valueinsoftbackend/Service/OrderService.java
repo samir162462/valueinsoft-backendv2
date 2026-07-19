@@ -28,6 +28,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.sql.Timestamp;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -199,7 +200,9 @@ public class OrderService {
                 ? context.getOrderDiscount()
                 : 0;
         int refundAmount = context.getTotal() + fullBounceDiscount;
-        int incomeReduction = (context.getTotal() - (context.getBuyingPrice() * context.getQuantity()))
+        int incomeReduction = (context.getTotal() - context.getInventoryCost()
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValueExact())
                 + fullBounceDiscount;
         Timestamp returnTime = new Timestamp(System.currentTimeMillis());
         Long inventoryMovementId = null;

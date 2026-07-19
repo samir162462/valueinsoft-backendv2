@@ -14,6 +14,7 @@ public class AttendanceLog {
     private int companyId;
     private int branchId;
     private int employeeId;
+    private Integer userId;
     private String actionType;
     private Timestamp actionTime;
     private String source;

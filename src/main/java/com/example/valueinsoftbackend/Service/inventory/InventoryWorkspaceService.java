@@ -55,15 +55,21 @@ public class InventoryWorkspaceService {
         return inventoryPresetService.getPresets(actorName, companyId, branchId);
     }
 
-    public InventoryPresetResponse createPreset(String actorName, InventoryPresetCreateRequest request) {
-        return inventoryPresetService.createPreset(actorName, request);
+    public InventoryPresetResponse createPreset(String actorName,
+                                                Integer companyId,
+                                                Integer branchId,
+                                                InventoryPresetCreateRequest request) {
+        return inventoryPresetService.createPreset(actorName, companyId, branchId, request);
     }
 
-    public InventoryPresetResponse updatePreset(String actorName, String presetId, InventoryPresetUpdateRequest request) {
-        return inventoryPresetService.updatePreset(actorName, presetId, request);
+    public InventoryPresetResponse updatePreset(String actorName,
+                                                Integer companyId,
+                                                String presetId,
+                                                InventoryPresetUpdateRequest request) {
+        return inventoryPresetService.updatePreset(actorName, companyId, presetId, request);
     }
 
-    public void deletePreset(String actorName, String presetId) {
-        inventoryPresetService.deletePreset(actorName, presetId);
+    public void deletePreset(String actorName, Integer companyId, String presetId) {
+        inventoryPresetService.deletePreset(actorName, companyId, presetId);
     }
 }

@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
@@ -17,6 +18,7 @@ public class InventoryCatalogItem {
     private String trackingType;
     private java.util.List<Long> productUnitIds;
     private java.util.List<String> unitIdentifiers;
+    private java.util.List<BigDecimal> unitCosts;
     private java.util.List<Long> unitSupplierIds;
     private java.util.List<String> unitSupplierNames;
     private String businessLineKey;
@@ -34,6 +36,8 @@ public class InventoryCatalogItem {
     private Integer supplierId;
     private String supplierName;
     private Integer quantityOnHand;
+    private Integer reservedQuantity;
+    private Long balanceVersion;
     private String stockStatus;
     private Boolean lowStock;
     private Boolean sellable;
@@ -50,6 +54,7 @@ public class InventoryCatalogItem {
                                 String trackingType,
                                 List<Long> productUnitIds,
                                 List<String> unitIdentifiers,
+                                List<BigDecimal> unitCosts,
                                 List<Long> unitSupplierIds,
                                 List<String> unitSupplierNames,
                                 String businessLineKey,
@@ -72,6 +77,7 @@ public class InventoryCatalogItem {
         this.trackingType = trackingType;
         this.productUnitIds = productUnitIds;
         this.unitIdentifiers = unitIdentifiers;
+        this.unitCosts = unitCosts;
         this.unitSupplierIds = unitSupplierIds;
         this.unitSupplierNames = unitSupplierNames;
         this.businessLineKey = businessLineKey;

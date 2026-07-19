@@ -17,6 +17,7 @@ import java.sql.Date;
 @AllArgsConstructor
 public class CurrentSalaryView {
     private int employeeId;
+    private Integer userId;
     private String employeeCode;
     private String firstName;
     private String lastName;

@@ -105,10 +105,10 @@ public class ProductService {
 
         legacyInventoryBackfillService.backfillBranchProducts(companyId, Integer.parseInt(branchId));
         Integer mappedProductId = legacyInventoryBackfillService.resolveModernProductId(companyId, Integer.parseInt(branchId), product.getProductId());
-        if (mappedProductId != null) {
+        if (mappedProductId != null && mappedProductId > 0) {
             product.setProductId(mappedProductId);
         }
-        productCommandRepository.updateProduct(product, branchId, companyId);
+        productCommandRepository.updateProductMetadata(product, branchId, companyId);
         Product savedProduct = productRepository.getProductById(product.getProductId(), Integer.parseInt(branchId), companyId);
         log.info("Updated company-scoped product {} for company {} branch {}", product.getProductId(), companyId, branchId);
         return buildOperationResponse("The Product Edit Saved", product.getProductId(), savedProduct == null ? product : savedProduct, "Update");

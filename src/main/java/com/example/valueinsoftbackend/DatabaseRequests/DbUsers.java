@@ -98,6 +98,26 @@ public class DbUsers {
         return jdbcTemplate.query(sql, userRowMapper);
     }
 
+    public List<User> getUsersForCompany(int companyId, Integer branchId) {
+        TenantSqlIdentifiers.requirePositive(companyId, "companyId");
+        if (branchId != null && branchId > 0) {
+            String sql = "SELECT " + USER_SELECT_COLUMNS.replace("\"branchId\"", "u.\"branchId\"") +
+                    " FROM public.users u JOIN public.\"Branch\" b ON b.\"branchId\" = u.\"branchId\"" +
+                    " WHERE b.\"companyId\" = ? AND u.\"branchId\" = ?" +
+                    " ORDER BY u.\"firstName\", u.\"lastName\", u.id";
+            return jdbcTemplate.query(sql, userRowMapper, companyId, branchId);
+        }
+
+        String sql = "SELECT " + USER_SELECT_COLUMNS.replace("\"branchId\"", "u.\"branchId\"") +
+                " FROM public.users u WHERE" +
+                " EXISTS (SELECT 1 FROM public.\"Branch\" b WHERE b.\"branchId\" = u.\"branchId\" AND b.\"companyId\" = ?)" +
+                " OR EXISTS (SELECT 1 FROM public.\"Company\" c WHERE c.id = ? AND c.\"ownerId\" = u.id)" +
+                " OR EXISTS (SELECT 1 FROM public.tenant_role_assignments tra" +
+                "            WHERE tra.tenant_id = ? AND tra.user_id = u.id AND tra.status = 'active')" +
+                " ORDER BY u.\"branchId\", u.\"firstName\", u.\"lastName\", u.id";
+        return jdbcTemplate.query(sql, userRowMapper, companyId, companyId, companyId);
+    }
+
     public List<User> searchUsersByName(String name, int branchId) {
         String sql = "SELECT " + USER_SELECT_COLUMNS + " FROM public.users WHERE (\"firstName\" ILIKE ? OR \"lastName\" ILIKE ? OR \"userName\" ILIKE ?)";
         String query = "%" + name + "%";

@@ -538,6 +538,7 @@ public class InventoryProductReceiptService {
                     ? receiptConditionCode
                     : normalizeConditionCode(input.getConditionCode()));
             unit.setConditionNotes(blankToNull(request.getReceipt().getConditionNotes()));
+            unit.setAcquisitionCost(money(request.getReceipt().getUnitCost()));
             unit.setSupplierId(clientTradeIn ? null : (long) request.getReceipt().getSupplierId());
             unit.setSourcePartyType(clientTradeIn ? "CLIENT" : "SUPPLIER");
             unit.setSourceClientId(clientTradeIn ? request.getReceipt().getClientId().longValue() : null);

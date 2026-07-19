@@ -121,7 +121,10 @@ public class PlatformAdminCompanyService {
                 .stream()
                 .filter((assignment) -> "Owner".equalsIgnoreCase(assignment.getRoleId()))
                 .filter((assignment) -> assignment.getUserId() != newOwner.getUserId())
-                .forEach((assignment) -> dbConfigurationAdmin.deactivateTenantRoleAssignment(assignment.getAssignmentId()));
+                .forEach((assignment) -> dbConfigurationAdmin.deactivateTenantRoleAssignment(
+                        tenantId,
+                        assignment.getAssignmentId()
+                ));
         dbConfigurationAdmin.upsertTenantRoleAssignment(
                 tenantId,
                 newOwner.getUserId(),

@@ -16,6 +16,7 @@ public class PayrollSalaryProfile {
     private long id;
     private int companyId;
     private int employeeId;
+    private Integer userId;
     private int branchId;
     private String jobTitle;
     private String salaryType;

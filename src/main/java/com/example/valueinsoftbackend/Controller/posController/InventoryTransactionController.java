@@ -4,6 +4,7 @@
 
 package com.example.valueinsoftbackend.Controller.posController;
 
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import com.example.valueinsoftbackend.Model.Inventory.ProductUnitStatus;
@@ -15,6 +16,9 @@ import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitTran
 import com.example.valueinsoftbackend.Model.Request.InventoryTransactionQueryRequest;
 import com.example.valueinsoftbackend.Service.SerializedInventoryService;
 import com.example.valueinsoftbackend.Service.inventory.InventoryTransactionService;
+import com.example.valueinsoftbackend.Service.inventory.InventoryLegacyWriterGate;
+import com.example.valueinsoftbackend.Service.inventory.InventoryLegacyWriterMetrics;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -23,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.List;
+import com.example.valueinsoftbackend.Model.Inventory.ProductUnit;
 
 @RestController
 @Validated
@@ -33,44 +38,82 @@ public class InventoryTransactionController {
     private final SerializedInventoryService serializedInventoryService;
     private final AuthorizationService authorizationService;
     private final TenantScopeGuard tenantScopeGuard;
+    private final InventoryLegacyWriterGate legacyWriterGate;
+    private final InventoryLegacyWriterMetrics legacyWriterMetrics;
 
     public InventoryTransactionController(InventoryTransactionService inventoryTransactionService,
                                           SerializedInventoryService serializedInventoryService,
                                           AuthorizationService authorizationService,
-                                          TenantScopeGuard tenantScopeGuard) {
+                                          TenantScopeGuard tenantScopeGuard,
+                                          InventoryLegacyWriterGate legacyWriterGate,
+                                          InventoryLegacyWriterMetrics legacyWriterMetrics) {
         this.inventoryTransactionService = inventoryTransactionService;
         this.serializedInventoryService = serializedInventoryService;
         this.authorizationService = authorizationService;
         this.tenantScopeGuard = tenantScopeGuard;
+        this.legacyWriterGate = legacyWriterGate;
+        this.legacyWriterMetrics = legacyWriterMetrics;
     }
 
     @PostMapping("/AddTransaction")
     public ResponseEntity<Object> newTransaction(@Valid @RequestBody CreateInventoryTransactionRequest body,
                                                  Principal principal) {
-        // P0-2: validate the request-supplied company/branch against the authenticated identity
-        // before any capability check or service work. The service reads companyId from the body;
-        // this guard guarantees that value belongs to the caller.
-        tenantScopeGuard.requireScope(principal.getName(), body.getCompanyId(), body.getBranchId());
-        authorizationService.assertAuthenticatedCapability(
-                principal.getName(),
-                body.getCompanyId(),
-                body.getBranchId(),
-                "inventory.adjustment.create"
-        );
-        inventoryTransactionService.addTransaction(body);
-        return ResponseEntity.status(HttpStatus.CREATED).body(successMessage(body.getBranchId()));
+        Timer.Sample sample = legacyWriterMetrics.start();
+        String outcome = "success";
+        try {
+            // P0-2: validate request scope before capability checks or service work.
+            tenantScopeGuard.requireScope(principal.getName(), body.getCompanyId(), body.getBranchId());
+            authorizationService.assertAuthenticatedCapability(
+                    principal.getName(),
+                    body.getCompanyId(),
+                    body.getBranchId(),
+                    "inventory.adjustment.create"
+            );
+            legacyWriterGate.requireEnabled(
+                    InventoryLegacyWriterGate.Writer.GENERIC_TRANSACTION,
+                    body.getCompanyId(),
+                    body.getBranchId()
+            );
+            inventoryTransactionService.addTransaction(body);
+            return deprecatedWriterResponse(HttpStatus.CREATED, successMessage(body.getBranchId()));
+        } catch (ApiException exception) {
+            outcome = exception.getStatus() == HttpStatus.GONE ? "blocked" : "rejected";
+            throw exception;
+        } catch (RuntimeException exception) {
+            outcome = "rejected";
+            throw exception;
+        } finally {
+            legacyWriterMetrics.finish(sample, "generic_transaction", outcome);
+        }
     }
 
     @PostMapping("/AddSerializedStockIn")
     public ResponseEntity<Object> newSerializedStockIn(@Valid @RequestBody SerializedUnitStockInRequest body,
                                                        Principal principal) {
-        authorizationService.assertAuthenticatedCapability(
-                principal.getName(),
-                (int) body.getCompanyId(),
-                (int) body.getBranchId(),
-                "inventory.adjustment.create"
-        );
-        return ResponseEntity.status(HttpStatus.CREATED).body(inventoryTransactionService.addSerializedStockIn(body));
+        Timer.Sample sample = legacyWriterMetrics.start();
+        String outcome = "success";
+        try {
+            authorizationService.assertAuthenticatedCapability(
+                    principal.getName(),
+                    (int) body.getCompanyId(),
+                    (int) body.getBranchId(),
+                    "inventory.adjustment.create"
+            );
+            legacyWriterGate.requireEnabled(
+                    InventoryLegacyWriterGate.Writer.STANDALONE_SERIALIZED_STOCK_IN,
+                    body.getCompanyId(),
+                    body.getBranchId()
+            );
+            return deprecatedWriterResponse(HttpStatus.CREATED, inventoryTransactionService.addSerializedStockIn(body));
+        } catch (ApiException exception) {
+            outcome = exception.getStatus() == HttpStatus.GONE ? "blocked" : "rejected";
+            throw exception;
+        } catch (RuntimeException exception) {
+            outcome = "rejected";
+            throw exception;
+        } finally {
+            legacyWriterMetrics.finish(sample, "standalone_serialized_stock_in", outcome);
+        }
     }
 
     @PostMapping("/TransferSerializedUnits")
@@ -112,7 +155,16 @@ public class InventoryTransactionController {
                 (int) branchId,
                 "inventory.item.read"
         );
-        return ResponseEntity.ok(serializedInventoryService.listProductUnits(companyId, branchId, productId, status));
+        List<ProductUnit> units = serializedInventoryService.listProductUnits(companyId, branchId, productId, status);
+        if (!authorizationService.hasAuthenticatedCapability(
+                principal.getName(),
+                (int) companyId,
+                (int) branchId,
+                "inventory.pricing.cost.read"
+        )) {
+            units.forEach(unit -> unit.setAcquisitionCost(null));
+        }
+        return ResponseEntity.ok(units);
     }
 
     @PutMapping("/SerializedUnits/{companyId}/{branchId}/{productId}/{productUnitId}/identifier")
@@ -205,6 +257,34 @@ public class InventoryTransactionController {
         return ResponseEntity.ok(serializedInventoryService.listProductUnitMovementHistory(companyId, branchId, productUnitId, limit));
     }
 
+    @GetMapping("/PurchaseHistory/{companyId}/{branchId}/{productId}")
+    public ResponseEntity<Object> productPurchaseHistory(@PathVariable("companyId") int companyId,
+                                                         @PathVariable("branchId") int branchId,
+                                                         @PathVariable("productId") int productId,
+                                                         @RequestParam(value = "limit", defaultValue = "50") int limit,
+                                                         Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.item.read"
+        );
+        List<com.example.valueinsoftbackend.Model.Response.ProductPurchaseHistoryResponse> purchaseHistory =
+                inventoryTransactionService.getProductPurchaseHistory(companyId, branchId, productId, limit);
+        if (!authorizationService.hasAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.pricing.cost.read"
+        )) {
+            purchaseHistory.forEach(entry -> {
+                entry.setUnitPrice(null);
+                entry.setTotalAmount(null);
+            });
+        }
+        return ResponseEntity.ok(purchaseHistory);
+    }
+
     @PostMapping("/transactions")
     public ResponseEntity<Object> newUser(@Valid @RequestBody InventoryTransactionQueryRequest body,
                                           Principal principal) {
@@ -220,5 +300,12 @@ public class InventoryTransactionController {
 
     private String successMessage(int branchId) {
         return "{\"title\" : \"the newTransaction added \", \"branchId\" : " + branchId + "}";
+    }
+
+    private ResponseEntity<Object> deprecatedWriterResponse(HttpStatus status, Object body) {
+        return ResponseEntity.status(status)
+                .header("Deprecation", "true")
+                .header("Warning", "299 ValueInSoft \"Deprecated inventory writer; migrate to typed inventory commands\"")
+                .body(body);
     }
 }

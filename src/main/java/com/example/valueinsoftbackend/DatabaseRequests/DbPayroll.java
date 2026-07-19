@@ -34,8 +34,13 @@ public class DbPayroll {
             rs.getBoolean("auto_include_attendance"),
             rs.getBigDecimal("overtime_rate_multiplier"),
             rs.getBigDecimal("late_deduction_per_minute"),
+            rs.getString("timezone_id"),
+            rs.getString("week_start_day"),
+            rs.getString("work_week_days"),
+            rs.getInt("monthly_cutoff_day"),
             uuid(rs, "salary_expense_account_id"),
             uuid(rs, "salary_payable_account_id"),
+            uuid(rs, "deduction_payable_account_id"),
             uuid(rs, "cash_bank_account_id"),
             rs.getInt("version"),
             rs.getTimestamp("created_at"),
@@ -74,6 +79,7 @@ public class DbPayroll {
             rs.getLong("id"),
             rs.getInt("company_id"),
             rs.getInt("employee_id"),
+            (Integer) rs.getObject("user_id"),
             rs.getInt("branch_id"),
             rs.getString("job_title"),
             rs.getString("salary_type"),
@@ -114,6 +120,7 @@ public class DbPayroll {
             rs.getInt("company_id"),
             (Integer) rs.getObject("branch_id"),
             rs.getInt("employee_id"),
+            (Integer) rs.getObject("user_id"),
             (Long) rs.getObject("payroll_run_id"),
             rs.getString("adjustment_type"),
             rs.getString("adjustment_code"),
@@ -160,10 +167,13 @@ public class DbPayroll {
             rs.getInt("company_id"),
             rs.getLong("payroll_run_id"),
             rs.getInt("employee_id"),
+            (Integer) rs.getObject("user_id"),
             rs.getLong("salary_profile_id"),
             rs.getBigDecimal("base_salary"),
             rs.getBigDecimal("total_allowances"),
             rs.getBigDecimal("total_deductions"),
+            rs.getBigDecimal("wage_reduction_total"),
+            rs.getBigDecimal("withholding_total"),
             rs.getBigDecimal("gross_salary"),
             rs.getBigDecimal("net_salary"),
             rs.getBigDecimal("paid_amount"),
@@ -195,6 +205,28 @@ public class DbPayroll {
             rs.getString("source")
     );
 
+    private final RowMapper<PayrollAttendanceSnapshot> attendanceSnapshotMapper = (rs, rowNum) -> new PayrollAttendanceSnapshot(
+            rs.getLong("id"),
+            rs.getInt("company_id"),
+            rs.getLong("payroll_run_id"),
+            rs.getLong("payroll_run_line_id"),
+            rs.getInt("employee_id"),
+            rs.getInt("user_id"),
+            rs.getInt("branch_id"),
+            rs.getDate("attendance_date"),
+            (Integer) rs.getObject("shift_id"),
+            rs.getInt("scheduled_minutes"),
+            rs.getInt("worked_minutes"),
+            rs.getInt("break_minutes"),
+            rs.getInt("late_minutes"),
+            rs.getInt("overtime_minutes"),
+            rs.getInt("payable_minutes"),
+            rs.getString("day_status"),
+            rs.getBoolean("is_paid_leave"),
+            (Long) rs.getObject("source_attendance_day_id"),
+            rs.getTimestamp("created_at")
+    );
+
     private final RowMapper<PayrollPayment> paymentMapper = (rs, rowNum) -> new PayrollPayment(
             rs.getLong("id"),
             rs.getInt("company_id"),
@@ -222,6 +254,7 @@ public class DbPayroll {
             rs.getLong("payroll_payment_id"),
             rs.getLong("payroll_run_line_id"),
             rs.getInt("employee_id"),
+            (Integer) rs.getObject("user_id"),
             rs.getBigDecimal("net_salary"),
             rs.getBigDecimal("paid_amount"),
             rs.getBigDecimal("remaining_amount"),
@@ -247,6 +280,7 @@ public class DbPayroll {
 
     private final RowMapper<CurrentSalaryView> currentSalaryViewMapper = (rs, rowNum) -> new CurrentSalaryView(
             rs.getInt("employee_id"),
+            (Integer) rs.getObject("user_id"),
             rs.getString("employee_code"),
             rs.getString("first_name"),
             rs.getString("last_name"),
@@ -275,8 +309,9 @@ public class DbPayroll {
     public int createSettings(PayrollSettings settings) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.payrollSettingsTable(settings.getCompanyId()) +
                 " (company_id, default_currency, default_frequency, auto_include_attendance, overtime_rate_multiplier, " +
-                "late_deduction_per_minute, salary_expense_account_id, salary_payable_account_id, cash_bank_account_id, created_by, updated_by) " +
-                "VALUES (?, ?, ?, ?, ?, ?, CAST(? AS UUID), CAST(? AS UUID), CAST(? AS UUID), ?, ?)";
+                "late_deduction_per_minute, timezone_id, week_start_day, work_week_days, monthly_cutoff_day, salary_expense_account_id, " +
+                "salary_payable_account_id, deduction_payable_account_id, cash_bank_account_id, created_by, updated_by) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS UUID), CAST(? AS UUID), CAST(? AS UUID), CAST(? AS UUID), ?, ?)";
         return generatedInt(sql,
                 settings.getCompanyId(),
                 settings.getDefaultCurrency(),
@@ -284,8 +319,13 @@ public class DbPayroll {
                 settings.isAutoIncludeAttendance(),
                 settings.getOvertimeRateMultiplier(),
                 settings.getLateDeductionPerMinute(),
+                settings.getTimezoneId(),
+                settings.getWeekStartDay(),
+                settings.getWorkWeekDays(),
+                settings.getMonthlyCutoffDay(),
                 settings.getSalaryExpenseAccountId(),
                 settings.getSalaryPayableAccountId(),
+                settings.getDeductionPayableAccountId(),
                 settings.getCashBankAccountId(),
                 settings.getCreatedBy(),
                 settings.getUpdatedBy());
@@ -294,7 +334,8 @@ public class DbPayroll {
     public int updateSettings(PayrollSettings settings) {
         String sql = "UPDATE " + TenantSqlIdentifiers.payrollSettingsTable(settings.getCompanyId()) +
                 " SET default_currency = ?, default_frequency = ?, auto_include_attendance = ?, overtime_rate_multiplier = ?, " +
-                "late_deduction_per_minute = ?, salary_expense_account_id = CAST(? AS UUID), salary_payable_account_id = CAST(? AS UUID), cash_bank_account_id = CAST(? AS UUID), " +
+                "late_deduction_per_minute = ?, timezone_id = ?, week_start_day = ?, work_week_days = ?, monthly_cutoff_day = ?, " +
+                "salary_expense_account_id = CAST(? AS UUID), salary_payable_account_id = CAST(? AS UUID), deduction_payable_account_id = CAST(? AS UUID), cash_bank_account_id = CAST(? AS UUID), " +
                 "version = version + 1, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ? AND company_id = ? AND version = ?";
         return jdbcTemplate.update(sql,
                 settings.getDefaultCurrency(),
@@ -302,8 +343,13 @@ public class DbPayroll {
                 settings.isAutoIncludeAttendance(),
                 settings.getOvertimeRateMultiplier(),
                 settings.getLateDeductionPerMinute(),
+                settings.getTimezoneId(),
+                settings.getWeekStartDay(),
+                settings.getWorkWeekDays(),
+                settings.getMonthlyCutoffDay(),
                 settings.getSalaryExpenseAccountId(),
                 settings.getSalaryPayableAccountId(),
+                settings.getDeductionPayableAccountId(),
                 settings.getCashBankAccountId(),
                 settings.getUpdatedBy(),
                 settings.getId(),
@@ -376,6 +422,11 @@ public class DbPayroll {
                 id);
     }
 
+    public void lockPayrollUser(int companyId, int userId) {
+        long lockKey = ((long) companyId << 32) ^ (userId & 0xffffffffL);
+        jdbcTemplate.queryForObject("SELECT pg_advisory_xact_lock(?)", Object.class, lockKey);
+    }
+
     public List<PayrollSalaryProfile> listSalaryProfiles(int companyId, Integer branchId, Integer employeeId, Boolean activeOnly) {
         StringBuilder sql = new StringBuilder("SELECT * FROM " + TenantSqlIdentifiers.payrollSalaryProfileTable(companyId) + " WHERE company_id = ?");
         java.util.ArrayList<Object> params = new java.util.ArrayList<>();
@@ -397,12 +448,13 @@ public class DbPayroll {
 
     public long createSalaryProfile(PayrollSalaryProfile profile) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.payrollSalaryProfileTable(profile.getCompanyId()) +
-                " (company_id, employee_id, branch_id, job_title, salary_type, base_salary, currency_code, payroll_frequency, " +
+                " (company_id, employee_id, user_id, branch_id, job_title, salary_type, base_salary, currency_code, payroll_frequency, " +
                 "salary_expense_account_id, salary_payable_account_id, is_active, effective_from, effective_to, created_by, updated_by) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS UUID), CAST(? AS UUID), ?, ?, ?, ?, ?)";
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS UUID), CAST(? AS UUID), ?, ?, ?, ?, ?)";
         return generatedLong(sql,
                 profile.getCompanyId(),
                 profile.getEmployeeId(),
+                profile.getUserId(),
                 profile.getBranchId(),
                 profile.getJobTitle(),
                 profile.getSalaryType(),
@@ -456,6 +508,16 @@ public class DbPayroll {
                 "AND effective_from <= COALESCE(CAST(? AS DATE), DATE '9999-12-31') " +
                 "AND COALESCE(effective_to, DATE '9999-12-31') >= CAST(? AS DATE)";
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, companyId, employeeId, excludeProfileId, excludeProfileId, to, from);
+        return count != null && count > 0;
+    }
+
+    public boolean hasOverlappingActiveProfileByUser(int companyId, int userId, java.sql.Date from, java.sql.Date to, Long excludeProfileId) {
+        String sql = "SELECT COUNT(*) FROM " + TenantSqlIdentifiers.payrollSalaryProfileTable(companyId) +
+                " WHERE company_id = ? AND user_id = ? AND is_active = TRUE " +
+                "AND (CAST(? AS BIGINT) IS NULL OR id <> CAST(? AS BIGINT)) " +
+                "AND effective_from <= COALESCE(CAST(? AS DATE), DATE '9999-12-31') " +
+                "AND COALESCE(effective_to, DATE '9999-12-31') >= CAST(? AS DATE)";
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, companyId, userId, excludeProfileId, excludeProfileId, to, from);
         return count != null && count > 0;
     }
 
@@ -544,12 +606,13 @@ public class DbPayroll {
 
     public long createAdjustment(PayrollAdjustment adjustment) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.payrollAdjustmentTable(adjustment.getCompanyId()) +
-                " (company_id, branch_id, employee_id, payroll_run_id, adjustment_type, adjustment_code, description, amount, effective_date, status, approved_by, approved_at, created_by, updated_by) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                " (company_id, branch_id, employee_id, user_id, payroll_run_id, adjustment_type, adjustment_code, description, amount, effective_date, status, approved_by, approved_at, created_by, updated_by) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         return generatedLong(sql,
                 adjustment.getCompanyId(),
                 adjustment.getBranchId(),
                 adjustment.getEmployeeId(),
+                adjustment.getUserId(),
                 adjustment.getPayrollRunId(),
                 adjustment.getAdjustmentType(),
                 adjustment.getAdjustmentCode(),
@@ -610,11 +673,24 @@ public class DbPayroll {
         return jdbcTemplate.query(sql.toString(), runMapper, params.toArray());
     }
 
+    public PayrollRun findActiveRunForPeriod(int companyId,
+                                             Integer branchId,
+                                             String frequency,
+                                             String currencyCode,
+                                             java.sql.Date periodStart,
+                                             java.sql.Date periodEnd) {
+        String sql = "SELECT * FROM " + TenantSqlIdentifiers.payrollRunTable(companyId) +
+                " WHERE company_id = ? AND COALESCE(branch_id, 0) = COALESCE(CAST(? AS INT), 0)" +
+                " AND frequency = ? AND currency_code = ? AND period_start = ? AND period_end = ?" +
+                " AND status NOT IN ('CANCELLED', 'REVERSED') ORDER BY id DESC LIMIT 1";
+        return queryOne(sql, runMapper, companyId, branchId, frequency, currencyCode, periodStart, periodEnd);
+    }
+
     public long createRun(PayrollRun run) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.payrollRunTable(run.getCompanyId()) +
                 " (company_id, branch_id, run_label, period_start, period_end, frequency, currency_code, status, total_gross, total_deductions, total_net, " +
                 "employee_count, approved_by, approved_at, posting_request_id, posted_journal_id, posted_at, created_by, updated_by) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS UUID), CAST(? AS UUID), ?, ?, ?)";
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS UUID), CAST(? AS UUID), ?, ?, ?) ON CONFLICT DO NOTHING";
         return generatedLong(sql,
                 run.getCompanyId(),
                 run.getBranchId(),
@@ -685,17 +761,20 @@ public class DbPayroll {
 
     public long createRunLine(PayrollRunLine line) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.payrollRunLineTable(line.getCompanyId()) +
-                " (company_id, payroll_run_id, employee_id, salary_profile_id, base_salary, total_allowances, total_deductions, gross_salary, net_salary, " +
+                " (company_id, payroll_run_id, employee_id, user_id, salary_profile_id, base_salary, total_allowances, total_deductions, wage_reduction_total, withholding_total, gross_salary, net_salary, " +
                 "paid_amount, remaining_amount, payment_status, working_days, absent_days, late_minutes, overtime_minutes, salary_type, payroll_frequency, currency_code, calculation_snapshot_json, notes) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         return generatedLong(sql,
                 line.getCompanyId(),
                 line.getPayrollRunId(),
                 line.getEmployeeId(),
+                line.getUserId(),
                 line.getSalaryProfileId(),
                 line.getBaseSalary(),
                 line.getTotalAllowances(),
                 line.getTotalDeductions(),
+                line.getWageReductionTotal(),
+                line.getWithholdingTotal(),
                 line.getGrossSalary(),
                 line.getNetSalary(),
                 line.getPaidAmount(),
@@ -714,13 +793,15 @@ public class DbPayroll {
 
     public int updateRunLine(PayrollRunLine line) {
         String sql = "UPDATE " + TenantSqlIdentifiers.payrollRunLineTable(line.getCompanyId()) +
-                " SET base_salary = ?, total_allowances = ?, total_deductions = ?, gross_salary = ?, net_salary = ?, paid_amount = ?, remaining_amount = ?, " +
+                " SET base_salary = ?, total_allowances = ?, total_deductions = ?, wage_reduction_total = ?, withholding_total = ?, gross_salary = ?, net_salary = ?, paid_amount = ?, remaining_amount = ?, " +
                 "payment_status = ?, working_days = ?, absent_days = ?, late_minutes = ?, overtime_minutes = ?, salary_type = ?, payroll_frequency = ?, currency_code = ?, " +
                 "calculation_snapshot_json = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE company_id = ? AND id = ?";
         return jdbcTemplate.update(sql,
                 line.getBaseSalary(),
                 line.getTotalAllowances(),
                 line.getTotalDeductions(),
+                line.getWageReductionTotal(),
+                line.getWithholdingTotal(),
                 line.getGrossSalary(),
                 line.getNetSalary(),
                 line.getPaidAmount(),
@@ -794,6 +875,39 @@ public class DbPayroll {
 
     public int deleteRunLineComponent(int companyId, long id) {
         return jdbcTemplate.update("DELETE FROM " + TenantSqlIdentifiers.payrollRunLineComponentTable(companyId) + " WHERE company_id = ? AND id = ?", companyId, id);
+    }
+
+    public List<PayrollAttendanceSnapshot> listAttendanceSnapshots(int companyId, long payrollRunId) {
+        return jdbcTemplate.query("SELECT * FROM " + TenantSqlIdentifiers.payrollRunAttendanceDayTable(companyId) +
+                        " WHERE company_id = ? AND payroll_run_id = ? ORDER BY attendance_date, user_id",
+                attendanceSnapshotMapper,
+                companyId,
+                payrollRunId);
+    }
+
+    public long createAttendanceSnapshot(PayrollAttendanceSnapshot snapshot) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.payrollRunAttendanceDayTable(snapshot.getCompanyId()) +
+                " (company_id, payroll_run_id, payroll_run_line_id, employee_id, user_id, branch_id, attendance_date, shift_id, " +
+                "scheduled_minutes, worked_minutes, break_minutes, late_minutes, overtime_minutes, payable_minutes, day_status, is_paid_leave, source_attendance_day_id) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        return generatedLong(sql,
+                snapshot.getCompanyId(),
+                snapshot.getPayrollRunId(),
+                snapshot.getPayrollRunLineId(),
+                snapshot.getEmployeeId(),
+                snapshot.getUserId(),
+                snapshot.getBranchId(),
+                snapshot.getAttendanceDate(),
+                snapshot.getShiftId(),
+                snapshot.getScheduledMinutes(),
+                snapshot.getWorkedMinutes(),
+                snapshot.getBreakMinutes(),
+                snapshot.getLateMinutes(),
+                snapshot.getOvertimeMinutes(),
+                snapshot.getPayableMinutes(),
+                snapshot.getDayStatus(),
+                snapshot.isPaidLeave(),
+                snapshot.getSourceAttendanceDayId());
     }
 
     public PayrollPayment getPayment(int companyId, long id) {
@@ -873,13 +987,14 @@ public class DbPayroll {
 
     public long createPaymentLine(PayrollPaymentLine line) {
         String sql = "INSERT INTO " + TenantSqlIdentifiers.payrollPaymentLineTable(line.getCompanyId()) +
-                " (company_id, payroll_payment_id, payroll_run_line_id, employee_id, net_salary, paid_amount, remaining_amount, payment_method, payment_status) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                " (company_id, payroll_payment_id, payroll_run_line_id, employee_id, user_id, net_salary, paid_amount, remaining_amount, payment_method, payment_status) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         return generatedLong(sql,
                 line.getCompanyId(),
                 line.getPayrollPaymentId(),
                 line.getPayrollRunLineId(),
                 line.getEmployeeId(),
+                line.getUserId(),
                 line.getNetSalary(),
                 line.getPaidAmount(),
                 line.getRemainingAmount(),
@@ -973,7 +1088,7 @@ public class DbPayroll {
                         "SELECT DISTINCT ON (employee_id) * FROM " + TenantSqlIdentifiers.payrollSalaryProfileTable(companyId) +
                         " WHERE company_id = ? AND is_active = TRUE AND effective_from <= CURRENT_DATE " +
                         "AND (effective_to IS NULL OR effective_to >= CURRENT_DATE) ORDER BY employee_id, effective_from DESC, id DESC) " +
-                        "SELECT e.id AS employee_id, e.employee_code, e.first_name, e.last_name, e.branch_id, p.job_title, p.salary_type, " +
+                        "SELECT e.id AS employee_id, e.user_id, e.employee_code, e.first_name, e.last_name, e.branch_id, p.job_title, p.salary_type, " +
                         "COALESCE(p.base_salary, 0) AS base_salary, p.payroll_frequency, p.currency_code, " +
                         "COALESCE(ct.total_allowances, 0) AS total_allowances, COALESCE(ct.total_deductions, 0) AS total_deductions, " +
                         "COALESCE(p.base_salary, 0) + COALESCE(ct.total_allowances, 0) - COALESCE(ct.total_deductions, 0) AS expected_net_salary, " +

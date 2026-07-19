@@ -5,6 +5,7 @@
 package com.example.valueinsoftbackend.DatabaseRequests.DbPOS;
 
 import com.example.valueinsoftbackend.Model.InventoryTransaction;
+import com.example.valueinsoftbackend.Model.Response.ProductPurchaseHistoryResponse;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -56,52 +57,27 @@ public class DbPosInventoryTransaction {
 
     public List<InventoryTransaction> getInventoryTrans(int companyId, int branchId, String startDate, String endDate) {
         String sql = """
-                WITH ledger_source AS (
+                WITH serialized_unit_reference AS (
                     SELECT
-                        ledger.stock_ledger_id,
-                        ledger.branch_id,
-                        ledger.product_id,
-                        ledger.product_unit_id,
-                        ledger.movement_type,
-                        ledger.quantity_delta,
-                        ledger.reference_type,
-                        ledger.reference_id,
-                        ledger.actor_name,
-                        ledger.supplier_id,
-                        ledger.trans_total,
-                        ledger.pay_type,
-                        ledger.remaining_amount,
-                        ledger.created_at
-                    FROM %s ledger
-
-                    UNION ALL
-
-                    SELECT
-                        -unit.product_unit_id AS stock_ledger_id,
                         unit.branch_id,
                         unit.product_id,
-                        unit.product_unit_id,
-                        'STOCK_IN' AS movement_type,
-                        1 AS quantity_delta,
-                        COALESCE(NULLIF(unit.purchase_reference_type, ''), 'SERIALIZED_UNIT') AS reference_type,
-                        COALESCE(NULLIF(unit.purchase_reference_id, ''), unit.product_unit_id::text) AS reference_id,
-                        NULL::varchar AS actor_name,
-                        COALESCE(unit.supplier_id, 0)::integer AS supplier_id,
-                        0 AS trans_total,
-                        '' AS pay_type,
-                        0 AS remaining_amount,
-                        COALESCE(unit.received_at, unit.created_at) AS created_at
+                        unit.purchase_reference_type AS reference_type,
+                        unit.purchase_reference_id AS reference_id,
+                        string_agg(
+                            DISTINCT COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')),
+                            ', '
+                        ) FILTER (
+                            WHERE COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')) IS NOT NULL
+                        ) AS serials,
+                        MAX(unit.supplier_id) AS supplier_id
                     FROM %s unit
-                    JOIN %s unit_product ON unit_product.product_id = unit.product_id
-                    WHERE unit.branch_id = ?
-                      AND COALESCE(unit_product.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM %s existing_ledger
-                          WHERE existing_ledger.product_unit_id = unit.product_unit_id
-                            AND existing_ledger.quantity_delta > 0
-                            AND existing_ledger.movement_type IN ('STOCK_IN', 'OPENING_BALANCE', 'MANUAL_STOCK_IN')
-                      )
+                    WHERE NULLIF(unit.purchase_reference_type, '') IS NOT NULL
+                      AND NULLIF(unit.purchase_reference_id, '') IS NOT NULL
+                    GROUP BY
+                        unit.branch_id,
+                        unit.product_id,
+                        unit.purchase_reference_type,
+                        unit.purchase_reference_id
                 ),
                 grouped_ledger AS (
                     SELECT
@@ -111,12 +87,13 @@ public class DbPosInventoryTransaction {
                         COALESCE(
                             string_agg(DISTINCT COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')), ', ')
                                 FILTER (WHERE COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')) IS NOT NULL),
+                            MAX(reference_units.serials),
                             NULLIF(prod.serial, ''),
                             NULLIF(prod.barcode, ''),
                             ''
                         ) AS serial,
                         COALESCE(MAX(ledger.actor_name), MAX(tx."userName"), 'system') AS actor_name,
-                        COALESCE(ledger.supplier_id, unit.supplier_id, tx."supplierId", prod.supplier_id, 0) AS supplier_id,
+                        COALESCE(ledger.supplier_id, unit.supplier_id, reference_units.supplier_id, tx."supplierId", prod.supplier_id, 0) AS supplier_id,
                         ledger.movement_type,
                         SUM(ledger.quantity_delta)::integer AS quantity_delta,
                         CASE
@@ -134,9 +111,15 @@ public class DbPosInventoryTransaction {
                         COALESCE(MAX(tx."RemainingAmount"), SUM(COALESCE(ledger.remaining_amount, 0)))::integer AS remaining_amount,
                         COALESCE(prod.business_line_key, '') AS business_line_key,
                         COALESCE(prod.template_key, '') AS template_key
-                    FROM ledger_source ledger
+                    FROM %s ledger
                     JOIN %s prod ON prod.product_id = ledger.product_id
                     LEFT JOIN %s unit ON unit.product_unit_id = ledger.product_unit_id
+                    LEFT JOIN serialized_unit_reference reference_units
+                        ON ledger.product_unit_id IS NULL
+                       AND reference_units.branch_id = ledger.branch_id
+                       AND reference_units.product_id = ledger.product_id
+                       AND reference_units.reference_type = ledger.reference_type
+                       AND reference_units.reference_id = ledger.reference_id
                     LEFT JOIN %s tx ON ledger.reference_type = 'INVENTORY_TRANSACTION'
                         AND ledger.reference_id = tx."transId"::text
                     WHERE ledger.branch_id = ?
@@ -178,7 +161,7 @@ public class DbPosInventoryTransaction {
                         prod.supplier_id,
                         ledger.product_unit_id,
                         ledger.movement_type,
-                        COALESCE(ledger.supplier_id, unit.supplier_id, tx."supplierId", prod.supplier_id, 0)
+                        COALESCE(ledger.supplier_id, unit.supplier_id, reference_units.supplier_id, tx."supplierId", prod.supplier_id, 0)
                 ),
                 ledger_with_balance AS (
                     SELECT
@@ -222,15 +205,131 @@ public class DbPosInventoryTransaction {
                   AND created_at < date_trunc('month', ?::timestamp) + interval '1 month'
                 ORDER BY created_at DESC, stock_ledger_id DESC
                 """.formatted(
-                TenantSqlIdentifiers.inventoryStockLedgerTable(companyId),
                 TenantSqlIdentifiers.inventoryProductUnitTable(companyId),
-                TenantSqlIdentifiers.inventoryProductTable(companyId),
                 TenantSqlIdentifiers.inventoryStockLedgerTable(companyId),
                 TenantSqlIdentifiers.inventoryProductTable(companyId),
                 TenantSqlIdentifiers.inventoryProductUnitTable(companyId),
                 TenantSqlIdentifiers.inventoryTransactionsTable(companyId, branchId)
         );
-        return jdbcTemplate.query(sql, new InventoryTransactionMapper(), branchId, branchId, startDate, endDate);
+        return jdbcTemplate.query(sql, new InventoryTransactionMapper(), branchId, startDate, endDate);
+    }
+
+    private static final RowMapper<ProductPurchaseHistoryResponse> PURCHASE_HISTORY_MAPPER = (rs, rowNum) -> new ProductPurchaseHistoryResponse(
+            rs.getLong("entry_id"),
+            rs.getInt("quantity"),
+            rs.getBigDecimal("unit_price"),
+            rs.getBigDecimal("total_amount"),
+            rs.getString("pay_type"),
+            rs.getLong("supplier_id"),
+            rs.getString("supplier_name"),
+            rs.getString("user_name"),
+            rs.getString("serial"),
+            rs.getTimestamp("time")
+    );
+
+    /**
+     * Buying-price (stock-in) transactions of one product with date and time.
+     * Uses the stock ledger as the single source of truth. Serialized identifiers are joined
+     * by unit id or purchase reference without creating extra quantity-bearing history rows.
+     */
+    public List<ProductPurchaseHistoryResponse> getProductPurchaseHistory(int companyId, int branchId, int productId, int limit) {
+        String sql = """
+                WITH serialized_unit_reference AS (
+                    SELECT
+                        unit.branch_id,
+                        unit.product_id,
+                        unit.purchase_reference_type AS reference_type,
+                        unit.purchase_reference_id AS reference_id,
+                        string_agg(
+                            DISTINCT COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')),
+                            ', '
+                        ) FILTER (
+                            WHERE COALESCE(NULLIF(unit.imei, ''), NULLIF(unit.serial_number, '')) IS NOT NULL
+                        ) AS serials
+                    FROM %s unit
+                    WHERE NULLIF(unit.purchase_reference_type, '') IS NOT NULL
+                      AND NULLIF(unit.purchase_reference_id, '') IS NOT NULL
+                    GROUP BY
+                        unit.branch_id,
+                        unit.product_id,
+                        unit.purchase_reference_type,
+                        unit.purchase_reference_id
+                ),
+                purchase_source AS (
+                    SELECT
+                        ledger.stock_ledger_id::bigint AS entry_id,
+                        ledger.branch_id,
+                        ledger.product_id,
+                        ledger.product_unit_id,
+                        ledger.quantity_delta::integer AS quantity_delta,
+                        COALESCE(ledger.trans_total, 0)::numeric AS trans_total,
+                        ledger.pay_type,
+                        COALESCE(ledger.supplier_id, 0)::bigint AS supplier_id,
+                        ledger.actor_name,
+                        ledger.reference_type,
+                        ledger.reference_id,
+                        ledger.created_at
+                    FROM %s ledger
+                    JOIN %s prod ON prod.product_id = ledger.product_id
+                    WHERE ledger.branch_id = ?
+                      AND ledger.product_id = ?
+                      AND ledger.quantity_delta > 0
+                      AND ledger.movement_type IN ('PURCHASE_RECEIPT', 'STOCK_IN', 'OPENING_BALANCE', 'MANUAL_STOCK_IN')
+                      AND NOT (
+                          COALESCE(prod.tracking_type, 'QUANTITY') IN ('IMEI', 'SERIAL')
+                          AND ledger.reference_type = 'PRODUCT_CREATE'
+                          AND ledger.movement_type = 'OPENING_BALANCE'
+                      )
+                )
+                SELECT
+                    src.entry_id,
+                    src.quantity_delta AS quantity,
+                    CASE
+                        WHEN src.product_unit_id IS NOT NULL
+                            THEN COALESCE(NULLIF(unit.acquisition_cost, 0), NULLIF(src.trans_total, 0), 0)::numeric
+                        ELSE ROUND(src.trans_total / NULLIF(src.quantity_delta, 0), 4)
+                    END AS unit_price,
+                    CASE
+                        WHEN src.product_unit_id IS NOT NULL
+                            THEN COALESCE(NULLIF(unit.acquisition_cost, 0), NULLIF(src.trans_total, 0), 0)::numeric
+                        ELSE src.trans_total
+                    END AS total_amount,
+                    COALESCE(src.pay_type, '') AS pay_type,
+                    src.supplier_id,
+                    COALESCE(sup."SupplierName", '') AS supplier_name,
+                    COALESCE(src.actor_name, '') AS user_name,
+                    COALESCE(
+                        NULLIF(unit.imei, ''),
+                        NULLIF(unit.serial_number, ''),
+                        reference_units.serials,
+                        ''
+                    ) AS serial,
+                    src.created_at AS time
+                FROM purchase_source src
+                LEFT JOIN %s unit ON unit.product_unit_id = src.product_unit_id
+                LEFT JOIN serialized_unit_reference reference_units
+                    ON src.product_unit_id IS NULL
+                   AND reference_units.branch_id = src.branch_id
+                   AND reference_units.product_id = src.product_id
+                   AND reference_units.reference_type = src.reference_type
+                   AND reference_units.reference_id = src.reference_id
+                LEFT JOIN %s sup ON sup."supplierId" = src.supplier_id
+                ORDER BY src.created_at DESC, src.entry_id DESC
+                LIMIT ?
+                """.formatted(
+                TenantSqlIdentifiers.inventoryProductUnitTable(companyId),
+                TenantSqlIdentifiers.inventoryStockLedgerTable(companyId),
+                TenantSqlIdentifiers.inventoryProductTable(companyId),
+                TenantSqlIdentifiers.inventoryProductUnitTable(companyId),
+                TenantSqlIdentifiers.supplierTable(companyId, branchId)
+        );
+        return jdbcTemplate.query(
+                sql,
+                PURCHASE_HISTORY_MAPPER,
+                branchId,
+                productId,
+                Math.max(1, limit)
+        );
     }
 
     public AddInventoryTransactionResult insertInventoryTransaction(InventoryTransaction inventoryTransaction, int branchId, int companyId) {

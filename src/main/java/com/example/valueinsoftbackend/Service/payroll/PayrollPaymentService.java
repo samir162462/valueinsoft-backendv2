@@ -83,6 +83,7 @@ public class PayrollPaymentService {
         paymentLine.setPayrollPaymentId(paymentId);
         paymentLine.setPayrollRunLineId(runLine.getId());
         paymentLine.setEmployeeId(runLine.getEmployeeId());
+        paymentLine.setUserId(runLine.getUserId());
         paymentLine.setNetSalary(runLine.getNetSalary());
         paymentLine.setPaidAmount(paidAmount);
         paymentLine.setRemainingAmount(remaining);
@@ -145,6 +146,7 @@ public class PayrollPaymentService {
             paymentLine.setPayrollPaymentId(paymentId);
             paymentLine.setPayrollRunLineId(runLine.getId());
             paymentLine.setEmployeeId(runLine.getEmployeeId());
+            paymentLine.setUserId(runLine.getUserId());
             paymentLine.setNetSalary(runLine.getNetSalary());
             paymentLine.setPaidAmount(paid);
             paymentLine.setRemainingAmount(BigDecimal.ZERO);

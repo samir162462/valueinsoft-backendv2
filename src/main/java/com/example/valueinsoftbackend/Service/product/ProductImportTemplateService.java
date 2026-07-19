@@ -1,13 +1,19 @@
 package com.example.valueinsoftbackend.Service.product;
 
+import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportColumn;
+import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportMode;
+import com.example.valueinsoftbackend.Model.Product;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @Service
 public class ProductImportTemplateService {
+
+    private static final int SAMPLE_PRODUCT_LIMIT = 5;
 
     private static final List<ProductImportColumn> COLUMNS = List.of(
             new ProductImportColumn("product_name", true, "Required. Maps to inventory_product.product_name; current max length is 30."),
@@ -40,107 +46,30 @@ public class ProductImportTemplateService {
             new ProductImportColumn("allow_below_cost", false, "Optional boolean flag.")
     );
 
-    private static final List<List<String>> SAMPLE_ROWS = List.of(
-            sampleRow(
-                    "iPhone 15 128GB Black",
-                    "8806095123001",
-                    "APL-IP15-128-BLK",
-                    "iPhone",
-                    "iPhone 15",
-                    "PCS",
-                    "1074",
-                    "35000",
-                    "37000",
-                    "38999",
-                    "4",
-                    "1",
-                    "Main Supplier",
-                    "SUP-MOB-001",
-                    "Apple",
-                    "New",
-                    "Sealed retail device",
-                    "ايفون 15 128 اسود",
-                    "true",
-                    "true",
-                    "365",
-                    "14",
-                    "",
-                    "https://example.com/products/iphone-15-black.jpg",
-                    "MOBILE",
-                    "mobile_device",
-                    "FIXED_RETAIL",
-                    "false"
-            ),
-            sampleRow(
-                    "Samsung A55 256GB Navy",
-                    "8806095467002",
-                    "SMS-A55-256-NVY",
-                    "Mobiles",
-                    "Samsung A Series",
-                    "PCS",
-                    "1074",
-                    "18500",
-                    "19500",
-                    "21999",
-                    "6",
-                    "2",
-                    "Mobile House",
-                    "SUP-MOB-002",
-                    "Samsung",
-                    "New",
-                    "Mid-range 5G smartphone",
-                    "سامسونج A55 256 كحلي",
-                    "true",
-                    "true",
-                    "365",
-                    "14",
-                    "",
-                    "https://example.com/products/samsung-a55-navy.jpg",
-                    "MOBILE",
-                    "mobile_device",
-                    "FIXED_RETAIL",
-                    "false"
-            ),
-            sampleRow(
-                    "USB-C Fast Charger 25W",
-                    "6223001001250",
-                    "ACC-CHG-25W-WHT",
-                    "Accessories",
-                    "Chargers",
-                    "PCS",
-                    "1074",
-                    "180",
-                    "220",
-                    "350",
-                    "25",
-                    "5",
-                    "Accessories Partner",
-                    "SUP-ACC-001",
-                    "Anker",
-                    "New",
-                    "25W PD wall charger",
-                    "شاحن سريع USB-C 25W",
-                    "true",
-                    "false",
-                    "180",
-                    "14",
-                    "",
-                    "https://example.com/products/usb-c-charger-25w.jpg",
-                    "MOBILE",
-                    "mobile_accessory",
-                    "FIXED_RETAIL",
-                    "false"
-            )
-    );
+    private final ProductService productService;
 
-    public String buildCsvTemplate() {
-        return "sep=,\r\n"
+    public ProductImportTemplateService(ProductService productService) {
+        this.productService = productService;
+    }
+
+    public String buildCsvTemplate(int companyId, int branchId, ProductImportMode mode) {
+        ProductImportMode effectiveMode = mode == null ? ProductImportMode.ADD_ONLY : mode;
+        String sampleBatchKey = Long.toString(System.currentTimeMillis(), 36).toUpperCase(Locale.ROOT);
+        List<List<String>> sampleRows = productService
+                .getProductsAllRange(String.valueOf(branchId), companyId, null)
+                .stream()
+                .filter(this::isImportCompatible)
+                .limit(SAMPLE_PRODUCT_LIMIT)
+                .map(product -> productRow(product, branchId, effectiveMode, sampleBatchKey))
+                .toList();
+
+        return "\uFEFFsep=,\r\n"
                 + COLUMNS.stream()
                 .map(ProductImportColumn::header)
                 .map(this::escapeCsv)
                 .collect(Collectors.joining(","))
                 + "\r\n"
-                + SAMPLE_ROWS.stream()
+                + sampleRows.stream()
                 .map(row -> row.stream()
                         .map(this::escapeCsv)
                         .collect(Collectors.joining(",")))
@@ -150,6 +79,95 @@ public class ProductImportTemplateService {
 
     public List<ProductImportColumn> columns() {
         return COLUMNS;
+    }
+
+    private boolean isImportCompatible(Product product) {
+        String barcode = sourceBarcode(product);
+        return product != null
+                && hasText(product.getProductName())
+                && product.getProductName().trim().length() <= 30
+                && hasText(barcode)
+                && barcode.length() <= 35
+                && hasText(product.getMajor())
+                && product.getMajor().trim().length() <= 30
+                && (!hasText(product.getType()) || product.getType().trim().length() <= 15)
+                && product.getBPrice() >= 0
+                && product.getLPrice() >= product.getBPrice()
+                && product.getRPrice() >= product.getLPrice();
+    }
+
+    private List<String> productRow(Product product, int branchId, ProductImportMode mode, String sampleBatchKey) {
+        boolean addOnly = mode == ProductImportMode.ADD_ONLY;
+        String sourceBarcode = sourceBarcode(product);
+        String barcode = addOnly
+                ? sampleIdentifier("S", branchId, product.getProductId(), sampleBatchKey)
+                : sourceBarcode;
+        String sourceSku = firstText(product.getSku(), "SKU-" + product.getProductId());
+        String sku = addOnly
+                ? sampleIdentifier("SKU", branchId, product.getProductId(), sampleBatchKey)
+                : sourceSku;
+        String imageUrl = httpUrlOrBlank(firstText(product.getOnlineImageUrl(), product.getImage()));
+        TrackingType trackingType = TrackingType.defaultIfNull(product.getTrackingType());
+
+        return sampleRow(
+                product.getProductName().trim(),
+                barcode,
+                sku,
+                product.getMajor().trim(),
+                firstText(product.getType(), "General"),
+                exportableUomCode(product.getBaseUomCode()),
+                String.valueOf(branchId),
+                String.valueOf(product.getBPrice()),
+                String.valueOf(product.getLPrice()),
+                String.valueOf(product.getRPrice()),
+                addOnly ? "0" : String.valueOf(Math.max(0, product.getQuantity())),
+                "",
+                "",
+                "",
+                firstText(product.getBrand(), product.getCompanyName(), product.getMajor()),
+                "Used".equalsIgnoreCase(product.getPState()) ? "Used" : "New",
+                firstText(product.getDesc(), product.getOnlineDescription()),
+                "",
+                "true",
+                String.valueOf(trackingType != TrackingType.QUANTITY),
+                "",
+                "",
+                "",
+                imageUrl,
+                firstText(product.getBusinessLineKey(), "MOBILE"),
+                firstText(product.getTemplateKey(), "mobile_device"),
+                firstText(product.getPricingPolicyCode(), "FIXED_RETAIL"),
+                "false"
+        );
+    }
+
+    /**
+     * Legacy products may carry a tracking type (IMEI / SERIAL) inside base_uom_code.
+     * Never export that into the sample CSV: unit_code must be a real base UOM.
+     */
+    private String exportableUomCode(String baseUomCode) {
+        String code = firstText(baseUomCode, "PCS").toUpperCase(Locale.ROOT);
+        return "IMEI".equals(code) || "SERIAL".equals(code) ? "PCS" : code;
+    }
+
+    private String sourceBarcode(Product product) {
+        if (product == null) {
+            return "";
+        }
+        return firstText(product.getSerial(), product.getBarcode());
+    }
+
+    private String sampleIdentifier(String prefix, int branchId, int productId, String sampleBatchKey) {
+        return (prefix + "-SAMPLE-" + branchId + "-" + productId + "-" + sampleBatchKey)
+                .toUpperCase(Locale.ROOT);
+    }
+
+    private String httpUrlOrBlank(String value) {
+        if (value == null) {
+            return "";
+        }
+        String clean = value.trim();
+        return clean.startsWith("http://") || clean.startsWith("https://") ? clean : "";
     }
 
     private static List<String> sampleRow(String productName,
@@ -210,6 +228,19 @@ public class ProductImportTemplateService {
                 pricingPolicyCode,
                 allowBelowCost
         );
+    }
+
+    private String firstText(String... values) {
+        for (String value : values) {
+            if (hasText(value)) {
+                return value.trim();
+            }
+        }
+        return "";
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private String escapeCsv(String value) {

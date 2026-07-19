@@ -29,6 +29,8 @@ class OpenItemsProvisioningTest {
                 "SELECT public.ensure_receipt_hardening_for_tenant('c_42', 42)");
         verify(jdbcTemplate).execute(
                 "SELECT public.ensure_credit_debit_notes_for_tenant('c_42', 42)");
+        verify(jdbcTemplate).execute(
+                "SELECT public.ensure_inventory_workspace_receipt_foundation_for_tenant('c_42', 42)");
     }
 
     @Test

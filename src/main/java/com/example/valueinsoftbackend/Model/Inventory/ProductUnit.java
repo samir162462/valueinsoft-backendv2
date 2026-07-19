@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.sql.Timestamp;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
@@ -21,6 +22,7 @@ public class ProductUnit {
     private ProductUnitStatus status;
     private String conditionCode;
     private String conditionNotes;
+    private BigDecimal acquisitionCost;
     private Long supplierId;
     private String sourcePartyType;
     private Long sourceClientId;

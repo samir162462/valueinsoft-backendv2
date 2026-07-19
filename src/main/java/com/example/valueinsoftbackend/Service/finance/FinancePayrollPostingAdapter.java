@@ -1,8 +1,10 @@
 package com.example.valueinsoftbackend.Service.finance;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceJournal;
+import com.example.valueinsoftbackend.DatabaseRequests.DbFinanceSetup;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPayroll;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.Finance.FinanceAccountItem;
 import com.example.valueinsoftbackend.Model.Finance.FinancePostingRequestItem;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollPayment;
 import com.example.valueinsoftbackend.Model.Payroll.PayrollRun;
@@ -25,13 +27,16 @@ public class FinancePayrollPostingAdapter implements FinancePostingAdapter {
     private static final BigDecimal ONE = BigDecimal.ONE.setScale(8);
 
     private final DbPayroll dbPayroll;
+    private final DbFinanceSetup dbFinanceSetup;
     private final DbFinanceJournal dbFinanceJournal;
     private final ObjectMapper objectMapper;
 
     public FinancePayrollPostingAdapter(DbPayroll dbPayroll,
+                                       DbFinanceSetup dbFinanceSetup,
                                        DbFinanceJournal dbFinanceJournal,
                                        ObjectMapper objectMapper) {
         this.dbPayroll = dbPayroll;
+        this.dbFinanceSetup = dbFinanceSetup;
         this.dbFinanceJournal = dbFinanceJournal;
         this.objectMapper = objectMapper;
     }
@@ -69,11 +74,26 @@ public class FinancePayrollPostingAdapter implements FinancePostingAdapter {
             PayrollSalaryProfile profile = dbPayroll.getSalaryProfile(request.getCompanyId(), line.getSalaryProfileId());
             java.util.UUID expense = (profile != null && profile.getSalaryExpenseAccountId() != null) ? profile.getSalaryExpenseAccountId() : settings.getSalaryExpenseAccountId();
             java.util.UUID payable = (profile != null && profile.getSalaryPayableAccountId() != null) ? profile.getSalaryPayableAccountId() : settings.getSalaryPayableAccountId();
-            requireAccount(expense, "PAYROLL_SALARY_EXPENSE_ACCOUNT_REQUIRED");
-            requireAccount(payable, "PAYROLL_SALARY_PAYABLE_ACCOUNT_REQUIRED");
-            String description = "Payroll accrual " + run.getRunLabel() + " employee " + line.getEmployeeId();
-            lines.add(line(expense, request.getBranchId(), line.getNetSalary(), ZERO, description));
+            requirePostingAccount(request.getCompanyId(), expense, "expense", "debit",
+                    "PAYROLL_SALARY_EXPENSE_ACCOUNT_REQUIRED", "PAYROLL_SALARY_EXPENSE_ACCOUNT_TYPE_INVALID");
+            requirePostingAccount(request.getCompanyId(), payable, "liability", "credit",
+                    "PAYROLL_SALARY_PAYABLE_ACCOUNT_REQUIRED", "PAYROLL_SALARY_PAYABLE_ACCOUNT_TYPE_INVALID");
+            BigDecimal wageReduction = line.getWageReductionTotal() == null ? ZERO : line.getWageReductionTotal();
+            BigDecimal withholdings = line.getWithholdingTotal() == null ? ZERO : line.getWithholdingTotal();
+            BigDecimal earnedExpense = line.getGrossSalary().subtract(wageReduction);
+            if (earnedExpense.signum() < 0) {
+                throw new ApiException(HttpStatus.CONFLICT, "PAYROLL_ACCRUAL_TOTAL_INVALID",
+                        "Payroll wage reductions exceed gross earnings");
+            }
+            String identity = line.getUserId() == null ? "employee " + line.getEmployeeId() : "user " + line.getUserId();
+            String description = "Payroll accrual " + run.getRunLabel() + " " + identity;
+            lines.add(line(expense, request.getBranchId(), earnedExpense, ZERO, description));
             lines.add(line(payable, request.getBranchId(), ZERO, line.getNetSalary(), description));
+            if (withholdings.signum() > 0) {
+                requirePostingAccount(request.getCompanyId(), settings.getDeductionPayableAccountId(), "liability", "credit",
+                        "PAYROLL_DEDUCTION_PAYABLE_ACCOUNT_REQUIRED", "PAYROLL_DEDUCTION_PAYABLE_ACCOUNT_TYPE_INVALID");
+                lines.add(line(settings.getDeductionPayableAccountId(), request.getBranchId(), ZERO, withholdings, description));
+            }
         }
         java.util.UUID journalEntryId = createPostedPayrollJournal(request, "payroll.accrual", "PY-A-", "payroll_accrual",
                 "Payroll accrual " + run.getRunLabel(), run.getCurrencyCode(), lines);
@@ -94,8 +114,13 @@ public class FinancePayrollPostingAdapter implements FinancePostingAdapter {
             throw new ApiException(HttpStatus.NOT_FOUND, "PAYROLL_PAYMENT_NOT_FOUND", "Payroll payment was not found");
         }
         PayrollSettings settings = dbPayroll.getSettings(request.getCompanyId());
-        requireAccount(settings == null ? null : settings.getSalaryPayableAccountId(), "PAYROLL_SALARY_PAYABLE_ACCOUNT_REQUIRED");
-        requireAccount(settings == null ? null : settings.getCashBankAccountId(), "PAYROLL_CASH_BANK_ACCOUNT_REQUIRED");
+        if (settings == null) {
+            throw new ApiException(HttpStatus.FAILED_DEPENDENCY, "PAYROLL_SETTINGS_MISSING", "Payroll settings are not configured");
+        }
+        requirePostingAccount(request.getCompanyId(), settings.getSalaryPayableAccountId(), "liability", "credit",
+                "PAYROLL_SALARY_PAYABLE_ACCOUNT_REQUIRED", "PAYROLL_SALARY_PAYABLE_ACCOUNT_TYPE_INVALID");
+        requirePostingAccount(request.getCompanyId(), settings.getCashBankAccountId(), "asset", "debit",
+                "PAYROLL_CASH_BANK_ACCOUNT_REQUIRED", "PAYROLL_CASH_BANK_ACCOUNT_TYPE_INVALID");
 
         String description = "Payroll payment " + payment.getReferenceNumber();
         ArrayList<DbFinanceJournal.PostedSourceJournalLineCommand> lines = new ArrayList<>();
@@ -167,9 +192,22 @@ public class FinancePayrollPostingAdapter implements FinancePostingAdapter {
         }
     }
 
-    private void requireAccount(UUID accountId, String code) {
-        if (accountId == null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, code, "Payroll posting account is missing");
+    private void requirePostingAccount(int companyId,
+                                       UUID accountId,
+                                       String expectedType,
+                                       String expectedNormalBalance,
+                                       String missingCode,
+                                       String typeCode) {
+        if (accountId == null || !dbFinanceSetup.accountExists(companyId, accountId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, missingCode, "Payroll posting account is missing or invalid");
+        }
+        FinanceAccountItem account = dbFinanceSetup.getAccountById(companyId, accountId);
+        if (!expectedType.equalsIgnoreCase(account.getAccountType())
+                || !expectedNormalBalance.equalsIgnoreCase(account.getNormalBalance())
+                || !account.isPostable()
+                || !"active".equalsIgnoreCase(account.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, typeCode,
+                    "Payroll posting account has the wrong account class or is not available for posting");
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.DatabaseRequests.InventoryWorkspace;
 
+import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryWorkspace.InventoryPresetResponse;
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryPresetCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.InventoryWorkspace.InventoryPresetUpdateRequest;
@@ -9,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
@@ -74,11 +76,15 @@ public class DbInventoryPresetGateway implements InventoryPresetGateway {
                 .addValue("branchId", branchId);
         
         List<InventoryPresetResponse> results = jdbcTemplate.query(sql, params, PRESET_ROW_MAPPER);
+        results.forEach(preset -> preset.setCanManage(actorName.equals(preset.getCreatedBy())));
         return new ArrayList<>(results);
     }
 
     @Override
-    public InventoryPresetResponse createPreset(String actorName, Integer companyId, InventoryPresetCreateRequest request) {
+    public InventoryPresetResponse createPreset(String actorName,
+                                                Integer companyId,
+                                                Integer branchId,
+                                                InventoryPresetCreateRequest request) {
         String sql = """
                 INSERT INTO public.inventory_presets (
                     company_id, branch_id, preset_name, scope, mode, role_target, query_state, created_by
@@ -96,7 +102,7 @@ public class DbInventoryPresetGateway implements InventoryPresetGateway {
 
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("companyId", companyId)
-                .addValue("branchId", request.getBranchId())
+                .addValue("branchId", branchId)
                 .addValue("name", request.getName())
                 .addValue("scope", request.getScope())
                 .addValue("mode", request.getMode())
@@ -105,11 +111,14 @@ public class DbInventoryPresetGateway implements InventoryPresetGateway {
                 .addValue("createdBy", actorName);
 
         UUID presetId = jdbcTemplate.queryForObject(sql, params, UUID.class);
-        return findById(presetId);
+        return findById(presetId, companyId, actorName);
     }
 
     @Override
-    public InventoryPresetResponse updatePreset(String actorName, String presetId, InventoryPresetUpdateRequest request) {
+    public InventoryPresetResponse updatePreset(String actorName,
+                                                Integer companyId,
+                                                String presetId,
+                                                InventoryPresetUpdateRequest request) {
         String queryStateJson = "{}";
         try {
             queryStateJson = objectMapper.writeValueAsString(request.getQueryState());
@@ -123,26 +132,64 @@ public class DbInventoryPresetGateway implements InventoryPresetGateway {
                     query_state = :queryState::jsonb,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE preset_id = :presetId::uuid
+                  AND company_id = :companyId
+                  AND created_by = :actorName
                 """;
         
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("presetId", presetId)
+                .addValue("companyId", companyId)
+                .addValue("actorName", actorName)
                 .addValue("name", request.getName())
                 .addValue("queryState", queryStateJson);
         
-        jdbcTemplate.update(sql, params);
-        return findById(UUID.fromString(presetId));
+        int updated = jdbcTemplate.update(sql, params);
+        if (updated == 0) {
+            throw presetNotFound();
+        }
+        return findById(UUID.fromString(presetId), companyId, actorName);
     }
 
     @Override
-    public void deletePreset(String actorName, String presetId) {
-        String sql = "DELETE FROM public.inventory_presets WHERE preset_id = :presetId::uuid";
-        jdbcTemplate.update(sql, new MapSqlParameterSource("presetId", presetId));
+    public void deletePreset(String actorName, Integer companyId, String presetId) {
+        String sql = """
+                DELETE FROM public.inventory_presets
+                WHERE preset_id = :presetId::uuid
+                  AND company_id = :companyId
+                  AND created_by = :actorName
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("presetId", presetId)
+                .addValue("companyId", companyId)
+                .addValue("actorName", actorName);
+        if (jdbcTemplate.update(sql, params) == 0) {
+            throw presetNotFound();
+        }
     }
 
-    private InventoryPresetResponse findById(UUID presetId) {
-        String sql = "SELECT * FROM public.inventory_presets WHERE preset_id = :presetId";
-        List<InventoryPresetResponse> results = jdbcTemplate.query(sql, new MapSqlParameterSource("presetId", presetId), PRESET_ROW_MAPPER);
-        return results.isEmpty() ? null : results.get(0);
+    private InventoryPresetResponse findById(UUID presetId, Integer companyId, String actorName) {
+        String sql = """
+                SELECT * FROM public.inventory_presets
+                WHERE preset_id = :presetId
+                  AND company_id = :companyId
+                """;
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("presetId", presetId)
+                .addValue("companyId", companyId);
+        List<InventoryPresetResponse> results = jdbcTemplate.query(sql, params, PRESET_ROW_MAPPER);
+        if (results.isEmpty()) {
+            throw presetNotFound();
+        }
+        InventoryPresetResponse preset = results.get(0);
+        preset.setCanManage(actorName.equals(preset.getCreatedBy()));
+        return preset;
+    }
+
+    private ApiException presetNotFound() {
+        return new ApiException(
+                HttpStatus.NOT_FOUND,
+                "INVENTORY_PRESET_NOT_FOUND",
+                "Inventory preset was not found"
+        );
     }
 }

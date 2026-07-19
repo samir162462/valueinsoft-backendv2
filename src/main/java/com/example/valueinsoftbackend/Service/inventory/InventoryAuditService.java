@@ -4,6 +4,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.InventoryAudit.DbInventor
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditAiAnalysisResponse;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditAiInsight;
+import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditGroupSummary;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditPageResponse;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditRow;
 import com.example.valueinsoftbackend.Model.InventoryAudit.InventoryAuditSummary;
@@ -47,6 +48,9 @@ import java.util.stream.Collectors;
 @Service
 public class InventoryAuditService {
 
+    private static final String ITEM_READ_CAPABILITY = "inventory.item.read";
+    private static final String COST_READ_CAPABILITY = "inventory.pricing.cost.read";
+
     private final DbInventoryAuditReadModels dbInventoryAuditReadModels;
     private final AuthorizationService authorizationService;
     private final AiModelClient aiModelClient;
@@ -75,13 +79,19 @@ public class InventoryAuditService {
     }
 
     public InventoryAuditPageResponse search(String authenticatedName, InventoryAuditSearchRequest request) {
-        authorize(authenticatedName, request);
+        boolean costVisible = authorize(authenticatedName, request);
         validateDates(request);
-        return dbInventoryAuditReadModels.search(request);
+        InventoryAuditPageResponse response = dbInventoryAuditReadModels.search(request);
+        response.setCostVisible(costVisible);
+        if (!costVisible) {
+            redactCost(response);
+        }
+        return response;
     }
 
     public void writeExcel(String authenticatedName, InventoryAuditSearchRequest request, OutputStream outputStream) throws IOException {
         authorize(authenticatedName, request);
+        authorizeCostDisclosure(authenticatedName, request);
         validateDates(request);
 
         InventoryAuditSummary summary = dbInventoryAuditReadModels.fetchSummary(request);
@@ -129,6 +139,7 @@ public class InventoryAuditService {
 
     public void writePdf(String authenticatedName, InventoryAuditSearchRequest request, OutputStream outputStream) throws IOException {
         authorize(authenticatedName, request);
+        authorizeCostDisclosure(authenticatedName, request);
         validateDates(request);
 
         InventoryAuditPageResponse fullResult = dbInventoryAuditReadModels.search(toPdfRequest(request));
@@ -150,6 +161,7 @@ public class InventoryAuditService {
 
     public InventoryAuditAiAnalysisResponse analyzeWithAi(String authenticatedName, InventoryAuditSearchRequest request) {
         authorize(authenticatedName, request);
+        authorizeCostDisclosure(authenticatedName, request);
         validateDates(request);
 
         InventoryAuditSummary summary = dbInventoryAuditReadModels.fetchSummary(request);
@@ -557,13 +569,52 @@ public class InventoryAuditService {
         return value == null ? 0L : value;
     }
 
-    private void authorize(String authenticatedName, InventoryAuditSearchRequest request) {
+    private boolean authorize(String authenticatedName, InventoryAuditSearchRequest request) {
         authorizationService.assertAuthenticatedCapability(
                 authenticatedName,
                 request.getCompanyId(),
                 request.getBranchId(),
-                "inventory.item.read"
+                ITEM_READ_CAPABILITY
         );
+        return authorizationService.hasAuthenticatedCapability(
+                authenticatedName,
+                request.getCompanyId(),
+                request.getBranchId(),
+                COST_READ_CAPABILITY
+        );
+    }
+
+    private void authorizeCostDisclosure(String authenticatedName, InventoryAuditSearchRequest request) {
+        authorizationService.assertAuthenticatedCapability(
+                authenticatedName,
+                request.getCompanyId(),
+                request.getBranchId(),
+                COST_READ_CAPABILITY
+        );
+    }
+
+    private void redactCost(InventoryAuditPageResponse response) {
+        if (response == null) {
+            return;
+        }
+        if (response.getRows() != null) {
+            response.getRows().forEach(row -> {
+                if (row != null) {
+                    row.setUnitPrice(null);
+                    row.setTotalValue(null);
+                }
+            });
+        }
+        if (response.getSummary() != null) {
+            response.getSummary().setTotalStockValue(0L);
+        }
+        if (response.getGrouping() != null) {
+            for (InventoryAuditGroupSummary group : response.getGrouping()) {
+                if (group != null) {
+                    group.setTotalValue(0L);
+                }
+            }
+        }
     }
 
     private void validateDates(InventoryAuditSearchRequest request) {

@@ -1,6 +1,5 @@
 package com.example.valueinsoftbackend.Controller;
 
-import com.example.valueinsoftbackend.DatabaseRequests.DbHR;
 import com.example.valueinsoftbackend.Model.HR.Employee;
 import com.example.valueinsoftbackend.Model.HR.EmployeeShift;
 import com.example.valueinsoftbackend.Model.HR.Shift;
@@ -16,36 +15,31 @@ import java.util.List;
 @RequestMapping("/api/hr")
 public class HRController {
 
-    private final DbHR dbHR;
     private final HRService hrService;
     private final AuthorizationService authorizationService;
 
-    public HRController(DbHR dbHR, HRService hrService, AuthorizationService authorizationService) {
-        this.dbHR = dbHR;
+    public HRController(HRService hrService, AuthorizationService authorizationService) {
         this.hrService = hrService;
         this.authorizationService = authorizationService;
     }
 
     @GetMapping("/{companyId}/{branchId}/employees")
-    public List<Employee> getEmployees(@PathVariable int companyId, @PathVariable int branchId, Principal principal) {
-        authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.employee.read");
-        return dbHR.getAllEmployees(companyId, branchId);
-    }
-
-    @PostMapping("/{companyId}/{branchId}/employees")
-    public Employee createEmployee(@PathVariable int companyId, @PathVariable int branchId, @RequestBody Employee employee, @RequestParam String pin, Principal principal) {
-        authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.employee.create");
-        employee.setCompanyId(companyId);
-        employee.setBranchId(branchId);
-        employee.setCreatedBy(principal.getName());
-        employee.setUpdatedBy(principal.getName());
-        return hrService.createEmployee(employee, pin);
+    public List<Employee> getEmployees(@PathVariable int companyId,
+                                       @PathVariable int branchId,
+                                       @RequestParam(defaultValue = "branch") String scope,
+                                       Principal principal) {
+        boolean companyScope = "company".equalsIgnoreCase(scope);
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(), companyId, companyScope ? null : branchId,
+                companyScope ? "hr.employee.read.company" : "hr.employee.read"
+        );
+        return hrService.getEmployees(companyId, branchId, companyScope, principal.getName());
     }
 
     @PostMapping("/{companyId}/{branchId}/sync-users")
     public ResponseEntity<Integer> syncUsers(@PathVariable int companyId, @PathVariable int branchId, Principal principal) {
         authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.employee.create");
-        int count = hrService.syncFromUsers(companyId, branchId, principal.getName());
+        int count = hrService.ensureBranchWorkspace(companyId, branchId, principal.getName());
         return ResponseEntity.ok(count);
     }
 
@@ -57,34 +51,36 @@ public class HRController {
     @GetMapping("/{companyId}/{branchId}/shifts")
     public List<Shift> getShifts(@PathVariable int companyId, @PathVariable int branchId, Principal principal) {
         authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.shift.read");
-        return dbHR.getAllShifts(companyId, branchId);
+        return hrService.getShifts(companyId, branchId, principal.getName());
     }
 
     @PostMapping("/{companyId}/{branchId}/shifts")
     public ResponseEntity<Integer> createShift(@PathVariable int companyId, @PathVariable int branchId, @RequestBody Shift shift, Principal principal) {
         authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.shift.create");
-        shift.setCompanyId(companyId);
-        shift.setBranchId(branchId);
-        shift.setCreatedBy(principal.getName());
-        shift.setUpdatedBy(principal.getName());
-        int id = dbHR.addShift(shift);
+        int id = hrService.createShift(companyId, branchId, shift, principal.getName());
         return ResponseEntity.ok(id);
+    }
+
+    @PutMapping("/{companyId}/{branchId}/shifts/{shiftId}")
+    public ResponseEntity<Shift> updateShift(@PathVariable int companyId,
+                                              @PathVariable int branchId,
+                                              @PathVariable int shiftId,
+                                              @RequestBody Shift shift,
+                                              Principal principal) {
+        authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.shift.edit");
+        return ResponseEntity.ok(hrService.updateShift(companyId, branchId, shiftId, shift, principal.getName()));
     }
 
     @PostMapping("/{companyId}/{branchId}/assign")
     public ResponseEntity<Void> assignShift(@PathVariable int companyId, @PathVariable int branchId, @RequestBody EmployeeShift assignment, Principal principal) {
         authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.shift.assign");
-        assignment.setCompanyId(companyId);
-        assignment.setBranchId(branchId);
-        assignment.setCreatedBy(principal.getName());
-        assignment.setUpdatedBy(principal.getName());
-        dbHR.assignShift(assignment);
+        hrService.assignShiftByUser(companyId, branchId, assignment, principal.getName());
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{companyId}/{branchId}/assignments")
     public List<EmployeeShift> getAssignments(@PathVariable int companyId, @PathVariable int branchId, Principal principal) {
         authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "hr.shift.read");
-        return dbHR.getAllAssignments(companyId, branchId);
+        return hrService.getAssignments(companyId, branchId, principal.getName());
     }
 }

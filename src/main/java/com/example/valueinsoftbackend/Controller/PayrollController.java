@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.DatabaseRequests.DbPayroll;
+import com.example.valueinsoftbackend.DatabaseRequests.DbHR;
 import com.example.valueinsoftbackend.Model.Payroll.*;
 import com.example.valueinsoftbackend.Service.*;
 import com.example.valueinsoftbackend.Service.payroll.*;
@@ -25,6 +26,7 @@ public class PayrollController {
 
     private final AuthorizationService authorizationService;
     private final DbPayroll dbPayroll;
+    private final DbHR dbHR;
     private final PayrollSettingsService settingsService;
     private final PayrollSalaryProfileService salaryProfileService;
     private final CurrentSalaryService currentSalaryService;
@@ -32,18 +34,22 @@ public class PayrollController {
     private final PayrollRunService runService;
     private final PayrollPostingService postingService;
     private final PayrollPaymentService paymentService;
+    private final PayrollAutomationService automationService;
 
     public PayrollController(AuthorizationService authorizationService,
                              DbPayroll dbPayroll,
+                             DbHR dbHR,
                              PayrollSettingsService settingsService,
                              PayrollSalaryProfileService salaryProfileService,
                              CurrentSalaryService currentSalaryService,
                              PayrollAdjustmentService adjustmentService,
                              PayrollRunService runService,
                              PayrollPostingService postingService,
-                             PayrollPaymentService paymentService) {
+                             PayrollPaymentService paymentService,
+                             PayrollAutomationService automationService) {
         this.authorizationService = authorizationService;
         this.dbPayroll = dbPayroll;
+        this.dbHR = dbHR;
         this.settingsService = settingsService;
         this.salaryProfileService = salaryProfileService;
         this.currentSalaryService = currentSalaryService;
@@ -51,6 +57,7 @@ public class PayrollController {
         this.runService = runService;
         this.postingService = postingService;
         this.paymentService = paymentService;
+        this.automationService = automationService;
     }
 
     @GetMapping("/{companyId}/settings")
@@ -72,7 +79,7 @@ public class PayrollController {
                                                    @RequestParam(required = false) Integer branchId,
                                                    @RequestParam(required = false, defaultValue = "ALL") String filter) {
         authorize(principal, companyId, branchId, "payroll.profile.read");
-        return currentSalaryService.listAll(companyId, branchId, filter);
+        return currentSalaryService.listAll(companyId, branchId, filter, principal.getName());
     }
 
     @GetMapping("/{companyId}/salary-profiles")
@@ -87,8 +94,10 @@ public class PayrollController {
 
     @PostMapping("/{companyId}/salary-profiles")
     public PayrollSalaryProfile createSalaryProfile(Principal principal, @PathVariable int companyId, @RequestBody PayrollSalaryProfile profile) {
-        authorize(principal, companyId, profile.getBranchId(), "payroll.profile.create");
+        int branchId = authoritativeBranch(companyId, profile.getUserId(), profile.getBranchId());
+        authorize(principal, companyId, branchId, "payroll.profile.create");
         profile.setCompanyId(companyId);
+        profile.setBranchId(branchId);
         return salaryProfileService.create(principal.getName(), profile);
     }
 
@@ -97,8 +106,10 @@ public class PayrollController {
                                                     @PathVariable int companyId,
                                                     @PathVariable long id,
                                                     @RequestBody PayrollSalaryProfile profile) {
-        authorize(principal, companyId, profile.getBranchId(), "payroll.profile.edit");
+        PayrollSalaryProfile existing = salaryProfileService.get(companyId, id);
+        authorize(principal, companyId, existing.getBranchId(), "payroll.profile.edit");
         profile.setCompanyId(companyId);
+        profile.setBranchId(existing.getBranchId());
         return salaryProfileService.update(principal.getName(), id, profile);
     }
 
@@ -156,8 +167,10 @@ public class PayrollController {
 
     @PostMapping("/{companyId}/adjustments")
     public PayrollAdjustment createAdjustment(Principal principal, @PathVariable int companyId, @RequestBody PayrollAdjustment adjustment) {
-        authorize(principal, companyId, adjustment.getBranchId(), "payroll.adjustment.create");
+        int branchId = authoritativeBranch(companyId, adjustment.getUserId(), adjustment.getBranchId());
+        authorize(principal, companyId, branchId, "payroll.adjustment.create");
         adjustment.setCompanyId(companyId);
+        adjustment.setBranchId(branchId);
         return adjustmentService.create(principal.getName(), adjustment);
     }
 
@@ -186,6 +199,14 @@ public class PayrollController {
         return runService.generate(principal.getName(), run);
     }
 
+    @PostMapping("/{companyId}/runs/ensure-current")
+    public List<PayrollRun> ensureCurrentRuns(Principal principal,
+                                              @PathVariable int companyId,
+                                              @RequestParam(required = false) Integer branchId) {
+        authorize(principal, companyId, branchId, "payroll.run.create");
+        return automationService.ensureCurrentRuns(principal.getName(), companyId, branchId);
+    }
+
     @GetMapping("/{companyId}/runs")
     public List<PayrollRun> runs(Principal principal,
                                  @PathVariable int companyId,
@@ -207,6 +228,15 @@ public class PayrollController {
         return runService.listLines(companyId, id);
     }
 
+    @GetMapping("/{companyId}/runs/{id}/attendance-snapshots")
+    public List<PayrollAttendanceSnapshot> attendanceSnapshots(Principal principal,
+                                                               @PathVariable int companyId,
+                                                               @PathVariable long id) {
+        authorize(principal, companyId, null, "payroll.run.read");
+        runService.get(companyId, id);
+        return dbPayroll.listAttendanceSnapshots(companyId, id);
+    }
+
     @PostMapping("/{companyId}/runs/{id}/recalculate")
     public PayrollRun recalculateRun(Principal principal, @PathVariable int companyId, @PathVariable long id) {
         authorize(principal, companyId, null, "payroll.run.recalculate");
@@ -223,7 +253,7 @@ public class PayrollController {
     public PayrollRun postRunToFinance(Principal principal,
                                        @PathVariable int companyId,
                                        @PathVariable long id,
-                                       @RequestParam UUID fiscalPeriodId) {
+                                       @RequestParam(required = false) UUID fiscalPeriodId) {
         authorize(principal, companyId, null, "payroll.run.post");
         return runService.postToFinance(principal.getName(), companyId, id, fiscalPeriodId, postingService);
     }
@@ -244,7 +274,7 @@ public class PayrollController {
     public PayrollPayment payAll(Principal principal,
                                  @PathVariable int companyId,
                                  @PathVariable long id,
-                                 @RequestParam UUID fiscalPeriodId,
+                                 @RequestParam(required = false) UUID fiscalPeriodId,
                                  @RequestBody PayrollPayment payment) {
         authorize(principal, companyId, null, "payroll.payment.create");
         return paymentService.payAll(principal.getName(), companyId, id, payment, fiscalPeriodId);
@@ -254,7 +284,7 @@ public class PayrollController {
     public PayrollPayment payEmployee(Principal principal,
                                       @PathVariable int companyId,
                                       @PathVariable long id,
-                                      @RequestParam UUID fiscalPeriodId,
+                                      @RequestParam(required = false) UUID fiscalPeriodId,
                                       @RequestBody Map<String, Object> payload) {
         authorize(principal, companyId, null, "payroll.payment.create");
         return paymentService.payEmployee(
@@ -325,6 +355,26 @@ public class PayrollController {
 
     private void authorize(Principal principal, int companyId, Integer branchId, String capability) {
         authorizationService.assertAuthenticatedCapability(principal.getName(), companyId, branchId, capability);
+    }
+
+    private int authoritativeBranch(int companyId, Integer userId, Integer legacyBranchId) {
+        if (userId != null) {
+            var employee = dbHR.getEmployeeByUser(companyId, userId);
+            if (employee == null || !employee.isActive()) {
+                throw new com.example.valueinsoftbackend.ExceptionPack.ApiException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST,
+                        "PAYROLL_COMPANY_USER_REQUIRED",
+                        "Payroll can only use an active user assigned to this company");
+            }
+            return employee.getBranchId();
+        }
+        if (legacyBranchId == null || legacyBranchId <= 0) {
+            throw new com.example.valueinsoftbackend.ExceptionPack.ApiException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "PAYROLL_COMPANY_USER_REQUIRED",
+                    "An active company user is required");
+        }
+        return legacyBranchId;
     }
 
     private long longValue(Object value) {

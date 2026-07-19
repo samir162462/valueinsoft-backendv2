@@ -16,6 +16,7 @@ public class PayrollAdjustment {
     private int companyId;
     private Integer branchId;
     private int employeeId;
+    private Integer userId;
     private Long payrollRunId;         // set when status = APPLIED
     private String adjustmentType;     // ALLOWANCE | DEDUCTION
     private String adjustmentCode;

@@ -13,7 +13,7 @@ import java.util.ArrayList;
  */
 public interface InventoryPresetGateway {
     ArrayList<InventoryPresetResponse> getPresets(String actorName, Integer companyId, Integer branchId);
-    InventoryPresetResponse createPreset(String actorName, Integer companyId, InventoryPresetCreateRequest request);
-    InventoryPresetResponse updatePreset(String actorName, String presetId, InventoryPresetUpdateRequest request);
-    void deletePreset(String actorName, String presetId);
+    InventoryPresetResponse createPreset(String actorName, Integer companyId, Integer branchId, InventoryPresetCreateRequest request);
+    InventoryPresetResponse updatePreset(String actorName, Integer companyId, String presetId, InventoryPresetUpdateRequest request);
+    void deletePreset(String actorName, Integer companyId, String presetId);
 }

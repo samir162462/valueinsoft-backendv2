@@ -77,10 +77,7 @@ public class DbPosProductCommandRepository {
         return productId;
     }
 
-    public void updateProduct(Product product, String branchId, int companyId) {
-        int numericBranchId = Integer.parseInt(branchId);
-        int previousQuantity = getCurrentQuantity(companyId, numericBranchId, product.getProductId());
-        boolean serializedTracking = isSerializedTracking(product);
+    public void updateProductMetadata(Product product, String branchId, int companyId) {
         ProductMetadata metadata = resolveMetadata(product);
 
         String sql = """
@@ -127,22 +124,7 @@ public class DbPosProductCommandRepository {
             throw new IllegalStateException("Updating product failed");
         }
 
-        int stockQuantity = serializedTracking ? previousQuantity : product.getQuantity();
-        upsertBranchQuantity(companyId, numericBranchId, product.getProductId(), stockQuantity);
         saveAttributeValues(companyId, product.getProductId(), metadata.templateKey(), parseAttributes(product.getAttributes()));
-
-        int delta = stockQuantity - previousQuantity;
-        if (!serializedTracking && delta != 0) {
-            insertLedgerEntry(
-                    companyId,
-                    numericBranchId,
-                    product.getProductId(),
-                    delta,
-                    delta > 0 ? "MANUAL_STOCK_IN" : "MANUAL_STOCK_OUT",
-                    "PRODUCT_EDIT",
-                    String.valueOf(product.getProductId())
-            );
-        }
     }
 
     private boolean isSerializedTracking(Product product) {
@@ -249,25 +231,6 @@ public class DbPosProductCommandRepository {
         );
     }
 
-    private int getCurrentQuantity(int companyId, int branchId, int productId) {
-        String sql = """
-                SELECT quantity
-                FROM %s
-                WHERE branch_id = :branchId
-                  AND product_id = :productId
-                """.formatted(TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId));
-
-        Integer quantity = jdbcTemplate.query(
-                sql,
-                new MapSqlParameterSource()
-                        .addValue("branchId", branchId)
-                        .addValue("productId", productId),
-                rs -> rs.next() ? rs.getInt("quantity") : 0
-        );
-
-        return quantity == null ? 0 : quantity;
-    }
-
     private MapSqlParameterSource createProductParams(Product product, int companyId, ProductMetadata metadata) {
         return new MapSqlParameterSource()
                 .addValue("companyId", companyId)
@@ -364,7 +327,13 @@ public class DbPosProductCommandRepository {
 
     private String normalizeBaseUomCode(String baseUomCode, String businessLineKey) {
         if (baseUomCode != null && !baseUomCode.isBlank()) {
-            return baseUomCode.trim().toUpperCase();
+            String normalized = baseUomCode.trim().toUpperCase();
+            // IMEI / SERIAL are tracking types, not units of measure. Storing them
+            // in base_uom_code corrupts CSV exports and import validation.
+            if ("IMEI".equals(normalized) || "SERIAL".equals(normalized)) {
+                return "PCS";
+            }
+            return normalized;
         }
 
         return switch (businessLineKey) {

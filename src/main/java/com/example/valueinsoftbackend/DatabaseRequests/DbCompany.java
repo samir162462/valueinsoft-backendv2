@@ -234,6 +234,12 @@ public class DbCompany {
         statements.add("SELECT public.ensure_supplier_receivables_for_tenant('" + schemaName + "', " + companyId + ")");
         // Opening-balance import audit (V147).
         statements.add("SELECT public.ensure_openitems_opening_import_audit_for_tenant('" + schemaName + "', " + companyId + ")");
+        // Critical workspace/receipt objects and schema-version verification are owned by Flyway V149.
+        // Keep this call last so newly-created tenants cannot be reported as current before all prior
+        // compatibility provisioning has completed.
+        statements.add("SELECT public.ensure_inventory_workspace_receipt_foundation_for_tenant('" + schemaName + "', " + companyId + ")");
+        // Damage lifecycle columns and indexes are Flyway-owned by V150.
+        statements.add("SELECT public.ensure_inventory_damage_foundation_for_tenant('" + schemaName + "', " + companyId + ")");
         return statements;
     }
 
@@ -852,6 +858,7 @@ public class DbCompany {
         statements.add("CREATE INDEX IF NOT EXISTS idx_inventory_stock_ledger_branch_product_time ON " + schemaName + ".inventory_stock_ledger (branch_id, product_id, created_at DESC)");
         statements.add("SELECT public.create_serialized_inventory_tables_for_tenant('" + schemaName + "', " + companyId + ")");
         statements.add("SELECT public.ensure_serialized_inventory_product_unit_table_for_tenant('" + schemaName + "', " + companyId + ")");
+        statements.add("SELECT public.ensure_serialized_inventory_unit_costing_for_tenant('" + schemaName + "')");
         statements.add("SELECT public.ensure_serialized_inventory_imei_constraints_for_tenant('" + schemaName + "')");
 
         statements.add("CREATE TABLE IF NOT EXISTS " + schemaName + ".inventory_legacy_product_mapping (" +

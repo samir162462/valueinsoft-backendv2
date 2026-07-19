@@ -11,6 +11,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.math.BigDecimal;
+import jakarta.validation.constraints.PositiveOrZero;
 
 @Data
 @NoArgsConstructor
@@ -37,6 +39,9 @@ public class SerializedUnitStockInRequest {
     private String purchaseReferenceId;
 
     private Long purchaseLineId;
+
+    @PositiveOrZero
+    private BigDecimal unitCost;
 
     @Size(max = 100)
     private String actorName;

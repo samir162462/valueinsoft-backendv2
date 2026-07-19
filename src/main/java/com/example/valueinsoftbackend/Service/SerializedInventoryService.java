@@ -677,6 +677,7 @@ public class SerializedInventoryService {
         productUnit.setSerialNumber(serialNumber);
         productUnit.setStatus(ProductUnitStatus.AVAILABLE);
         productUnit.setConditionCode(conditionCode == null ? "NEW" : conditionCode);
+        productUnit.setAcquisitionCost(request.getUnitCost());
         productUnit.setSupplierId(request.getSupplierId());
         productUnit.setPurchaseReferenceType(blankToNull(request.getPurchaseReferenceType()));
         productUnit.setPurchaseReferenceId(blankToNull(request.getPurchaseReferenceId()));

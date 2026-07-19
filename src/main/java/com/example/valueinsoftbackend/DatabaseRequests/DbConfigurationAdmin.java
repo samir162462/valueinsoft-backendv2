@@ -241,9 +241,11 @@ public class DbConfigurationAdmin {
         }
     }
 
-    public void deactivateTenantRoleAssignment(long assignmentId) {
-        String sql = "UPDATE public.tenant_role_assignments SET status = 'inactive' WHERE assignment_id = ?";
-        jdbcTemplate.update(sql, assignmentId);
+    public int deactivateTenantRoleAssignment(int tenantId, long assignmentId) {
+        TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
+        String sql = "UPDATE public.tenant_role_assignments SET status = 'inactive' " +
+                "WHERE tenant_id = ? AND assignment_id = ?";
+        return jdbcTemplate.update(sql, tenantId, assignmentId);
     }
 
     public void upsertTenantUserGrantOverride(int tenantId,
@@ -285,21 +287,20 @@ public class DbConfigurationAdmin {
         }
     }
 
-    public void deleteTenantUserGrantOverride(int tenantId,
-                                              int userId,
-                                              String capabilityKey,
-                                              String scopeType,
-                                              Integer scopeBranchId) {
+    public int deleteTenantUserGrantOverride(int tenantId,
+                                             int userId,
+                                             String capabilityKey,
+                                             String scopeType,
+                                             Integer scopeBranchId) {
         TenantSqlIdentifiers.requirePositive(tenantId, "tenantId");
         TenantSqlIdentifiers.requirePositive(userId, "userId");
         if (scopeBranchId == null) {
             String sql = "DELETE FROM public.tenant_user_grant_overrides WHERE tenant_id = ? AND user_id = ? " +
                     "AND capability_key = ? AND scope_type = ? AND scope_branch_id IS NULL";
-            jdbcTemplate.update(sql, tenantId, userId, capabilityKey, scopeType);
-            return;
+            return jdbcTemplate.update(sql, tenantId, userId, capabilityKey, scopeType);
         }
         String sql = "DELETE FROM public.tenant_user_grant_overrides WHERE tenant_id = ? AND user_id = ? " +
                 "AND capability_key = ? AND scope_type = ? AND scope_branch_id = ?";
-        jdbcTemplate.update(sql, tenantId, userId, capabilityKey, scopeType, scopeBranchId);
+        return jdbcTemplate.update(sql, tenantId, userId, capabilityKey, scopeType, scopeBranchId);
     }
 }

@@ -15,6 +15,7 @@ public class EmployeeShift {
     private int companyId;
     private int branchId;
     private int employeeId;
+    private Integer userId;
     private int shiftId;
     private Date effectiveFrom;
     private Date effectiveTo;

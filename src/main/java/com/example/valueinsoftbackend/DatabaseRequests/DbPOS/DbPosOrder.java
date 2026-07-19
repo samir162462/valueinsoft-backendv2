@@ -189,10 +189,20 @@ public class DbPosOrder {
         TenantSqlIdentifiers.requirePositive(orderId, "orderId");
         TenantSqlIdentifiers.requirePositive(branchId, "branchId");
 
-        String sql = "SELECT od.\"productId\", od.quantity, COALESCE(prod.buying_price, 0) AS unit_cost, " +
-                "(COALESCE(prod.buying_price, 0) * od.quantity) AS total_cost " +
+        String sql = "SELECT od.\"productId\", od.quantity, " +
+                "CASE WHEN serialized.unit_count > 0 " +
+                "THEN serialized.total_cost / NULLIF(od.quantity, 0) " +
+                "ELSE COALESCE(prod.buying_price, 0) END AS unit_cost, " +
+                "CASE WHEN serialized.unit_count > 0 " +
+                "THEN serialized.total_cost " +
+                "ELSE (COALESCE(prod.buying_price, 0) * od.quantity) END AS total_cost " +
                 "FROM " + TenantSqlIdentifiers.orderDetailTable(companyId, branchId) + " od " +
                 "LEFT JOIN " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " prod ON prod.product_id = od.\"productId\" " +
+                "LEFT JOIN LATERAL (" +
+                " SELECT COUNT(*) AS unit_count, COALESCE(SUM(unit.acquisition_cost), 0) AS total_cost " +
+                " FROM " + TenantSqlIdentifiers.inventoryProductUnitTable(companyId) + " unit " +
+                " WHERE unit.branch_id = ? AND unit.sale_order_detail_id = od.\"orderDetailsId\"" +
+                ") serialized ON true " +
                 "WHERE od.\"orderId\" = ? " +
                 "AND od.\"productId\" > 0 " +
                 "AND COALESCE(od.\"bouncedBack\", 0) = 0 " +
@@ -203,7 +213,7 @@ public class DbPosOrder {
                 rs.getInt("quantity"),
                 rs.getBigDecimal("unit_cost"),
                 rs.getBigDecimal("total_cost")
-        ), orderId);
+        ), branchId, orderId);
     }
 
     public record OrderFinanceCostLine(int productId,
@@ -319,10 +329,13 @@ public class DbPosOrder {
 
         String detailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String sql = "SELECT od.\"orderDetailsId\", od.\"orderId\", od.quantity, od.total, od.\"productId\", " +
                 "COALESCE(od.\"bouncedBack\", 0) AS \"bouncedBack\", ord.\"salesUser\", ord.\"clientId\", COALESCE(ord.\"orderDiscount\", 0) AS \"orderDiscount\", " +
                 "COALESCE(ord.\"orderTotal\", 0) AS \"orderTotal\", ord.\"orderType\", " +
                 "COALESCE(prod.buying_price, 0) AS \"buyingPrice\", " +
+                "CASE WHEN serialized.unit_count > 0 THEN serialized.total_cost " +
+                "ELSE (COALESCE(prod.buying_price, 0) * od.quantity) END AS \"inventoryCost\", " +
                 "EXISTS (" +
                 " SELECT 1 FROM " + detailTable + " other " +
                 " WHERE other.\"orderId\" = od.\"orderId\" AND other.\"orderDetailsId\" <> od.\"orderDetailsId\" AND COALESCE(other.\"bouncedBack\", 0) = 0" +
@@ -330,6 +343,11 @@ public class DbPosOrder {
                 "FROM " + detailTable + " od " +
                 "JOIN " + orderTable + " ord ON ord.\"orderId\" = od.\"orderId\" " +
                 "LEFT JOIN " + TenantSqlIdentifiers.inventoryProductTable(companyId) + " prod ON prod.product_id = od.\"productId\" " +
+                "LEFT JOIN LATERAL (" +
+                " SELECT COUNT(*) AS unit_count, COALESCE(SUM(unit.acquisition_cost), 0) AS total_cost " +
+                " FROM " + unitTable + " unit " +
+                " WHERE unit.branch_id = ? AND unit.sale_order_detail_id = od.\"orderDetailsId\"" +
+                ") serialized ON true " +
                 "WHERE od.\"orderDetailsId\" = ?";
 
         List<OrderBounceBackContext> contexts = jdbcTemplate.query(sql, (rs, rowNum) -> new OrderBounceBackContext(
@@ -345,8 +363,9 @@ public class DbPosOrder {
                 rs.getInt("orderTotal"),
                 rs.getString("orderType"),
                 rs.getInt("buyingPrice"),
+                rs.getBigDecimal("inventoryCost"),
                 rs.getBoolean("hasOtherActiveItems")
-        ), odId);
+        ), branchId, odId);
 
         return contexts.isEmpty() ? null : contexts.get(0);
     }
@@ -867,18 +886,28 @@ public class DbPosOrder {
         private final int orderTotal;
         private final String orderType;
         private final int buyingPrice;
+        private final BigDecimal inventoryCost;
         private final boolean hasOtherActiveItems;
 
         public OrderBounceBackContext(int orderDetailId, int orderId, int quantity, int total, int productId,
                                       int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int orderTotal, int buyingPrice,
                                       boolean hasOtherActiveItems) {
             this(orderDetailId, orderId, quantity, total, productId, bouncedBack, salesUser, clientId,
-                    orderDiscount, orderTotal, null, buyingPrice, hasOtherActiveItems);
+                    orderDiscount, orderTotal, null, buyingPrice,
+                    BigDecimal.valueOf((long) buyingPrice * quantity), hasOtherActiveItems);
         }
 
         public OrderBounceBackContext(int orderDetailId, int orderId, int quantity, int total, int productId,
                                       int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int orderTotal,
                                       String orderType, int buyingPrice, boolean hasOtherActiveItems) {
+            this(orderDetailId, orderId, quantity, total, productId, bouncedBack, salesUser, clientId,
+                    orderDiscount, orderTotal, orderType, buyingPrice,
+                    BigDecimal.valueOf((long) buyingPrice * quantity), hasOtherActiveItems);
+        }
+
+        public OrderBounceBackContext(int orderDetailId, int orderId, int quantity, int total, int productId,
+                                      int bouncedBack, String salesUser, Integer clientId, int orderDiscount, int orderTotal,
+                                      String orderType, int buyingPrice, BigDecimal inventoryCost, boolean hasOtherActiveItems) {
             this.orderDetailId = orderDetailId;
             this.orderId = orderId;
             this.quantity = quantity;
@@ -891,6 +920,9 @@ public class DbPosOrder {
             this.orderTotal = orderTotal;
             this.orderType = orderType;
             this.buyingPrice = buyingPrice;
+            this.inventoryCost = inventoryCost == null
+                    ? BigDecimal.valueOf((long) buyingPrice * quantity)
+                    : inventoryCost;
             this.hasOtherActiveItems = hasOtherActiveItems;
         }
 
@@ -940,6 +972,10 @@ public class DbPosOrder {
 
         public int getBuyingPrice() {
             return buyingPrice;
+        }
+
+        public BigDecimal getInventoryCost() {
+            return inventoryCost;
         }
 
         public boolean hasOtherActiveItems() {

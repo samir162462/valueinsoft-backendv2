@@ -198,6 +198,7 @@ class InventoryProductReceiptServiceTradeInTest {
         assertEquals("CLIENT", saved.getSourcePartyType());
         assertEquals(Long.valueOf(88), saved.getSourceClientId());
         assertEquals(null, saved.getSupplierId());
+        assertEquals(new BigDecimal("100.0000"), saved.getAcquisitionCost());
     }
 
     @Test

@@ -19,8 +19,19 @@ public class DamagedItem {
     boolean paid;
     int branchId;
     int quantity;
+    String status;
+    Timestamp reversedAt;
+    String reversedBy;
+    String reversalReason;
 
     public DamagedItem(int DId, int productId, String productName, Timestamp time, String reason, String damagedBy, String cashierUser, int amountTP, boolean paid, int branchId, int quantity) {
+        this(DId, productId, productName, time, reason, damagedBy, cashierUser, amountTP, paid,
+                branchId, quantity, "POSTED", null, null, null);
+    }
+
+    public DamagedItem(int DId, int productId, String productName, Timestamp time, String reason,
+                       String damagedBy, String cashierUser, int amountTP, boolean paid, int branchId,
+                       int quantity, String status, Timestamp reversedAt, String reversedBy, String reversalReason) {
         this.DId = DId;
         this.productId = productId;
         this.productName = productName;
@@ -32,6 +43,10 @@ public class DamagedItem {
         this.paid = paid;
         this.branchId = branchId;
         this.quantity = quantity;
+        this.status = status;
+        this.reversedAt = reversedAt;
+        this.reversedBy = reversedBy;
+        this.reversalReason = reversalReason;
     }
 
     public int getQuantity() {
@@ -121,5 +136,21 @@ public class DamagedItem {
 
     public void setBranchId(int branchId) {
         this.branchId = branchId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public Timestamp getReversedAt() {
+        return reversedAt;
+    }
+
+    public String getReversedBy() {
+        return reversedBy;
+    }
+
+    public String getReversalReason() {
+        return reversalReason;
     }
 }

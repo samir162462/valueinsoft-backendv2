@@ -207,9 +207,13 @@ public class DashboardInventoryProvider {
 
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
 
-        // 1. Inventory Value (buying_price * quantity)
-        String valueSql = "SELECT SUM(COALESCE(st.quantity, 0) * COALESCE(p.buying_price, 0))::double precision " +
+        // 1. Inventory value: specific cost for serialized units, product cost for quantity stock.
+        String valueSql = "SELECT SUM(COALESCE((" +
+                " SELECT SUM(unit.acquisition_cost) FROM " + unitTable + " unit " +
+                " WHERE unit.product_id = p.product_id AND unit.branch_id = st.branch_id AND unit.status = 'AVAILABLE'" +
+                "), COALESCE(st.quantity, 0) * COALESCE(p.buying_price, 0)))::double precision " +
                 "FROM " + productTable + " p " +
                 "JOIN " + stockTable + " st ON st.product_id = p.product_id AND st.branch_id = ?";
         
@@ -335,16 +339,20 @@ public class DashboardInventoryProvider {
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String orderDetailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
 
-        // COGS for last 30 days = sum(sold_qty * buying_price)
-        String cogsSql = "SELECT COALESCE(SUM(od.quantity * p.buying_price), 0)::double precision " +
+        // COGS uses the units actually sold when the product is serialized.
+        String cogsSql = "SELECT COALESCE(SUM(COALESCE((" +
+                " SELECT SUM(unit.acquisition_cost) FROM " + unitTable + " unit " +
+                " WHERE unit.branch_id = ? AND unit.sale_order_detail_id = od.\"orderDetailsId\"" +
+                "), od.quantity * COALESCE(p.buying_price, 0))), 0)::double precision " +
                 "FROM " + orderDetailTable + " od " +
                 "JOIN " + orderTable + " o ON o.\"orderId\" = od.\"orderId\" " +
                 "JOIN " + productTable + " p ON p.product_id = od.\"productId\" " +
                 "WHERE o.\"orderTime\" >= (CURRENT_DATE - INTERVAL '30 days')";
         
         try {
-            Double cogs30d = jdbcTemplate.queryForObject(cogsSql, Double.class);
+            Double cogs30d = jdbcTemplate.queryForObject(cogsSql, Double.class, branchId);
             if (cogs30d == null) cogs30d = 0.0;
             
             // Annualized Turnover = (COGS_30d * 12) / InventoryValue

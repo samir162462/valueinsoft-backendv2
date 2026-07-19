@@ -201,6 +201,12 @@ public class ProductCatalogExportService {
                 request.getBranchId(),
                 "inventory.item.read"
         );
+        authorizationService.assertAuthenticatedCapability(
+                authenticatedName,
+                request.getCompanyId(),
+                request.getBranchId(),
+                "inventory.pricing.cost.read"
+        );
 
         List<Product> products = switch (normalizeSearchType(request.getSearchType())) {
             case "dir" -> pagedProducts(productService.searchProductsByText(

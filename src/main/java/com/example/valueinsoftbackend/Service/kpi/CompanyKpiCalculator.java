@@ -90,8 +90,12 @@ public class CompanyKpiCalculator {
     public BranchInventoryLevel inventoryLevel(int companyId, int branchId) {
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
 
-        String valueSql = "SELECT COALESCE(SUM(COALESCE(st.quantity, 0) * COALESCE(p.buying_price, 0)), 0)::double precision " +
+        String valueSql = "SELECT COALESCE(SUM(COALESCE((" +
+                " SELECT SUM(unit.acquisition_cost) FROM " + unitTable + " unit " +
+                " WHERE unit.product_id = p.product_id AND unit.branch_id = st.branch_id AND unit.status = 'AVAILABLE'" +
+                "), COALESCE(st.quantity, 0) * COALESCE(p.buying_price, 0))), 0)::double precision " +
                 "FROM " + productTable + " p " +
                 "JOIN " + stockTable + " st ON st.product_id = p.product_id AND st.branch_id = ?";
         Double value = safeDouble(() -> jdbcTemplate.queryForObject(valueSql, Double.class, branchId));
@@ -145,20 +149,25 @@ public class CompanyKpiCalculator {
     public double deadStockValue(int companyId, int branchId, int noSaleDays) {
         String stockTable = TenantSqlIdentifiers.inventoryBranchStockBalanceTable(companyId);
         String productTable = TenantSqlIdentifiers.inventoryProductTable(companyId);
+        String unitTable = TenantSqlIdentifiers.inventoryProductUnitTable(companyId);
         String orderTable = TenantSqlIdentifiers.orderTable(companyId, branchId);
         String orderDetailTable = TenantSqlIdentifiers.orderDetailTable(companyId, branchId);
 
-        String sql = "SELECT COALESCE(SUM(sub.qty * sub.buying_price), 0)::double precision FROM (" +
+        String sql = "SELECT COALESCE(SUM(sub.inventory_value), 0)::double precision FROM (" +
                 "  SELECT st.product_id, " +
                 "         SUM(COALESCE(st.quantity, 0)) AS qty, " +
                 "         MAX(COALESCE(p.buying_price, 0)) AS buying_price, " +
+                "         COALESCE((SELECT SUM(unit.acquisition_cost) FROM " + unitTable + " unit " +
+                "                   WHERE unit.product_id = st.product_id AND unit.branch_id = st.branch_id " +
+                "                     AND unit.status = 'AVAILABLE'), " +
+                "                  SUM(COALESCE(st.quantity, 0)) * MAX(COALESCE(p.buying_price, 0))) AS inventory_value, " +
                 "         MAX(o.\"orderTime\") AS last_sale " +
                 "  FROM " + stockTable + " st " +
                 "  JOIN " + productTable + " p ON p.product_id = st.product_id " +
                 "  LEFT JOIN " + orderDetailTable + " od ON od.\"productId\" = st.product_id " +
                 "  LEFT JOIN " + orderTable + " o ON o.\"orderId\" = od.\"orderId\" " +
                 "  WHERE st.branch_id = ? AND st.quantity > 0 " +
-                "  GROUP BY st.product_id " +
+                "  GROUP BY st.product_id, st.branch_id " +
                 "  HAVING MAX(o.\"orderTime\") IS NULL " +
                 "     OR MAX(o.\"orderTime\") < (CURRENT_DATE - make_interval(days => ?)) " +
                 ") sub";

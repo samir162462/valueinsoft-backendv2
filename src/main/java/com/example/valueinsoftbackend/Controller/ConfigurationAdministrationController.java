@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Controller;
 
+import com.example.valueinsoftbackend.Model.Configuration.AccessMap.UserAccessMapResponse;
 import com.example.valueinsoftbackend.Model.Configuration.TenantAdminPortalConfig;
 import com.example.valueinsoftbackend.Model.Request.Configuration.SaveRoleGrantRequest;
 import com.example.valueinsoftbackend.Model.Request.Configuration.SaveTenantRoleAssignmentRequest;
@@ -7,6 +8,7 @@ import com.example.valueinsoftbackend.Model.Request.Configuration.SaveUserGrantO
 import com.example.valueinsoftbackend.Model.Request.Configuration.UpdateTenantModuleOverrideRequest;
 import com.example.valueinsoftbackend.Model.Request.Configuration.UpdateTenantWorkflowOverrideRequest;
 import com.example.valueinsoftbackend.Service.ConfigurationAdministrationService;
+import com.example.valueinsoftbackend.Service.UserAccessMapService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,9 +29,29 @@ import java.security.Principal;
 public class ConfigurationAdministrationController {
 
     private final ConfigurationAdministrationService configurationAdministrationService;
+    private final UserAccessMapService userAccessMapService;
 
-    public ConfigurationAdministrationController(ConfigurationAdministrationService configurationAdministrationService) {
+    public ConfigurationAdministrationController(ConfigurationAdministrationService configurationAdministrationService,
+                                                 UserAccessMapService userAccessMapService) {
         this.configurationAdministrationService = configurationAdministrationService;
+        this.userAccessMapService = userAccessMapService;
+    }
+
+    /**
+     * Explainable access map for one tenant user, resolved for the acting admin's
+     * tenant and the requested (or defaulted) branch context. Read-only.
+     */
+    @GetMapping("/users/{userId}/access-map")
+    public UserAccessMapResponse getUserAccessMap(Principal principal,
+                                                  @PathVariable int userId,
+                                                  @RequestParam(value = "tenantId", required = false) Integer tenantId,
+                                                  @RequestParam(value = "branchId", required = false) Integer branchId) {
+        return userAccessMapService.getAccessMapForAuthenticatedUser(
+                principal.getName(),
+                tenantId,
+                branchId,
+                userId
+        );
     }
 
     @GetMapping("/portal")

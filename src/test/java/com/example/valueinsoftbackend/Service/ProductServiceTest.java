@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ProductServiceTest {
@@ -96,6 +97,23 @@ class ProductServiceTest {
 
         assertNotNull(result);
         assertEquals(9001, result.getProductId());
+    }
+
+    @Test
+    void editProductUpdatesMetadataAndReturnsAuthoritativeStoredQuantity() {
+        Product input = buildProduct();
+        input.setProductId(77);
+        input.setQuantity(999);
+        Product saved = buildProduct();
+        saved.setProductId(77);
+        saved.setQuantity(4);
+        when(productRepository.getProductById(eq(77), eq(1074), eq(1095))).thenReturn(saved);
+
+        ProductOperationResponse response = productService.editProduct(input, "1074", 1095);
+
+        verify(productCommandRepository).updateProductMetadata(input, "1074", 1095);
+        assertEquals(4, response.getNumItems());
+        assertEquals(4, response.getProduct().getQuantity());
     }
 
     private Product buildProduct() {

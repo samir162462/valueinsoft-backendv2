@@ -324,6 +324,10 @@ public final class TenantSqlIdentifiers {
         return companySchema(companyId) + ".hr_attendance_day";
     }
 
+    public static String hrLeaveRequestTable(int companyId) {
+        return companySchema(companyId) + ".hr_leave_request";
+    }
+
     public static String supplierTable(int companyId, int branchId) {
         requirePositive(branchId, "branchId");
         return companySchema(companyId) + ".supplier_" + branchId;
@@ -367,6 +371,10 @@ public final class TenantSqlIdentifiers {
 
     public static String payrollRunLineComponentTable(int companyId) {
         return companySchema(companyId) + ".payroll_run_line_component";
+    }
+
+    public static String payrollRunAttendanceDayTable(int companyId) {
+        return companySchema(companyId) + ".payroll_run_attendance_day";
     }
 
     public static String payrollPaymentTable(int companyId) {

@@ -67,6 +67,7 @@ class SerializedInventoryServiceTest {
                 "PURCHASE",
                 "P-1",
                 null,
+                new java.math.BigDecimal("70000.0000"),
                         "cashier",
                         "idem-1",
                         List.of(
@@ -97,6 +98,7 @@ class SerializedInventoryServiceTest {
                 "PURCHASE",
                 "P-1",
                 null,
+                new java.math.BigDecimal("70000.0000"),
                 "cashier",
                 "idem-1",
                 List.of(new SerializedUnitInput(null, "356789123456789", null, "NEW"))
@@ -129,6 +131,7 @@ class SerializedInventoryServiceTest {
                 "PURCHASE",
                 "P-2",
                 null,
+                new java.math.BigDecimal("60000.0000"),
                 "cashier",
                 "idem-2",
                 List.of(new SerializedUnitInput(null, "490154203237518", null, "NEW"))
@@ -141,6 +144,7 @@ class SerializedInventoryServiceTest {
         verify(productUnitRepository).reactivateForStockIn(unitCaptor.capture(), Mockito.eq(ProductUnitStatus.SOLD));
         assertEquals(7001L, unitCaptor.getValue().getProductUnitId());
         assertEquals(ProductUnitStatus.AVAILABLE, unitCaptor.getValue().getStatus());
+        assertEquals(new java.math.BigDecimal("60000.0000"), unitCaptor.getValue().getAcquisitionCost());
 
         ArgumentCaptor<InventoryStockMovement> movementCaptor = ArgumentCaptor.forClass(InventoryStockMovement.class);
         verify(stockMovementRepository).insertMovement(movementCaptor.capture());
@@ -166,6 +170,7 @@ class SerializedInventoryServiceTest {
                 "PURCHASE",
                 "P-3",
                 null,
+                new java.math.BigDecimal("70000.0000"),
                 "cashier",
                 "idem-3",
                 List.of(new SerializedUnitInput(null, "490154203237518", null, "NEW"))

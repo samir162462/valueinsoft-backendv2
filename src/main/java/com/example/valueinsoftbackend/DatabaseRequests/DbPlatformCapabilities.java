@@ -27,6 +27,16 @@ public class DbPlatformCapabilities {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * Returns every capability regardless of status so explainable projections
+     * (for example the user access map) can also surface deprecated entries.
+     */
+    public List<PlatformCapabilityConfig> getAllCapabilities() {
+        String sql = "SELECT capability_key, module_id, resource, action, scope_type, status, description " +
+                "FROM public.platform_capabilities ORDER BY module_id ASC, resource ASC, capability_key ASC";
+        return jdbcTemplate.query(sql, PLATFORM_CAPABILITY_ROW_MAPPER);
+    }
+
     public List<PlatformCapabilityConfig> getActiveCapabilities() {
         String sql = "SELECT capability_key, module_id, resource, action, scope_type, status, description " +
                 "FROM public.platform_capabilities WHERE status = 'active' ORDER BY module_id ASC, capability_key ASC";

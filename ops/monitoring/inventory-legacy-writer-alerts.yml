@@ -1,0 +1,29 @@
+groups:
+  - name: valueinsoft-inventory-legacy-writers
+    rules:
+      - alert: InventoryLegacyWriterStillInUse
+        expr: sum by (endpoint) (increase(valueinsoft_inventory_legacy_writer_requests_total{outcome="success"}[15m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deprecated inventory writer {{ $labels.endpoint }} is still in use"
+          description: "Successful calls were observed during the last 15 minutes. Identify and migrate the caller before disabling this writer."
+
+      - alert: InventoryLegacyWriterRejections
+        expr: sum by (endpoint) (increase(valueinsoft_inventory_legacy_writer_requests_total{outcome="rejected"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deprecated inventory writer {{ $labels.endpoint }} is rejecting requests"
+          description: "Inspect authentication, validation, and concurrency failures; do not bypass the typed command path."
+
+      - alert: InventoryLegacyWriterLatencyP95
+        expr: histogram_quantile(0.95, sum by (le, endpoint) (rate(valueinsoft_inventory_legacy_writer_latency_seconds_bucket[10m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deprecated inventory writer {{ $labels.endpoint }} p95 exceeds one second"
+          description: "Legacy writer p95 is {{ $value }} seconds. Inspect locks and database waits while migrating the caller."

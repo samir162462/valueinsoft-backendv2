@@ -33,7 +33,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Aggregates tenant, package, template, role, and override data into one effective
@@ -306,7 +305,7 @@ public class EffectiveConfigurationService {
         }
 
         for (TenantRoleAssignmentConfig assignment : roleAssignments) {
-            if (!assignmentAppliesToBranch(assignment, activeBranchId)) {
+            if (!CapabilityScopeRules.assignmentAppliesToBranch(assignment, activeBranchId)) {
                 continue;
             }
 
@@ -316,31 +315,31 @@ public class EffectiveConfigurationService {
             }
 
             for (RoleGrantConfig roleGrant : grantsForRole) {
-                ResolvedScope resolvedScope = resolveScopeForAssignment(roleGrant, assignment);
-                if (resolvedScope == null || !scopeAppliesToBranch(resolvedScope.scopeType, resolvedScope.scopeBranchId, activeBranchId)) {
+                CapabilityScopeRules.ResolvedScope resolvedScope = CapabilityScopeRules.resolveScopeForAssignment(roleGrant, assignment);
+                if (resolvedScope == null || !CapabilityScopeRules.scopeAppliesToBranch(resolvedScope.getScopeType(), resolvedScope.getScopeBranchId(), activeBranchId)) {
                     continue;
                 }
 
                 ResolvedCapabilityConfig capability = new ResolvedCapabilityConfig(
                         roleGrant.getCapabilityKey(),
                         roleGrant.getGrantMode(),
-                        resolvedScope.scopeType,
-                        resolvedScope.scopeBranchId,
+                        resolvedScope.getScopeType(),
+                        resolvedScope.getScopeBranchId(),
                         "role_grant",
                         assignment.getRoleId(),
                         assignment.getAssignmentId(),
                         null
                 );
-                resolved.put(capabilityMapKey(capability.getCapabilityKey(), capability.getScopeType(), capability.getScopeBranchId()), capability);
+                resolved.put(CapabilityScopeRules.capabilityMapKey(capability.getCapabilityKey(), capability.getScopeType(), capability.getScopeBranchId()), capability);
             }
         }
 
         for (TenantUserGrantOverrideConfig override : userGrantOverrides) {
-            if (!scopeAppliesToBranch(override.getScopeType(), override.getScopeBranchId(), activeBranchId)) {
+            if (!CapabilityScopeRules.scopeAppliesToBranch(override.getScopeType(), override.getScopeBranchId(), activeBranchId)) {
                 continue;
             }
 
-            String key = capabilityMapKey(override.getCapabilityKey(), override.getScopeType(), override.getScopeBranchId());
+            String key = CapabilityScopeRules.capabilityMapKey(override.getCapabilityKey(), override.getScopeType(), override.getScopeBranchId());
             if ("deny".equalsIgnoreCase(override.getGrantMode())) {
                 resolved.remove(key);
                 continue;
@@ -362,47 +361,6 @@ public class EffectiveConfigurationService {
         }
 
         return new ArrayList<>(resolved.values());
-    }
-
-    private boolean assignmentAppliesToBranch(TenantRoleAssignmentConfig assignment, Integer activeBranchId) {
-        if ("branch".equalsIgnoreCase(assignment.getScopeType())) {
-            return activeBranchId != null && Objects.equals(activeBranchId, assignment.getScopeBranchId());
-        }
-        return true;
-    }
-
-    private boolean scopeAppliesToBranch(String scopeType, Integer scopeBranchId, Integer activeBranchId) {
-        if ("branch".equalsIgnoreCase(scopeType)) {
-            return activeBranchId != null && Objects.equals(activeBranchId, scopeBranchId);
-        }
-        return true;
-    }
-
-    private ResolvedScope resolveScopeForAssignment(RoleGrantConfig roleGrant, TenantRoleAssignmentConfig assignment) {
-        if ("branch".equalsIgnoreCase(assignment.getScopeType())) {
-            if ("global_admin".equalsIgnoreCase(roleGrant.getScopeType())) {
-                return null;
-            }
-            if ("self".equalsIgnoreCase(roleGrant.getScopeType())) {
-                return new ResolvedScope("self", null);
-            }
-            return new ResolvedScope("branch", assignment.getScopeBranchId());
-        }
-        return new ResolvedScope(roleGrant.getScopeType(), null);
-    }
-
-    private String capabilityMapKey(String capabilityKey, String scopeType, Integer scopeBranchId) {
-        return capabilityKey + "|" + scopeType + "|" + (scopeBranchId == null ? "null" : scopeBranchId);
-    }
-
-    private static class ResolvedScope {
-        private final String scopeType;
-        private final Integer scopeBranchId;
-
-        private ResolvedScope(String scopeType, Integer scopeBranchId) {
-            this.scopeType = scopeType;
-            this.scopeBranchId = scopeBranchId;
-        }
     }
 
     private boolean hasText(String value) {

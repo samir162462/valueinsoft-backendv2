@@ -15,6 +15,7 @@ public class AttendanceDay {
     private int companyId;
     private int branchId;
     private int employeeId;
+    private Integer userId;
     private Date attendanceDate;
     private Timestamp clockIn;
     private Timestamp clockOut;
@@ -22,6 +23,7 @@ public class AttendanceDay {
     private int breakMinutes;
     private int lateMinutes;
     private int overtimeMinutes;
+    private int sessionCount;
     private String status;
     private Timestamp createdAt;
     private Timestamp updatedAt;

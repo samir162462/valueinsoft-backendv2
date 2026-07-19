@@ -57,6 +57,12 @@ public class PayrollRunService {
     @Transactional
     public PayrollRun generate(String actor, PayrollRun request) {
         validationService.validatePeriod(request.getPeriodStart(), request.getPeriodEnd());
+        PayrollRun existing = dbPayroll.findActiveRunForPeriod(
+                request.getCompanyId(), request.getBranchId(), request.getFrequency(), request.getCurrencyCode(),
+                request.getPeriodStart(), request.getPeriodEnd());
+        if (existing != null) {
+            return existing;
+        }
         request.setStatus("DRAFT");
         request.setCreatedBy(actor);
         request.setUpdatedBy(actor);
@@ -65,7 +71,18 @@ public class PayrollRunService {
         request.setTotalNet(BigDecimal.ZERO);
         request.setEmployeeCount(0);
 
-        long runId = dbPayroll.createRun(request);
+        long runId;
+        try {
+            runId = dbPayroll.createRun(request);
+        } catch (IllegalStateException duplicateInsert) {
+            PayrollRun concurrent = dbPayroll.findActiveRunForPeriod(
+                    request.getCompanyId(), request.getBranchId(), request.getFrequency(), request.getCurrencyCode(),
+                    request.getPeriodStart(), request.getPeriodEnd());
+            if (concurrent != null) {
+                return concurrent;
+            }
+            throw duplicateInsert;
+        }
         PayrollRun run = get(request.getCompanyId(), runId);
         run = calculateAndPersist(actor, run, "CALCULATED");
         auditService.record(run.getCompanyId(), run.getBranchId(), "payroll_run", String.valueOf(runId),
@@ -148,14 +165,30 @@ public class PayrollRunService {
 
     private PayrollRun calculateAndPersist(String actor, PayrollRun run, String targetStatus) {
         PayrollSettings settings = settingsService.get(run.getCompanyId());
-        List<PayrollRunLine> lines = calculationService.calculateRunLines(run, settings);
+        List<PayrollCalculationService.CalculatedPayrollLine> calculations = calculationService.calculateRun(run, settings);
+        List<PayrollRunLine> lines = calculations.stream().map(PayrollCalculationService.CalculatedPayrollLine::line).toList();
+        if (lines.isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT, "PAYROLL_NO_ELIGIBLE_USERS",
+                    "No active company users have compensation configured for this payroll frequency and period");
+        }
         BigDecimal gross = lines.stream().map(PayrollRunLine::getGrossSalary).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal deductions = lines.stream().map(PayrollRunLine::getTotalDeductions).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal net = lines.stream().map(PayrollRunLine::getNetSalary).reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        for (PayrollRunLine line : lines) {
+        for (PayrollCalculationService.CalculatedPayrollLine calculation : calculations) {
+            PayrollRunLine line = calculation.line();
             line.setPayrollRunId(run.getId());
-            dbPayroll.createRunLine(line);
+            long runLineId = dbPayroll.createRunLine(line);
+            for (var component : calculation.components()) {
+                component.setCompanyId(run.getCompanyId());
+                component.setPayrollRunLineId(runLineId);
+                dbPayroll.createRunLineComponent(component);
+            }
+            for (var snapshot : calculation.attendanceSnapshots()) {
+                snapshot.setPayrollRunId(run.getId());
+                snapshot.setPayrollRunLineId(runLineId);
+                dbPayroll.createAttendanceSnapshot(snapshot);
+            }
         }
 
         run.setStatus(targetStatus);

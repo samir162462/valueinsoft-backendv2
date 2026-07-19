@@ -246,6 +246,8 @@ public class FinanceDefaultAccountsService {
                 true,  true,  false, false, false));
         s.add(detail("2400", "GRNI",               "liability", "credit", "2000",
                 true,  false, true,  false, false));
+        s.add(detail("2500", "Salaries Payable",   "liability", "credit", "2000",
+                true,  false, false, false, false));
 
         // ── Equity ─────────────────────────────────────────────────────────
         s.add(header("3000", "Equity",             "equity",    "credit", null));

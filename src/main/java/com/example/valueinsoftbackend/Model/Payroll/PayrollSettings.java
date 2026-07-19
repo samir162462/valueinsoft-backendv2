@@ -19,8 +19,13 @@ public class PayrollSettings {
     private boolean autoIncludeAttendance;
     private BigDecimal overtimeRateMultiplier;
     private BigDecimal lateDeductionPerMinute;
+    private String timezoneId;
+    private String weekStartDay;
+    private String workWeekDays;
+    private int monthlyCutoffDay;
     private UUID salaryExpenseAccountId;
     private UUID salaryPayableAccountId;
+    private UUID deductionPayableAccountId;
     private UUID cashBankAccountId;
     private int version;
     private Timestamp createdAt;

@@ -11,10 +11,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class PayrollSettingsService {
 
     private final DbPayroll dbPayroll;
+    private final PayrollValidationService validationService;
     private final PayrollAuditService auditService;
 
-    public PayrollSettingsService(DbPayroll dbPayroll, PayrollAuditService auditService) {
+    public PayrollSettingsService(DbPayroll dbPayroll,
+                                  PayrollValidationService validationService,
+                                  PayrollAuditService auditService) {
         this.dbPayroll = dbPayroll;
+        this.validationService = validationService;
         this.auditService = auditService;
     }
 
@@ -25,6 +29,8 @@ public class PayrollSettingsService {
     @Transactional
     public PayrollSettings update(String actor, PayrollSettings settings) {
         PayrollSettings existing = dbPayroll.getSettings(settings.getCompanyId());
+        applyDefaults(settings, existing);
+        validationService.validateSettingsAccounts(settings);
         if (existing == null) {
             settings.setCreatedBy(actor);
             settings.setUpdatedBy(actor);
@@ -44,5 +50,25 @@ public class PayrollSettingsService {
         auditService.record(settings.getCompanyId(), null, "payroll_settings", String.valueOf(existing.getId()),
                 "SETTINGS_UPDATED", null, null, actor, "Payroll settings updated");
         return dbPayroll.getSettings(settings.getCompanyId());
+    }
+
+    private void applyDefaults(PayrollSettings settings, PayrollSettings existing) {
+        if (settings.getTimezoneId() == null || settings.getTimezoneId().isBlank()) {
+            settings.setTimezoneId(existing == null || existing.getTimezoneId() == null ? "Africa/Cairo" : existing.getTimezoneId());
+        }
+        if (settings.getWeekStartDay() == null || settings.getWeekStartDay().isBlank()) {
+            settings.setWeekStartDay(existing == null || existing.getWeekStartDay() == null ? "SUNDAY" : existing.getWeekStartDay());
+        }
+        if (settings.getWorkWeekDays() == null || settings.getWorkWeekDays().isBlank()) {
+            settings.setWorkWeekDays(existing == null || existing.getWorkWeekDays() == null
+                    ? "SUNDAY,MONDAY,TUESDAY,WEDNESDAY,THURSDAY"
+                    : existing.getWorkWeekDays());
+        }
+        if (settings.getMonthlyCutoffDay() < 1 || settings.getMonthlyCutoffDay() > 28) {
+            settings.setMonthlyCutoffDay(existing == null || existing.getMonthlyCutoffDay() < 1 ? 25 : existing.getMonthlyCutoffDay());
+        }
+        if (settings.getDeductionPayableAccountId() == null && existing != null) {
+            settings.setDeductionPayableAccountId(existing.getDeductionPayableAccountId());
+        }
     }
 }

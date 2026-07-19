@@ -37,6 +37,8 @@ public class ProductImportValidationService {
 
     private static final Logger log = LoggerFactory.getLogger(ProductImportValidationService.class);
 
+    private static final Set<String> TRACKING_TYPE_UNIT_CODES = Set.of("IMEI", "SERIAL");
+
     private final ProductImportCsvParserService parserService;
     private final ProductImportRepository importRepository;
     private final ProductImportAuditService auditService;
@@ -193,7 +195,7 @@ public class ProductImportValidationService {
             validateText(row, "pricing_policy_code", false, 40);
             validateBranch(row, branchId);
             validateLookup(row, "category", categories, "CATEGORY_NOT_FOUND", "Category does not exist");
-            validateLookup(row, "unit_code", units, "UNIT_NOT_FOUND", "Unit code does not exist");
+            validateUnitCode(row, units);
             validateSupplier(row, suppliers);
             validatePrices(row, allowSellingBelowPurchase);
             validateIntegerQuantity(row, "opening_stock_quantity", true);
@@ -265,6 +267,31 @@ public class ProductImportValidationService {
             }
         } catch (NumberFormatException ex) {
             row.addError("branch_id", "BRANCH_ID_INVALID", "branch_id must be numeric", value);
+        }
+    }
+
+    /**
+     * unit_code must be a base UOM (e.g. PCS). Users frequently put the tracking
+     * type (IMEI / SERIAL) there, so accept those values with a warning instead of
+     * rejecting the row: the confirm step maps them to base UOM PCS plus the
+     * matching serialized tracking type.
+     */
+    private void validateUnitCode(ParsedProductImportRow row, Set<String> units) {
+        String value = row.value("unit_code");
+        if (value.isBlank()) {
+            return;
+        }
+        String normalized = normalize(value);
+        if (TRACKING_TYPE_UNIT_CODES.contains(normalized)) {
+            row.addWarning(
+                    "unit_code",
+                    "UNIT_CODE_IS_TRACKING_TYPE",
+                    "unit_code '" + value.trim() + "' is a tracking type, not a unit. The product will be imported with base unit PCS and " + normalized + " tracking",
+                    value);
+            return;
+        }
+        if (!units.contains(normalized)) {
+            row.addError("unit_code", "UNIT_NOT_FOUND", "Unit code does not exist", value);
         }
     }
 

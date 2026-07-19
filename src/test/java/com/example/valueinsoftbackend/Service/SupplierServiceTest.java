@@ -3,6 +3,7 @@ package com.example.valueinsoftbackend.Service;
 import com.example.valueinsoftbackend.DatabaseRequests.DbSupplier;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Request.SupplierCreateRequest;
+import com.example.valueinsoftbackend.Model.Request.SupplierProductCreateRequest;
 import com.example.valueinsoftbackend.Model.Request.SupplierUpdateRequest;
 import com.example.valueinsoftbackend.Model.Supplier;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 class SupplierServiceTest {
@@ -111,6 +114,23 @@ class SupplierServiceTest {
                 eq(1074),
                 eq(1095)
         );
+    }
+
+    @Test
+    void legacySupplierReturnCannotAdjustInventory() {
+        SupplierProductCreateRequest request = new SupplierProductCreateRequest();
+        request.setQuantity(2);
+        request.setCost(50);
+        request.setUserName("manager");
+        request.setTime("2026-07-17T10:00:00Z");
+        request.setAdjustInventory(true);
+
+        ApiException exception = assertThrows(
+                ApiException.class,
+                () -> supplierService.createSupplierBoughtProduct(1095, 1074, 30, request));
+
+        assertEquals("TYPED_SUPPLIER_RETURN_COMMAND_REQUIRED", exception.getCode());
+        verify(dbSupplier, never()).addSupplierBProduct(any(), eq(30), eq(1074), eq(1095));
     }
 
     private SupplierCreateRequest buildCreateRequest() {

@@ -16,6 +16,7 @@ public class PayrollPaymentLine {
     private long payrollPaymentId;
     private long payrollRunLineId;
     private int employeeId;
+    private Integer userId;
     private BigDecimal netSalary;
     private BigDecimal paidAmount;
     private BigDecimal remainingAmount;

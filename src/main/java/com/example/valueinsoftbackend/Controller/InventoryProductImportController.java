@@ -34,7 +34,6 @@ import java.security.Principal;
 @RequestMapping("/api/inventory/products/import")
 public class InventoryProductImportController {
 
-    private static final String TEMPLATE_FILE_NAME = "products_import_template.csv";
     private static final String ERROR_REPORT_FILE_NAME = "products_import_errors.csv";
 
     private final ProductImportTemplateService templateService;
@@ -58,19 +57,27 @@ public class InventoryProductImportController {
     @GetMapping("/template")
     public ResponseEntity<byte[]> downloadTemplate(Principal principal,
                                                    @RequestParam @Positive Integer companyId,
-                                                   @RequestParam @Positive Integer branchId) {
+                                                   @RequestParam @Positive Integer branchId,
+                                                   @RequestParam(defaultValue = "ADD_ONLY") ProductImportMode mode) {
         authorizationService.assertAuthenticatedCapability(
                 principal.getName(),
                 companyId,
                 branchId,
                 "inventory.item.read"
         );
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(),
+                companyId,
+                branchId,
+                "inventory.pricing.cost.read"
+        );
 
-        byte[] content = templateService.buildCsvTemplate().getBytes(StandardCharsets.UTF_8);
+        byte[] content = templateService.buildCsvTemplate(companyId, branchId, mode).getBytes(StandardCharsets.UTF_8);
+        String fileName = "products_import_sample_5_" + mode.name().toLowerCase() + ".csv";
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(TEMPLATE_FILE_NAME).build().toString())
+                        ContentDisposition.attachment().filename(fileName).build().toString())
                 .body(content);
     }
 

@@ -42,6 +42,7 @@ public class ProductImportCsvParserService {
             if (headerLine == null || headerLine.isBlank()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "CSV_EMPTY", "CSV file is empty");
             }
+            headerLine = stripUtf8Bom(headerLine);
 
             if (isExcelSeparatorHint(headerLine)) {
                 headerLine = reader.readLine();
@@ -79,6 +80,12 @@ public class ProductImportCsvParserService {
 
     private boolean isExcelSeparatorHint(String line) {
         return line != null && line.trim().equalsIgnoreCase("sep=,");
+    }
+
+    private String stripUtf8Bom(String value) {
+        return value != null && !value.isEmpty() && value.charAt(0) == '\uFEFF'
+                ? value.substring(1)
+                : value;
     }
 
     private void validateFile(MultipartFile file) {
