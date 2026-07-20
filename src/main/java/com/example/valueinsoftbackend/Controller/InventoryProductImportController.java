@@ -1,5 +1,6 @@
 package com.example.valueinsoftbackend.Controller;
 
+import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportConfirmRequest;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportConfirmResponse;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportBatchSummaryResponse;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportFileDownloadResponse;
@@ -20,6 +21,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -163,8 +165,9 @@ public class InventoryProductImportController {
     public ProductImportConfirmResponse confirmImport(Principal principal,
                                                       @RequestParam @Positive Integer companyId,
                                                       @RequestParam @Positive Integer branchId,
-                                                      @PathVariable @Positive Long batchId) {
-        return confirmService.confirm(principal.getName(), companyId, branchId, batchId);
+                                                      @PathVariable @Positive Long batchId,
+                                                      @RequestBody(required = false) ProductImportConfirmRequest confirmRequest) {
+        return confirmService.confirm(principal.getName(), companyId, branchId, batchId, confirmRequest);
     }
 
     @GetMapping("/{batchId}/errors.csv")

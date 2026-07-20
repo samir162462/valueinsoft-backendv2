@@ -43,7 +43,10 @@ public class ProductImportTemplateService {
             new ProductImportColumn("business_line_key", false, "Optional. Default is MOBILE."),
             new ProductImportColumn("template_key", false, "Optional. Default is mobile_device."),
             new ProductImportColumn("pricing_policy_code", false, "Optional. Default is FIXED_RETAIL."),
-            new ProductImportColumn("allow_below_cost", false, "Optional boolean flag.")
+            new ProductImportColumn("allow_below_cost", false, "Optional boolean flag."),
+            new ProductImportColumn("imei", false, "Required per row for IMEI-tracked products (unit_code=IMEI). One row per device; rows sharing the same product_name + category are grouped into a single product and each row becomes one serialized unit."),
+            new ProductImportColumn("serial_number", false, "Required per row for SERIAL-tracked products (unit_code=SERIAL or serial_required=true). One row per unit."),
+            new ProductImportColumn("unit_cost", false, "Optional per-unit acquisition cost for serialized rows. Defaults to purchase_price.")
     );
 
     private final ProductService productService;
@@ -137,7 +140,10 @@ public class ProductImportTemplateService {
                 firstText(product.getBusinessLineKey(), "MOBILE"),
                 firstText(product.getTemplateKey(), "mobile_device"),
                 firstText(product.getPricingPolicyCode(), "FIXED_RETAIL"),
-                "false"
+                "false",
+                "",
+                "",
+                ""
         );
     }
 
@@ -197,7 +203,10 @@ public class ProductImportTemplateService {
                                           String businessLineKey,
                                           String templateKey,
                                           String pricingPolicyCode,
-                                          String allowBelowCost) {
+                                          String allowBelowCost,
+                                          String imei,
+                                          String serialNumber,
+                                          String unitCost) {
         return List.of(
                 productName,
                 barcode,
@@ -226,7 +235,10 @@ public class ProductImportTemplateService {
                 businessLineKey,
                 templateKey,
                 pricingPolicyCode,
-                allowBelowCost
+                allowBelowCost,
+                imei,
+                serialNumber,
+                unitCost
         );
     }
 

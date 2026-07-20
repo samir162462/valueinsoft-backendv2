@@ -8,6 +8,7 @@ import java.util.Map;
 public class ParsedProductImportRow {
     private final int rowNumber;
     private final Map<String, String> values;
+    private final Map<String, String> computed = new LinkedHashMap<>();
     private final List<ProductImportErrorResponse> errors = new ArrayList<>();
     private ProductImportRowStatus status = ProductImportRowStatus.VALID;
     private Long existingProductId;
@@ -24,6 +25,28 @@ public class ParsedProductImportRow {
 
     public Map<String, String> getValues() {
         return values;
+    }
+
+    /**
+     * Derived values (tracking type, serialized identifier, group key, resolved
+     * unit cost) computed during validation. They are persisted into
+     * normalized_data so the confirm step can consume them without re-deriving.
+     */
+    public void putComputed(String key, String value) {
+        computed.put(key, value == null ? "" : value);
+    }
+
+    public String computed(String key) {
+        return computed.getOrDefault(key, "");
+    }
+
+    /**
+     * Raw CSV values merged with computed values; stored as normalized_data.
+     */
+    public Map<String, String> getNormalizedValues() {
+        Map<String, String> merged = new LinkedHashMap<>(values);
+        merged.putAll(computed);
+        return merged;
     }
 
     public List<ProductImportErrorResponse> getErrors() {

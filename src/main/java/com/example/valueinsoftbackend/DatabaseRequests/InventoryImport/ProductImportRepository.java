@@ -98,7 +98,7 @@ public class ProductImportRepository {
                         .addValue("rowNumber", row.getRowNumber())
                         .addValue("rowHash", Integer.toHexString(row.getValues().hashCode()))
                         .addValue("rawData", toJson(row.getValues()))
-                        .addValue("normalizedData", toJson(row.getValues()))
+                        .addValue("normalizedData", toJson(row.getNormalizedValues()))
                         .addValue("status", row.getStatus().name())
                         .addValue("existingProductId", row.getExistingProductId())
                         .addValue("action", row.getAction() == null ? "SKIP" : row.getAction())
@@ -187,6 +187,49 @@ public class ProductImportRepository {
         jdbcTemplate.query(sql, new MapSqlParameterSource("barcodes", barcodes), rs -> {
             result.put(normalize(rs.getString("serial")), rs.getLong("product_id"));
         });
+        return result;
+    }
+
+    /**
+     * Returns (lowercased) serialized identifiers among the given candidates that
+     * already exist as ACTIVE inventory units for the company. Units in a
+     * re-receivable state (SOLD, RETURNED, DAMAGED, UNDER_REPAIR) are not
+     * reported: the receipt pipeline can legitimately stock those in again.
+     */
+    public Set<String> activeSerializedIdentifiers(int companyId, Collection<String> identifiers) {
+        Set<String> result = new java.util.HashSet<>();
+        if (identifiers == null || identifiers.isEmpty()) {
+            return result;
+        }
+        List<String> lowered = identifiers.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().toLowerCase(java.util.Locale.ROOT))
+                .distinct()
+                .toList();
+        String sql = """
+                SELECT lower(unit_identifier) AS unit_identifier, lower(imei) AS imei, lower(serial_number) AS serial_number
+                FROM %s
+                WHERE company_id = :companyId
+                  AND status NOT IN ('SOLD', 'RETURNED', 'DAMAGED', 'UNDER_REPAIR')
+                  AND (
+                    lower(unit_identifier) IN (:identifiers)
+                    OR lower(imei) IN (:identifiers)
+                    OR lower(serial_number) IN (:identifiers)
+                  )
+                """.formatted(TenantSqlIdentifiers.inventoryProductUnitTable(companyId));
+        for (int start = 0; start < lowered.size(); start += 1000) {
+            List<String> chunk = lowered.subList(start, Math.min(start + 1000, lowered.size()));
+            jdbcTemplate.query(sql, new MapSqlParameterSource()
+                    .addValue("companyId", companyId)
+                    .addValue("identifiers", chunk), rs -> {
+                for (String column : List.of("unit_identifier", "imei", "serial_number")) {
+                    String value = rs.getString(column);
+                    if (value != null && !value.isBlank()) {
+                        result.add(value);
+                    }
+                }
+            });
+        }
         return result;
     }
 
@@ -446,7 +489,7 @@ public class ProductImportRepository {
                 FROM %s
                 WHERE batch_id = :batchId
                   AND status IN ('VALID', 'WARNING')
-                  AND action IN ('INSERT', 'UPDATE')
+                  AND action IN ('INSERT', 'UPDATE', 'RECEIVE')
                 ORDER BY row_number ASC
                 """.formatted(rowTable(companyId));
 

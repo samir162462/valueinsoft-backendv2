@@ -3,10 +3,16 @@ package com.example.valueinsoftbackend.Service.product;
 import com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosProductCommandRepository;
 import com.example.valueinsoftbackend.DatabaseRequests.InventoryImport.ProductImportRepository;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
+import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportConfirmRequest;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportConfirmResponse;
 import com.example.valueinsoftbackend.Model.InventoryImport.ProductImportStagedRow;
 import com.example.valueinsoftbackend.Model.Inventory.TrackingType;
 import com.example.valueinsoftbackend.Model.Product;
+import com.example.valueinsoftbackend.Model.Request.Inventory.SerializedUnitInput;
+import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptDetailsRequest;
+import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptOperationMode;
+import com.example.valueinsoftbackend.Model.Request.InventoryReceipt.ProductReceiptRequest;
+import com.example.valueinsoftbackend.Service.inventory.InventoryProductReceiptService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +22,11 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -30,21 +40,26 @@ public class ProductImportConfirmService {
     private final DbPosProductCommandRepository productCommandRepository;
     private final AuthorizationService authorizationService;
     private final ProductImportAuditService auditService;
+    private final InventoryProductReceiptService receiptService;
     private final TransactionTemplate transactionTemplate;
 
     public ProductImportConfirmService(ProductImportRepository importRepository,
                                        DbPosProductCommandRepository productCommandRepository,
                                        AuthorizationService authorizationService,
                                        ProductImportAuditService auditService,
+                                       InventoryProductReceiptService receiptService,
                                        PlatformTransactionManager transactionManager) {
         this.importRepository = importRepository;
         this.productCommandRepository = productCommandRepository;
         this.authorizationService = authorizationService;
         this.auditService = auditService;
+        this.receiptService = receiptService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    public ProductImportConfirmResponse confirm(String principalName, int companyId, int branchId, long batchId) {
+    public ProductImportConfirmResponse confirm(String principalName, int companyId, int branchId, long batchId,
+                                                ProductImportConfirmRequest confirmRequest) {
+        PaymentSettings payment = resolvePaymentSettings(confirmRequest);
         long startedAt = System.nanoTime();
         BatchSnapshot batch = transactionTemplate.execute(status -> {
             Map<String, Object> lockedBatch = importRepository.findBatchForUpdate(companyId, batchId);
@@ -75,10 +90,32 @@ public class ProductImportConfirmService {
         int skippedRows = importRepository.countIneligibleRows(companyId, batchId);
         Map<String, Integer> supplierIds = importRepository.supplierIdsByName(companyId, branchId);
 
+        // Serialized (IMEI / SERIAL) rows with INSERT/RECEIVE actions are grouped
+        // by product and received through the same pipeline the single Add
+        // Product flow uses (units + stock + ledger + supplier + finance).
+        List<ProductImportStagedRow> standardRows = new ArrayList<>();
+        Map<String, List<ProductImportStagedRow>> serializedGroups = new LinkedHashMap<>();
+        for (ProductImportStagedRow row : eligibleRows) {
+            String tracking = row.data().getOrDefault("_tracking_type", "");
+            boolean serialized = "IMEI".equals(tracking) || "SERIAL".equals(tracking);
+            if (serialized && ("INSERT".equals(row.action()) || "RECEIVE".equals(row.action()))) {
+                String groupKey = row.data().getOrDefault("_group_key", "");
+                if (groupKey.isBlank()) {
+                    groupKey = "ROW:" + row.rowId();
+                }
+                serializedGroups.computeIfAbsent(groupKey, key -> new ArrayList<>()).add(row);
+            } else {
+                standardRows.add(row);
+            }
+        }
+
         int insertedRows = 0;
         int updatedRows = 0;
         int failedRows = 0;
-        for (ProductImportStagedRow row : eligibleRows) {
+        int receivedUnits = 0;
+        int serializedProductsCreated = 0;
+        int serializedProductsReceived = 0;
+        for (ProductImportStagedRow row : standardRows) {
             try {
                 if ("UPDATE".equals(row.action())) {
                     Long productId = transactionTemplate.execute(status -> {
@@ -120,6 +157,37 @@ public class ProductImportConfirmService {
             }
         }
 
+        for (Map.Entry<String, List<ProductImportStagedRow>> entry : serializedGroups.entrySet()) {
+            List<ProductImportStagedRow> group = entry.getValue();
+            try {
+                SerializedGroupResult result = importSerializedGroup(
+                        principalName, companyId, branchId, batchId, entry.getKey(), group, supplierIds, payment);
+                insertedRows += group.size();
+                receivedUnits += group.size();
+                if (result.productCreated()) {
+                    serializedProductsCreated++;
+                } else {
+                    serializedProductsReceived++;
+                }
+                for (ProductImportStagedRow row : group) {
+                    importRepository.markRowImported(companyId, row.rowId(), result.productId());
+                }
+            } catch (Exception ex) {
+                failedRows += group.size();
+                String message = safeMessage(ex);
+                for (ProductImportStagedRow row : group) {
+                    importRepository.markRowImportFailed(
+                            companyId,
+                            branchId,
+                            batchId,
+                            row.rowId(),
+                            row.rowNumber(),
+                            "IMPORT_GROUP_FAILED",
+                            message);
+                }
+            }
+        }
+
         int finalInsertedRows = insertedRows;
         int finalUpdatedRows = updatedRows;
         int finalFailedRows = failedRows;
@@ -128,6 +196,12 @@ public class ProductImportConfirmService {
 
         List<String> messages = new ArrayList<>();
         messages.add(insertedRows + " products imported.");
+        if (receivedUnits > 0) {
+            messages.add(receivedUnits + " serialized units received into "
+                    + (serializedProductsCreated + serializedProductsReceived) + " products ("
+                    + serializedProductsCreated + " created, " + serializedProductsReceived + " existing) with "
+                    + payment.option() + " payment.");
+        }
         if (updatedRows > 0) {
             messages.add(updatedRows + " products updated.");
         }
@@ -153,6 +227,8 @@ public class ProductImportConfirmService {
                         "updatedRows", updatedRows,
                         "skippedRows", skippedRows,
                         "failedRows", failedRows,
+                        "receivedUnits", receivedUnits,
+                        "paymentOption", payment.option(),
                         "status", finalStatus));
         log.info("Product import confirm completed: companyId={}, branchId={}, batchId={}, eligible={}, inserted={}, updated={}, skipped={}, failed={}, durationMs={}",
                 companyId,
@@ -176,6 +252,151 @@ public class ProductImportConfirmService {
                 failedRows == 0,
                 messages
         );
+    }
+
+    /**
+     * Receives one serialized product group through the same pipeline as the
+     * single Add Product flow: resolve or create the product, then call the
+     * product receipt service with one serialized unit per CSV row. The receipt
+     * runs in its own transaction with a deterministic idempotency key derived
+     * from the batch and group so a crashed confirm can never double-receive.
+     */
+    private SerializedGroupResult importSerializedGroup(String principalName,
+                                                        int companyId,
+                                                        int branchId,
+                                                        long batchId,
+                                                        String groupKey,
+                                                        List<ProductImportStagedRow> group,
+                                                        Map<String, Integer> supplierIds,
+                                                        PaymentSettings payment) {
+        ProductImportStagedRow first = group.get(0);
+        Map<String, String> data = first.data();
+
+        int supplierId = supplierIds.getOrDefault(normalize(data.get("supplier_name")), 0);
+        if (supplierId <= 0) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMPORT_SUPPLIER_REQUIRED",
+                    "Supplier was not found for serialized group: " + data.get("supplier_name"));
+        }
+
+        Long existingProductId = null;
+        for (ProductImportStagedRow row : group) {
+            if (row.existingProductId() != null && row.existingProductId() > 0) {
+                existingProductId = row.existingProductId();
+                break;
+            }
+        }
+        boolean productCreated = false;
+        Long productId = existingProductId;
+        if (productId == null) {
+            // Crash resilience: a previous partially-failed confirm may already
+            // have created this product. Reuse it instead of duplicating.
+            Map<String, Long> byBarcode = importRepository.existingProductsByBarcode(
+                    companyId, List.of(normalize(data.get("barcode"))));
+            productId = byBarcode.get(normalize(data.get("barcode")));
+        }
+        if (productId == null) {
+            productId = transactionTemplate.execute(status ->
+                    productCommandRepository.addProduct(toProduct(data, supplierIds), String.valueOf(branchId), companyId));
+            productCreated = true;
+        }
+        if (productId == null || productId <= 0) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "IMPORT_GROUP_PRODUCT_UNRESOLVED",
+                    "Product could not be resolved for serialized group");
+        }
+
+        boolean imeiTracking = "IMEI".equals(data.get("_tracking_type"));
+        List<SerializedUnitInput> units = new ArrayList<>(group.size());
+        for (ProductImportStagedRow row : group) {
+            String identifier = row.data().getOrDefault("_unit_identifier", "").trim();
+            SerializedUnitInput unit = new SerializedUnitInput();
+            if (imeiTracking) {
+                unit.setImei(identifier);
+            } else {
+                unit.setSerialNumber(identifier);
+            }
+            units.add(unit);
+        }
+
+        BigDecimal unitCost = parseUnitCost(data);
+        BigDecimal totalCost = unitCost.setScale(4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(group.size()))
+                .setScale(4, RoundingMode.HALF_UP);
+
+        ProductReceiptDetailsRequest receipt = new ProductReceiptDetailsRequest();
+        receipt.setSupplierId(supplierId);
+        receipt.setQuantity(group.size());
+        receipt.setUnitCost(unitCost);
+        receipt.setConditionCode("USED".equals(normalize(data.get("product_state"))) ? "USED" : "NEW");
+        receipt.setPaymentOption(payment.option());
+        receipt.setPaymentMethod("FULL".equals(payment.option()) ? payment.method() : null);
+        receipt.setPaidAmount("FULL".equals(payment.option()) ? totalCost : BigDecimal.ZERO);
+        receipt.setNotes("Bulk product import batch " + batchId);
+
+        ProductReceiptRequest request = new ProductReceiptRequest();
+        request.setCompanyId(companyId);
+        request.setBranchId(branchId);
+        request.setOperationMode(ProductReceiptOperationMode.RECEIVE_EXISTING_PRODUCT);
+        request.setExistingProductId(productId);
+        request.setReceipt(receipt);
+        request.setSerializedUnits(units);
+        request.setIdempotencyKey(buildGroupIdempotencyKey(batchId, groupKey));
+
+        receiptService.receiveProduct(principalName, request);
+        return new SerializedGroupResult(productId, productCreated);
+    }
+
+    private BigDecimal parseUnitCost(Map<String, String> data) {
+        String raw = data.getOrDefault("_unit_cost", "");
+        if (raw == null || raw.isBlank()) {
+            raw = data.getOrDefault("purchase_price", "");
+        }
+        try {
+            BigDecimal parsed = new BigDecimal(raw.trim());
+            if (parsed.compareTo(BigDecimal.ZERO) < 0) {
+                throw new NumberFormatException("negative");
+            }
+            return parsed;
+        } catch (NumberFormatException ex) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMPORT_UNIT_COST_INVALID",
+                    "unit_cost/purchase_price must be a non-negative number");
+        }
+    }
+
+    private String buildGroupIdempotencyKey(long batchId, String groupKey) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashed = digest.digest(groupKey.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte value : hashed) {
+                hex.append(String.format("%02x", value));
+            }
+            return "bulk-import:" + batchId + ":" + hex.substring(0, 40);
+        } catch (Exception ex) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "IMPORT_IDEMPOTENCY_KEY_FAILED",
+                    "Could not derive idempotency key for import group");
+        }
+    }
+
+    private PaymentSettings resolvePaymentSettings(ProductImportConfirmRequest confirmRequest) {
+        String option = confirmRequest == null ? null : confirmRequest.getPaymentOption();
+        String normalizedOption = option == null || option.isBlank() ? "LATER" : option.trim().toUpperCase(Locale.ROOT);
+        if (!"FULL".equals(normalizedOption) && !"LATER".equals(normalizedOption)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMPORT_PAYMENT_OPTION_INVALID",
+                    "paymentOption must be FULL or LATER");
+        }
+        String method = confirmRequest == null ? null : confirmRequest.getPaymentMethod();
+        String normalizedMethod = method == null || method.isBlank() ? null : method.trim();
+        if ("FULL".equals(normalizedOption) && normalizedMethod == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "IMPORT_PAYMENT_METHOD_REQUIRED",
+                    "paymentMethod is required when paying in full");
+        }
+        return new PaymentSettings(normalizedOption, normalizedMethod);
+    }
+
+    private record PaymentSettings(String option, String method) {
+    }
+
+    private record SerializedGroupResult(long productId, boolean productCreated) {
     }
 
     private Product toProduct(Map<String, String> data, Map<String, Integer> supplierIds) {

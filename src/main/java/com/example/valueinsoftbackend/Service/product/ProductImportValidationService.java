@@ -39,6 +39,13 @@ public class ProductImportValidationService {
 
     private static final Set<String> TRACKING_TYPE_UNIT_CODES = Set.of("IMEI", "SERIAL");
 
+    // Computed (derived) keys persisted into normalized_data for the confirm step.
+    public static final String COMPUTED_TRACKING_TYPE = "_tracking_type";
+    public static final String COMPUTED_UNIT_IDENTIFIER = "_unit_identifier";
+    public static final String COMPUTED_IDENTIFIER_SOURCE = "_identifier_source";
+    public static final String COMPUTED_GROUP_KEY = "_group_key";
+    public static final String COMPUTED_UNIT_COST = "_unit_cost";
+
     private final ProductImportCsvParserService parserService;
     private final ProductImportRepository importRepository;
     private final ProductImportAuditService auditService;
@@ -181,8 +188,16 @@ public class ProductImportValidationService {
 
         Set<String> barcodes = nonBlankValues(rows, "barcode");
         Map<String, Long> existingByBarcode = importRepository.existingProductsByBarcode(companyId, barcodes);
+
+        // Serialized (IMEI / SERIAL) context must be derived before duplicate checks:
+        // rows of the same product group legitimately repeat sku/barcode.
+        for (ParsedProductImportRow row : rows) {
+            deriveSerializedContext(row);
+        }
         markFileDuplicates(rows, "sku", "DUPLICATE_SKU_IN_FILE", "SKU is duplicated inside the CSV file");
         markFileDuplicates(rows, "barcode", "DUPLICATE_BARCODE_IN_FILE", "Barcode is duplicated inside the CSV file");
+        markSerializedIdentifierDuplicates(rows);
+        markExistingActiveIdentifiers(companyId, rows);
 
         for (ParsedProductImportRow row : rows) {
             validateText(row, "product_name", true, 30);
@@ -207,6 +222,7 @@ public class ProductImportValidationService {
             validateWarranty(row);
             validateUrl(row);
             validateDate(row);
+            validateSerializedRow(row);
 
             Long existingProductId = existingByBarcode.get(normalize(row.value("barcode")));
             if (existingProductId != null) {
@@ -214,6 +230,213 @@ public class ProductImportValidationService {
             }
             assignAction(row, mode, existingProductId);
         }
+
+        warnGroupConflicts(rows);
+    }
+
+    /**
+     * Derives the tracking type, the serialized unit identifier (IMEI or serial
+     * number, with legacy fallback to barcode when the dedicated column is
+     * absent), the product group key (product_name + category + tracking) and
+     * the per-unit acquisition cost. Persisted into normalized_data so the
+     * confirm step can group rows and build receipt requests directly.
+     */
+    private void deriveSerializedContext(ParsedProductImportRow row) {
+        String unitCode = normalize(row.value("unit_code"));
+        String tracking;
+        if ("IMEI".equals(unitCode)) {
+            tracking = "IMEI";
+        } else if ("SERIAL".equals(unitCode)) {
+            tracking = "SERIAL";
+        } else {
+            tracking = isTrue(row.value("serial_required")) ? "SERIAL" : "QUANTITY";
+        }
+        row.putComputed(COMPUTED_TRACKING_TYPE, tracking);
+        if ("QUANTITY".equals(tracking)) {
+            return;
+        }
+
+        String identifier = "IMEI".equals(tracking) ? row.value("imei") : row.value("serial_number");
+        String source = "COLUMN";
+        if (identifier == null || identifier.isBlank()) {
+            identifier = row.value("barcode");
+            source = "BARCODE_FALLBACK";
+        }
+        row.putComputed(COMPUTED_UNIT_IDENTIFIER, identifier == null ? "" : identifier.trim());
+        row.putComputed(COMPUTED_IDENTIFIER_SOURCE, source);
+        row.putComputed(COMPUTED_GROUP_KEY,
+                normalize(row.value("product_name")) + "|" + normalize(row.value("category")) + "|" + tracking);
+        String unitCost = row.value("unit_cost");
+        row.putComputed(COMPUTED_UNIT_COST, unitCost == null || unitCost.isBlank()
+                ? row.value("purchase_price").trim()
+                : unitCost.trim());
+    }
+
+    private boolean isSerializedRow(ParsedProductImportRow row) {
+        String tracking = row.computed(COMPUTED_TRACKING_TYPE);
+        return "IMEI".equals(tracking) || "SERIAL".equals(tracking);
+    }
+
+    private void validateSerializedRow(ParsedProductImportRow row) {
+        if (!isSerializedRow(row)) {
+            return;
+        }
+        boolean imeiTracking = "IMEI".equals(row.computed(COMPUTED_TRACKING_TYPE));
+        String field = imeiTracking ? "imei" : "serial_number";
+        String identifier = row.computed(COMPUTED_UNIT_IDENTIFIER);
+
+        if (identifier.isBlank()) {
+            row.addError(field, "SERIALIZED_IDENTIFIER_REQUIRED",
+                    (imeiTracking ? "imei" : "serial_number") + " is required for serialized products (one row per unit)", identifier);
+        } else {
+            if ("BARCODE_FALLBACK".equals(row.computed(COMPUTED_IDENTIFIER_SOURCE))) {
+                row.addWarning(field, "IDENTIFIER_FROM_BARCODE",
+                        "No " + field + " column value; the barcode value is used as the unit " + (imeiTracking ? "IMEI" : "serial number"), row.value("barcode"));
+            }
+            if (imeiTracking && !isValidImei(identifier)) {
+                row.addError("imei", "IMEI_INVALID", "IMEI must be a valid 15-digit number", identifier);
+            }
+        }
+
+        if (row.value("supplier_name").isBlank()) {
+            row.addError("supplier_name", "SUPPLIER_REQUIRED_FOR_SERIALIZED",
+                    "supplier_name is required for serialized (IMEI/SERIAL) rows so stock can be received from the supplier", "");
+        }
+
+        String unitCost = row.value("unit_cost");
+        if (!unitCost.isBlank()) {
+            try {
+                if (new BigDecimal(unitCost).compareTo(BigDecimal.ZERO) < 0) {
+                    row.addError("unit_cost", "UNIT_COST_INVALID", "unit_cost cannot be negative", unitCost);
+                }
+            } catch (NumberFormatException ex) {
+                row.addError("unit_cost", "UNIT_COST_INVALID", "unit_cost must be numeric", unitCost);
+            }
+        }
+
+        String quantity = row.value("opening_stock_quantity");
+        if (!quantity.isBlank() && !"1".equals(quantity.trim())) {
+            row.addWarning("opening_stock_quantity", "SERIALIZED_ROW_QUANTITY_IGNORED",
+                    "Each serialized row receives exactly one unit; opening_stock_quantity is ignored", quantity);
+        }
+    }
+
+    /**
+     * Any IMEI / serial number may appear only once inside the file.
+     */
+    private void markSerializedIdentifierDuplicates(List<ParsedProductImportRow> rows) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (ParsedProductImportRow row : rows) {
+            if (!isSerializedRow(row)) {
+                continue;
+            }
+            String identifier = row.computed(COMPUTED_UNIT_IDENTIFIER).toLowerCase(Locale.ROOT);
+            if (!identifier.isBlank()) {
+                counts.merge(identifier, 1, Integer::sum);
+            }
+        }
+        for (ParsedProductImportRow row : rows) {
+            if (!isSerializedRow(row)) {
+                continue;
+            }
+            String identifier = row.computed(COMPUTED_UNIT_IDENTIFIER).toLowerCase(Locale.ROOT);
+            if (!identifier.isBlank() && counts.getOrDefault(identifier, 0) > 1) {
+                boolean imeiTracking = "IMEI".equals(row.computed(COMPUTED_TRACKING_TYPE));
+                row.markDuplicate(imeiTracking ? "imei" : "serial_number",
+                        "SERIALIZED_IDENTIFIER_DUPLICATE_IN_FILE",
+                        "IMEI or serial number is duplicated inside the CSV file",
+                        row.computed(COMPUTED_UNIT_IDENTIFIER));
+            }
+        }
+    }
+
+    /**
+     * Identifiers that already exist as active inventory units are rejected up
+     * front (same rule the single Add Product receipt enforces).
+     */
+    private void markExistingActiveIdentifiers(int companyId, List<ParsedProductImportRow> rows) {
+        Set<String> identifiers = new HashSet<>();
+        for (ParsedProductImportRow row : rows) {
+            if (isSerializedRow(row) && !row.computed(COMPUTED_UNIT_IDENTIFIER).isBlank()) {
+                identifiers.add(row.computed(COMPUTED_UNIT_IDENTIFIER));
+            }
+        }
+        if (identifiers.isEmpty()) {
+            return;
+        }
+        Set<String> active = importRepository.activeSerializedIdentifiers(companyId, identifiers);
+        if (active.isEmpty()) {
+            return;
+        }
+        for (ParsedProductImportRow row : rows) {
+            if (!isSerializedRow(row)) {
+                continue;
+            }
+            String identifier = row.computed(COMPUTED_UNIT_IDENTIFIER).toLowerCase(Locale.ROOT);
+            if (!identifier.isBlank() && active.contains(identifier)) {
+                boolean imeiTracking = "IMEI".equals(row.computed(COMPUTED_TRACKING_TYPE));
+                row.addError(imeiTracking ? "imei" : "serial_number",
+                        "SERIALIZED_IDENTIFIER_EXISTS",
+                        "This IMEI or serial already exists as an active inventory unit",
+                        row.computed(COMPUTED_UNIT_IDENTIFIER));
+            }
+        }
+    }
+
+    /**
+     * Rows of the same serialized product group must agree on product-level
+     * fields; the first row wins and later conflicts get a warning.
+     */
+    private void warnGroupConflicts(List<ParsedProductImportRow> rows) {
+        Map<String, ParsedProductImportRow> firstByGroup = new HashMap<>();
+        for (ParsedProductImportRow row : rows) {
+            if (!isSerializedRow(row)) {
+                continue;
+            }
+            String groupKey = row.computed(COMPUTED_GROUP_KEY);
+            ParsedProductImportRow first = firstByGroup.putIfAbsent(groupKey, row);
+            if (first == null) {
+                continue;
+            }
+            for (String field : List.of("purchase_price", "selling_price", "wholesale_price", "supplier_name", "unit_cost")) {
+                if (!normalize(row.value(field)).equals(normalize(first.value(field)))) {
+                    row.addWarning(field, "GROUP_VALUE_CONFLICT",
+                            "Rows of the same product group have different " + field + "; the first row's value is used", row.value(field));
+                }
+            }
+            if ("COLUMN".equals(row.computed(COMPUTED_IDENTIFIER_SOURCE))
+                    && !normalize(row.value("barcode")).equals(normalize(first.value("barcode")))) {
+                row.addWarning("barcode", "GROUP_BARCODE_CONFLICT",
+                        "Rows of the same product group have different barcodes; the first row's barcode is used as the product barcode", row.value("barcode"));
+            }
+        }
+    }
+
+    private boolean isTrue(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        return Set.of("TRUE", "YES", "1").contains(normalize(value));
+    }
+
+    private boolean isValidImei(String value) {
+        if (value == null || !value.matches("\\d{15}")) {
+            return false;
+        }
+        int sum = 0;
+        boolean doubleDigit = false;
+        for (int index = value.length() - 1; index >= 0; index -= 1) {
+            int digit = value.charAt(index) - '0';
+            if (doubleDigit) {
+                digit *= 2;
+                if (digit > 9) {
+                    digit -= 9;
+                }
+            }
+            sum += digit;
+            doubleDigit = !doubleDigit;
+        }
+        return sum % 10 == 0;
     }
 
     private void assignAction(ParsedProductImportRow row, ProductImportMode mode, Long existingProductId) {
@@ -222,11 +445,19 @@ public class ProductImportValidationService {
             return;
         }
 
+        boolean serialized = isSerializedRow(row);
         switch (mode) {
             case ADD_ONLY -> {
                 if (existingProductId != null) {
-                    row.addError("barcode", "PRODUCT_ALREADY_EXISTS", "Barcode already exists in inventory_product.serial", row.value("barcode"));
-                    row.setAction("SKIP");
+                    if (serialized) {
+                        // Same product already in the catalog: receive this row's
+                        // unit into it (single Add Product parity) instead of
+                        // rejecting or duplicating the product.
+                        row.setAction("RECEIVE");
+                    } else {
+                        row.addError("barcode", "PRODUCT_ALREADY_EXISTS", "Barcode already exists in inventory_product.serial", row.value("barcode"));
+                        row.setAction("SKIP");
+                    }
                 } else {
                     row.setAction("INSERT");
                 }
@@ -236,10 +467,20 @@ public class ProductImportValidationService {
                     row.addError("barcode", "PRODUCT_NOT_FOUND_FOR_UPDATE", "Barcode does not match an existing product for update", row.value("barcode"));
                     row.setAction("SKIP");
                 } else {
+                    if (serialized) {
+                        row.addWarning("unit_code", "SERIALIZED_UPDATE_METADATA_ONLY",
+                                "UPDATE mode only updates product data; serialized units are not received", row.value("unit_code"));
+                    }
                     row.setAction("UPDATE");
                 }
             }
-            case UPSERT -> row.setAction(existingProductId == null ? "INSERT" : "UPDATE");
+            case UPSERT -> {
+                if (existingProductId == null) {
+                    row.setAction("INSERT");
+                } else {
+                    row.setAction(serialized ? "RECEIVE" : "UPDATE");
+                }
+            }
         }
     }
 
@@ -417,20 +658,32 @@ public class ProductImportValidationService {
         }
     }
 
+    /**
+     * Group-aware duplicate detection: rows of the same serialized product
+     * group legitimately share sku/barcode (one product, many units), so a
+     * value only counts as duplicated when it appears in more than one
+     * distinct context (different groups, or standalone QUANTITY rows).
+     */
     private void markFileDuplicates(List<ParsedProductImportRow> rows, String field, String code, String message) {
-        Map<String, Integer> counts = new HashMap<>();
+        Map<String, Set<String>> contexts = new HashMap<>();
         for (ParsedProductImportRow row : rows) {
             String value = normalize(row.value(field));
             if (!value.isBlank()) {
-                counts.merge(value, 1, Integer::sum);
+                contexts.computeIfAbsent(value, key -> new HashSet<>()).add(duplicateContext(row));
             }
         }
         for (ParsedProductImportRow row : rows) {
             String value = normalize(row.value(field));
-            if (!value.isBlank() && counts.getOrDefault(value, 0) > 1) {
+            if (!value.isBlank() && contexts.getOrDefault(value, Set.of()).size() > 1) {
                 row.markDuplicate(field, code, message, row.value(field));
             }
         }
+    }
+
+    private String duplicateContext(ParsedProductImportRow row) {
+        return isSerializedRow(row)
+                ? "G:" + row.computed(COMPUTED_GROUP_KEY)
+                : "R:" + row.getRowNumber();
     }
 
     private Set<String> nonBlankValues(List<ParsedProductImportRow> rows, String field) {
