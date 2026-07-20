@@ -6,7 +6,7 @@ import com.example.valueinsoftbackend.Service.SupplierService;
 import com.example.valueinsoftbackend.Service.security.AuthenticatedEffectiveConfigurationService;
 import com.example.valueinsoftbackend.Service.security.AuthenticatedEffectiveConfigurationService.ResolvedTenantContext;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.test.context.support.WithMockUser;
 
@@ -47,10 +47,10 @@ class OwnerCrossTenantIsolationIntegrationTest extends AbstractIntegrationTest {
     private static final int COMPANY_B = 200;
     private static final int BRANCH_B = 22;
 
-    @MockBean
+    @MockitoBean
     private SupplierService supplierService;
 
-    @MockBean
+    @MockitoBean
     private AuthenticatedEffectiveConfigurationService authenticatedEffectiveConfigurationService;
 
     @Test

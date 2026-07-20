@@ -18,7 +18,7 @@ import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -43,16 +43,16 @@ class InventoryTransactionEndpointIntegrationTest extends AbstractIntegrationTes
 
     private static final String AUTHENTICATED_USER = "inventory_user:Owner";
 
-    @MockBean
+    @MockitoBean
     private InventoryTransactionService inventoryTransactionService;
 
-    @MockBean
+    @MockitoBean
     private SerializedInventoryService serializedInventoryService;
 
-    @MockBean
+    @MockitoBean
     private AuthorizationService authorizationService;
 
-    @MockBean
+    @MockitoBean
     private TenantScopeGuard tenantScopeGuard;
 
     @BeforeEach

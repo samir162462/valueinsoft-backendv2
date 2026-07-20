@@ -170,6 +170,7 @@ class HRServiceTest {
         openDay.setUserId(42);
         openDay.setAttendanceDate(java.sql.Date.valueOf(attendanceDate));
         openDay.setClockIn(Timestamp.valueOf(attendanceDate.atTime(12, 0)));
+        openDay.setWorkingMinutes(12 * 60 - 5);
         openDay.setStatus("INCOMPLETE");
         Shift shift = new Shift();
         shift.setId(31);

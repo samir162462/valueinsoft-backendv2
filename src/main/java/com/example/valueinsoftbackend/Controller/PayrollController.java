@@ -24,6 +24,8 @@ import java.util.UUID;
 @RequestMapping("/api/payroll")
 public class PayrollController {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PayrollController.class);
+
     private final AuthorizationService authorizationService;
     private final DbPayroll dbPayroll;
     private final DbHR dbHR;
@@ -334,7 +336,8 @@ public class PayrollController {
                         org.springframework.http.HttpStatus.NOT_FOUND,
                         "PAYROLL_PAYSLIP_NOT_FOUND",
                         "Payslip line was not found"));
-        String html = "<!doctype html><html><head><title>Payslip</title><style>" +
+        // openhtmltopdf parses this as XML: must be well-formed XHTML (uppercase DOCTYPE, all tags closed).
+        String html = "<!DOCTYPE html><html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Payslip</title><style>" +
                 "body{font-family:Arial,sans-serif;margin:32px;color:#17202a}table{border-collapse:collapse;width:100%;margin-top:18px}td,th{border:1px solid #d9e2ec;padding:10px;text-align:left}h1{margin-bottom:4px}.muted{color:#64748b}" +
                 "</style></head><body><h1>Payslip</h1><div class='muted'>" + escape(run.getRunLabel()) + " · " + run.getPeriodStart() + " to " + run.getPeriodEnd() + "</div>" +
                 "<table><tbody>" +
@@ -405,6 +408,7 @@ public class PayrollController {
             builder.run();
             return outputStream.toByteArray();
         } catch (Exception exception) {
+            log.error("Payslip PDF rendering failed", exception);
             throw new com.example.valueinsoftbackend.ExceptionPack.ApiException(
                     org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
                     "PAYROLL_PAYSLIP_RENDER_FAILED",

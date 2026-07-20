@@ -4,17 +4,21 @@
 
 package com.example.valueinsoftbackend.Model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.sql.Timestamp;
 import java.util.UUID;
 
 public class SupplierBProduct {
 
+    @JsonProperty("sBPId")
     int sBPId;
     int productId;
     int supplierId;
     int quantity;
     int cost;
     String userName;
+    @JsonProperty("sPaid")
     int sPaid;
     Timestamp time;
     String desc;

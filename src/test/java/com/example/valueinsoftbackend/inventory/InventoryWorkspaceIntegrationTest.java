@@ -23,7 +23,7 @@ import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -47,16 +47,16 @@ class InventoryWorkspaceIntegrationTest extends AbstractIntegrationTest {
 
     private static final String AUTHENTICATED_USER = "inventory_user:Owner";
 
-    @MockBean
+    @MockitoBean
     private InventoryWorkspaceService inventoryWorkspaceService;
 
-    @MockBean
+    @MockitoBean
     private InventoryAuditService inventoryAuditService;
 
-    @MockBean
+    @MockitoBean
     private AuthorizationService authorizationService;
 
-    @MockBean
+    @MockitoBean
     private TenantScopeGuard tenantScopeGuard;
 
     @BeforeEach

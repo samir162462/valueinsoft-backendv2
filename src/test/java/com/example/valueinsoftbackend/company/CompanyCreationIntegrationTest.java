@@ -8,7 +8,7 @@ import com.example.valueinsoftbackend.Model.User;
 import com.example.valueinsoftbackend.Service.BusinessPackageCatalogService;
 import com.example.valueinsoftbackend.Service.branch.BranchService;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
@@ -28,16 +28,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class CompanyCreationIntegrationTest extends AbstractIntegrationTest {
 
-    @MockBean
+    @MockitoBean
     private DbCompany dbCompany;
 
-    @MockBean
+    @MockitoBean
     private DbUsers dbUsers;
 
-    @MockBean
+    @MockitoBean
     private BranchService branchService;
 
-    @MockBean
+    @MockitoBean
     private BusinessPackageCatalogService businessPackageCatalogService;
 
     @Test

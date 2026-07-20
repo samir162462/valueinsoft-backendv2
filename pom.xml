@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.4.5</version>
+		<version>4.0.7</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.example</groupId>
@@ -15,9 +15,9 @@
 	<description>Demo project for Spring Boot</description>
 	<properties>
 		<java.version>21</java.version>
-		<lombok.version>1.18.36</lombok.version>
+		<lombok.version>1.18.46</lombok.version>
 		<aws.sdk.version>2.25.35</aws.sdk.version>
-		<spring-ai.version>1.1.6</spring-ai.version>
+		<spring-ai.version>2.0.0</spring-ai.version>
 		<!-- P1-9: Postgres/Testcontainers tests are excluded from the default build (need Docker).
 		     Run them with: mvn test -Dsurefire.excludedGroups= -Dgroups=postgres -->
 		<surefire.excludedGroups>postgres</surefire.excludedGroups>
@@ -38,12 +38,25 @@
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
+			<!-- Boot 4 parent no longer manages Testcontainers versions -->
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>1.21.3</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-web</artifactId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<!-- Boot 4 stop-gap: keeps Jackson 2 (com.fasterxml) working until code migrates to Jackson 3 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-jackson2</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -78,17 +91,21 @@
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-test</artifactId>
+			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-aop</artifactId>
+			<artifactId>spring-boot-starter-aspectj</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-micrometer-metrics</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>io.micrometer</groupId>
@@ -114,7 +131,6 @@
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
-			<version>42.7.10</version>
 		</dependency>
 		<dependency>
 			<groupId>com.google.code.gson</groupId>
@@ -146,10 +162,13 @@
 		</dependency>
 
 		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-core</artifactId>
-			<version>9.22.3</version>
-
+			<artifactId>flyway-database-postgresql</artifactId>
+			<scope>runtime</scope>
 		</dependency>
 
 		<!-- Jakarta XML Bind (Replacement for JAXB) -->
@@ -183,7 +202,7 @@
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>2.7.0</version>
+			<version>3.0.3</version>
 		</dependency>
 		<dependency>
 			<groupId>com.h2database</groupId>
@@ -191,8 +210,8 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.springframework.security</groupId>
-			<artifactId>spring-security-test</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<!-- P1-9: real-Postgres integration tests (versions managed by the Spring Boot BOM) -->
@@ -232,9 +251,11 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.13.0</version>
+				<version>3.14.0</version>
 				<configuration>
-					<release>21</release>
+					<release>${java.version}</release>
+					<!-- JDK 23+ defaults to -proc:none; keep annotation processing (Lombok) on -->
+					<proc>full</proc>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>

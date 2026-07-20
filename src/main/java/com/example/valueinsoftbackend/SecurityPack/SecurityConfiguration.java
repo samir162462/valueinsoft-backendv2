@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.SecurityPack;
 
 import com.example.valueinsoftbackend.Config.CorsProperties;
 import com.example.valueinsoftbackend.Filters.JwtRequestFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -14,7 +15,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import jakarta.servlet.DispatcherType;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -54,24 +54,24 @@ public class SecurityConfiguration {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
-                        .requestMatchers(AntPathRequestMatcher.antMatcher(org.springframework.http.HttpMethod.OPTIONS, "/**")).permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
-                                AntPathRequestMatcher.antMatcher("/authenticate"),
-                                AntPathRequestMatcher.antMatcher("/users/saveNewUser"),
-                                AntPathRequestMatcher.antMatcher("/Company/saveCompany"),
-                                AntPathRequestMatcher.antMatcher("/Company/getCompany"),
-                                AntPathRequestMatcher.antMatcher("/Company/getCompanyById"),
-                                AntPathRequestMatcher.antMatcher("/public/package-plans"),
-                                AntPathRequestMatcher.antMatcher("/public/business-packages"),
-                                AntPathRequestMatcher.antMatcher("/appSubscription/Res"),
-                                AntPathRequestMatcher.antMatcher("/api/billing/paymob/webhook"),
-                                AntPathRequestMatcher.antMatcher("/error"),
-                                AntPathRequestMatcher.antMatcher("/users/checkUserEmail/**"),
-                                AntPathRequestMatcher.antMatcher("/users/checkUserUserName/**"),
-                                AntPathRequestMatcher.antMatcher("/api/public/**"),
-                                AntPathRequestMatcher.antMatcher("/v3/api-docs/**"),
-                                AntPathRequestMatcher.antMatcher("/swagger-ui/**"),
-                                AntPathRequestMatcher.antMatcher("/swagger-ui.html")
+                                "/authenticate",
+                                "/users/saveNewUser",
+                                "/Company/saveCompany",
+                                "/Company/getCompany",
+                                "/Company/getCompanyById",
+                                "/public/package-plans",
+                                "/public/business-packages",
+                                "/appSubscription/Res",
+                                "/api/billing/paymob/webhook",
+                                "/error",
+                                "/users/checkUserEmail/**",
+                                "/users/checkUserUserName/**",
+                                "/api/public/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
                         ).permitAll()
                         .anyRequest().authenticated()
                 );
@@ -79,6 +79,13 @@ public class SecurityConfiguration {
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public FilterRegistrationBean<JwtRequestFilter> jwtFilterRegistration(JwtRequestFilter filter) {
+        FilterRegistrationBean<JwtRequestFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
@@ -92,8 +99,7 @@ public class SecurityConfiguration {
 
     @Bean
     public AuthenticationManager authenticationManager(PasswordEncoder passwordEncoder) {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(myUserDetailsServices);
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(myUserDetailsServices);
         provider.setUserDetailsPasswordService(myUserDetailsServices);
         provider.setPasswordEncoder(passwordEncoder);
         return new ProviderManager(provider);

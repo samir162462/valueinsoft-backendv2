@@ -24,7 +24,7 @@ import com.example.valueinsoftbackend.Service.finance.FinanceReconciliationServi
 import com.example.valueinsoftbackend.Service.finance.FinanceReportingService;
 import com.example.valueinsoftbackend.Service.finance.FinanceSetupService;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -55,25 +55,25 @@ class FinanceIntegrationTest extends AbstractIntegrationTest {
     private static final UUID POSTING_REQUEST_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
     private static final UUID RECONCILIATION_RUN_ID = UUID.fromString("66666666-6666-6666-6666-666666666666");
 
-    @MockBean
+    @MockitoBean
     private FinanceSetupService financeSetupService;
 
-    @MockBean
+    @MockitoBean
     private FinanceJournalService financeJournalService;
 
-    @MockBean
+    @MockitoBean
     private FinancePostingRequestService financePostingRequestService;
 
-    @MockBean
+    @MockitoBean
     private FinanceReportingService financeReportingService;
 
-    @MockBean
+    @MockitoBean
     private FinancePeriodCloseService financePeriodCloseService;
 
-    @MockBean
+    @MockitoBean
     private FinanceProjectionService financeProjectionService;
 
-    @MockBean
+    @MockitoBean
     private FinanceReconciliationService financeReconciliationService;
 
     @Test

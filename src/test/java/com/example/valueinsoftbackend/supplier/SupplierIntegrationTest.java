@@ -21,7 +21,7 @@ import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -57,13 +57,13 @@ class SupplierIntegrationTest extends AbstractIntegrationTest {
     private static final UUID POSTING_REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID JOURNAL_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
-    @MockBean
+    @MockitoBean
     private SupplierService supplierService;
 
-    @MockBean
+    @MockitoBean
     private AuthorizationService authorizationService;
 
-    @MockBean
+    @MockitoBean
     private TenantScopeGuard tenantScopeGuard;
 
     @BeforeEach

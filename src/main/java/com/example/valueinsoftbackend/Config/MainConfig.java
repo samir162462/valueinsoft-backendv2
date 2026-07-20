@@ -4,6 +4,7 @@
 
 package com.example.valueinsoftbackend.Config;
 
+import com.google.gson.Gson;
 import com.example.valueinsoftbackend.SecurityPack.LegacyAwareBcryptPasswordEncoder;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
@@ -17,6 +18,11 @@ import javax.sql.DataSource;
 @Configuration
 @EnableTransactionManagement
 public class MainConfig {
+
+    @Bean
+    public Gson gson() {
+        return new Gson();
+    }
 
     @Bean
     public JdbcTemplate jdbcTemplate(DataSource dataSource) {

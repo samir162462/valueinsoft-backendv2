@@ -388,14 +388,14 @@ public class PayMobService {
             log.error(
                     "PayMob HTTP request failed for url={} status={} body={}",
                     url,
-                    exception.getRawStatusCode(),
+                    exception.getStatusCode().value(),
                     sanitizePayMobErrorBody(exception.getResponseBodyAsString())
             );
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
                     errorCode,
                     failureMessage,
-                    List.of("PayMob status " + exception.getRawStatusCode() + ": " + sanitizePayMobErrorBody(exception.getResponseBodyAsString()))
+                    List.of("PayMob status " + exception.getStatusCode().value() + ": " + sanitizePayMobErrorBody(exception.getResponseBodyAsString()))
             );
         } catch (RestClientException exception) {
             log.error("PayMob HTTP request failed for url={}", url, exception);
