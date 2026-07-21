@@ -69,6 +69,8 @@ public class SecurityConfiguration {
                                 "/users/checkUserEmail/**",
                                 "/users/checkUserUserName/**",
                                 "/api/public/**",
+                                "/actuator/health",
+                                "/actuator/health/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"

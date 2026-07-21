@@ -15,11 +15,14 @@ import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Repository
 @Slf4j
 public class DbDvSales {
+
+    private static final ZoneId SALES_ZONE = ZoneId.of("Africa/Cairo");
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -31,6 +34,11 @@ public class DbDvSales {
         LocalDate date = LocalDate.parse(dateStr);
         LocalDateTime monthStart = date.withDayOfMonth(1).atStartOfDay();
         LocalDateTime monthEnd = monthStart.plusMonths(1);
+        LocalDateTime queryEnd = boundedPeriodEnd(monthEnd, LocalDateTime.now(SALES_ZONE));
+
+        if (!queryEnd.isAfter(monthStart)) {
+            return List.of();
+        }
 
         String sql = "SELECT DATE(\"orderTime\") AS salesDate, " +
                 "CAST(date_trunc('month', ?::timestamp) AS date) AS firstDay, " +
@@ -50,7 +58,7 @@ public class DbDvSales {
                 rs.getInt("sum"),
                 rs.getInt("income"),
                 rs.getInt("count")
-        ), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthEnd));
+        ), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthStart), Timestamp.valueOf(monthStart), Timestamp.valueOf(queryEnd));
     }
 
     public DvSales getDailyKpis(Integer companyId, Integer branchId, String dateStr) {
@@ -83,18 +91,31 @@ public class DbDvSales {
     }
 
     public List<DVSalesYearly> getYearlySales(int companyId, int currentYear, int branchId) {
+        LocalDateTime yearStart = LocalDate.of(currentYear, 1, 1).atStartOfDay();
+        LocalDateTime yearEnd = yearStart.plusYears(1);
+        LocalDateTime queryEnd = boundedPeriodEnd(yearEnd, LocalDateTime.now(SALES_ZONE));
+
+        if (!queryEnd.isAfter(yearStart)) {
+            return List.of();
+        }
+
         String sql = "SELECT COALESCE(SUM(\"orderTotal\"), 0) - COALESCE(SUM(\"orderBouncedBack\"), 0) AS sum, " +
                 "to_char(date_trunc('month', \"orderTime\"), 'Mon ') AS month, " +
                 "EXTRACT(MONTH FROM date_trunc('month', \"orderTime\"))::integer AS num, " +
                 "COALESCE(SUM(\"orderIncome\"), 0)::integer AS income " +
                 "FROM " + TenantSqlIdentifiers.orderTable(companyId, branchId) + " " +
-                "WHERE EXTRACT(YEAR FROM \"orderTime\") = ? " +
+                "WHERE \"orderTime\" >= ? AND \"orderTime\" < ? " +
                 "GROUP BY month, num ORDER BY num";
         return jdbcTemplate.query(
                 sql,
                 (rs, rowNum) -> new DVSalesYearly(rs.getString("month"), rs.getInt("sum"), rs.getInt("num"), rs.getInt("income")),
-                currentYear
+                Timestamp.valueOf(yearStart),
+                Timestamp.valueOf(queryEnd)
         );
+    }
+
+    static LocalDateTime boundedPeriodEnd(LocalDateTime periodEnd, LocalDateTime now) {
+        return periodEnd.isBefore(now) ? periodEnd : now;
     }
 
     public List<SalesProduct> getSalesProductsByPeriod(int companyId, int branchId, String startTime, String endTime) {
