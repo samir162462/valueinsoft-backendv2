@@ -9,6 +9,7 @@ import com.example.valueinsoftbackend.companyinsights.api.dto.InsightPageDto;
 import com.example.valueinsoftbackend.companyinsights.api.dto.InsightStatusRequest;
 import com.example.valueinsoftbackend.companyinsights.config.CompanyInsightThresholds;
 import com.example.valueinsoftbackend.companyinsights.backfill.CompanyInsightBackfillService;
+import com.example.valueinsoftbackend.companyinsights.backfill.CompanyInsightBackfillRunner;
 import com.example.valueinsoftbackend.companyinsights.engine.CompanyInsightEngineService;
 import com.example.valueinsoftbackend.companyinsights.kpi.CompanyKpiAggregationService;
 import com.example.valueinsoftbackend.companyinsights.kpi.CompanyKpiRepository;
@@ -44,6 +45,7 @@ public class CompanyInsightQueryService {
     private final CompanyInsightEngineService engineService;
     private final CompanyKpiAggregationService aggregationService;
     private final CompanyInsightBackfillService backfillService;
+    private final CompanyInsightBackfillRunner backfillRunner;
 
     public CompanyInsightQueryService(CompanyInsightSecurityService security,
                                       CompanyInsightQueryRepository queryRepository,
@@ -53,7 +55,8 @@ public class CompanyInsightQueryService {
                                       CompanyInsightAuditService auditService,
                                       CompanyInsightEngineService engineService,
                                       CompanyKpiAggregationService aggregationService,
-                                      CompanyInsightBackfillService backfillService) {
+                                      CompanyInsightBackfillService backfillService,
+                                      CompanyInsightBackfillRunner backfillRunner) {
         this.security = security;
         this.queryRepository = queryRepository;
         this.insightRepository = insightRepository;
@@ -63,6 +66,7 @@ public class CompanyInsightQueryService {
         this.engineService = engineService;
         this.aggregationService = aggregationService;
         this.backfillService = backfillService;
+        this.backfillRunner = backfillRunner;
     }
 
     public long startBackfill(Principal principal, LocalDate from, LocalDate to) {
@@ -74,6 +78,7 @@ public class CompanyInsightQueryService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "COMPANY_INSIGHT_INVALID_FILTER", "from must be on or before to");
         }
         long id = backfillService.createBackfill(ctx.companyId(), fromDate, toDate, ctx.userId());
+        backfillRunner.runToCompletion(ctx.companyId(), id);
         auditService.log(ctx.companyId(), null, ctx.userId(), "BACKFILL_TRIGGERED",
                 "{\"from\":\"" + fromDate + "\",\"to\":\"" + toDate + "\"}", true, elapsedMs(startedAt));
         return id;
@@ -190,7 +195,7 @@ public class CompanyInsightQueryService {
      * Manual populate + recalculate for one company: aggregates a trailing window of trusted
      * KPI snapshots (so weekly/branch comparisons have a baseline), then runs the deterministic
      * insight engine. Synchronous and admin-gated; intended for on-demand admin use, not the
-     * dashboard read path. For large tenants, prefer the async backfill.
+     * dashboard read path. For large tenants, use the explicit backfill endpoint.
      */
     public int recalculate(Principal principal, LocalDate asOfDate) {
         long startedAt = System.nanoTime();

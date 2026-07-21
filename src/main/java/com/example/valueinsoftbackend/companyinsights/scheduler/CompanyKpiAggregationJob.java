@@ -44,7 +44,7 @@ public class CompanyKpiAggregationJob {
             zone = "${vls.company-insights.aggregation.zone:Africa/Cairo}"
     )
     public void runDailyAggregation() {
-        if (!properties.isEnabled()) {
+        if (!properties.isEnabled() || !properties.isScheduledJobsEnabled()) {
             return;
         }
         LocalDate targetDate = LocalDate.now(DEFAULT_ZONE).minusDays(1);

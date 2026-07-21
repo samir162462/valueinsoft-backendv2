@@ -15,9 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Async, chunked, resumable, checkpointed backfill of KPI snapshots for a company.
- * The API only enqueues a checkpoint row; {@link CompanyInsightBackfillWorker} advances it
- * one date-chunk at a time so a 13-month backfill never runs on a request thread.
+ * Chunked, checkpointed backfill of KPI snapshots for a company. Backfills are advanced
+ * only by an explicit admin request; there is no database-polling worker.
  */
 @Service
 @Slf4j
@@ -76,17 +75,17 @@ public class CompanyInsightBackfillService {
     }
 
     /**
-     * Process the next pending chunk of the oldest active backfill. Returns true if work was
-     * done. Uses FOR UPDATE SKIP LOCKED so multiple instances never process the same row.
+     * Processes the next chunk of one explicitly requested company backfill. Returns true if
+     * work was done. The targeted lock prevents an admin request from draining another tenant's
+     * queued work and avoids any need for a global polling worker.
      */
     @Transactional
-    public boolean processNextChunk() {
-        Map<String, Object> row = lockNextActive();
+    public boolean processNextChunk(long companyId, long backfillId) {
+        Map<String, Object> row = lockActive(companyId, backfillId);
         if (row == null) {
             return false;
         }
-        long backfillId = ((Number) row.get("backfill_id")).longValue();
-        int companyId = ((Number) row.get("company_id")).intValue();
+        int companyIdInt = Math.toIntExact(companyId);
         LocalDate rangeFrom = toLocalDate(row.get("range_from"));
         LocalDate rangeTo = toLocalDate(row.get("range_to"));
         LocalDate cursor = toLocalDate(row.get("cursor_date"));
@@ -99,7 +98,7 @@ public class CompanyInsightBackfillService {
         }
 
         try {
-            aggregationService.aggregateCompanyRange(companyId, chunkStart, chunkEnd);
+            aggregationService.aggregateCompanyRange(companyIdInt, chunkStart, chunkEnd);
             boolean done = !chunkEnd.isBefore(rangeTo);
             jdbcTemplate.update(
                     """
@@ -115,7 +114,7 @@ public class CompanyInsightBackfillService {
                             .addValue("done", done)
                             .addValue("id", backfillId));
             if (done) {
-                engineService.generateForCompany(companyId, rangeTo);
+                engineService.generateForCompany(companyIdInt, rangeTo);
                 log.info("Company insight backfill completed id={} companyId={}", backfillId, companyId);
             }
             return true;
@@ -129,17 +128,19 @@ public class CompanyInsightBackfillService {
         }
     }
 
-    private Map<String, Object> lockNextActive() {
+    private Map<String, Object> lockActive(long companyId, long backfillId) {
         var rows = jdbcTemplate.queryForList(
                 """
                         SELECT backfill_id, company_id, range_from, range_to, cursor_date
                         FROM public.company_insight_backfill_checkpoint
-                        WHERE status IN ('PENDING','RUNNING')
-                        ORDER BY created_at ASC
-                        LIMIT 1
+                        WHERE backfill_id = :id
+                          AND company_id = :companyId
+                          AND status IN ('PENDING','RUNNING')
                         FOR UPDATE SKIP LOCKED
                         """,
-                new MapSqlParameterSource());
+                new MapSqlParameterSource()
+                        .addValue("id", backfillId)
+                        .addValue("companyId", companyId));
         return rows.stream().findFirst().orElse(null);
     }
 

@@ -54,7 +54,7 @@ public class BranchNoActivityJob {
             zone = "${vls.company-insights.no-activity.zone:Africa/Cairo}"
     )
     public void runHourly() {
-        if (!properties.isEnabled()) {
+        if (!properties.isEnabled() || !properties.isScheduledJobsEnabled()) {
             return;
         }
         LocalDate today = LocalDate.now(DEFAULT_ZONE);

@@ -80,7 +80,7 @@ public class CompanyInsightController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             Principal principal) {
         long backfillId = queryService.startBackfill(principal, from, to);
-        return ResponseEntity.accepted().body(Map.of("backfillId", backfillId));
+        return ResponseEntity.ok(Map.of("backfillId", backfillId));
     }
 
     @GetMapping("/backfill/{id}")

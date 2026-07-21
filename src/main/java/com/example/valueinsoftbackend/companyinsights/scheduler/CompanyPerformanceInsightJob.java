@@ -44,7 +44,7 @@ public class CompanyPerformanceInsightJob {
             zone = "${vls.company-insights.performance.zone:Africa/Cairo}"
     )
     public void runDailyInsightGeneration() {
-        if (!properties.isEnabled()) {
+        if (!properties.isEnabled() || !properties.isScheduledJobsEnabled()) {
             return;
         }
         LocalDate asOfDate = LocalDate.now(DEFAULT_ZONE).minusDays(1);

@@ -11,7 +11,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -40,14 +39,10 @@ public class BillingProviderCheckoutOutboxProcessor {
         this.objectMapper = objectMapper;
     }
 
-    @Scheduled(fixedDelayString = "${vls.billing.checkout-outbox-worker-delay-ms:30000}")
-    public void runScheduledCheckoutOutbox() {
-        if (!billingProperties.isCheckoutOutboxWorkerEnabled()) {
-            return;
-        }
-        processDueCheckoutRequests();
-    }
-
+    /**
+     * Processes due checkout work on demand from the payment initiation request path.
+     * This deliberately has no timer: an empty outbox must not keep a serverless database awake.
+     */
     public int processDueCheckoutRequests() {
         int batchSize = Math.max(1, billingProperties.getCheckoutOutboxBatchSize());
         List<BillingProviderCheckoutOutboxItem> items = dbBillingWriteModels.claimDueProviderCheckoutOutboxItems(batchSize);

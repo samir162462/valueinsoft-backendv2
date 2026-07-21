@@ -22,8 +22,6 @@ public class BillingProperties {
     private int dunningMaxAttempts = 3;
     private int manualRetryCooldownMinutes = 15;
     private int manualRetryMaxAttempts = 5;
-    private boolean checkoutOutboxWorkerEnabled = true;
-    private String checkoutOutboxWorkerDelayMs = "30000";
     private int checkoutOutboxBatchSize = 10;
     private int checkoutOutboxMaxAttempts = 5;
     private int checkoutOutboxRetryDelaySeconds = 60;
@@ -32,12 +30,11 @@ public class BillingProperties {
     @PostConstruct
     void initialize() {
         log.info(
-                "Billing configured: provider={} renewalSchedulerEnabled={} dunningSchedulerEnabled={} balanceFirstPaymentApisEnabled={} checkoutOutboxWorkerEnabled={}",
+                "Billing configured: provider={} renewalSchedulerEnabled={} dunningSchedulerEnabled={} balanceFirstPaymentApisEnabled={}",
                 paymentProvider,
                 renewalSchedulerEnabled,
                 dunningSchedulerEnabled,
-                balanceFirstPaymentApisEnabled,
-                checkoutOutboxWorkerEnabled
+                balanceFirstPaymentApisEnabled
         );
     }
 
@@ -127,22 +124,6 @@ public class BillingProperties {
 
     public void setManualRetryMaxAttempts(int manualRetryMaxAttempts) {
         this.manualRetryMaxAttempts = manualRetryMaxAttempts;
-    }
-
-    public boolean isCheckoutOutboxWorkerEnabled() {
-        return checkoutOutboxWorkerEnabled;
-    }
-
-    public void setCheckoutOutboxWorkerEnabled(boolean checkoutOutboxWorkerEnabled) {
-        this.checkoutOutboxWorkerEnabled = checkoutOutboxWorkerEnabled;
-    }
-
-    public String getCheckoutOutboxWorkerDelayMs() {
-        return checkoutOutboxWorkerDelayMs;
-    }
-
-    public void setCheckoutOutboxWorkerDelayMs(String checkoutOutboxWorkerDelayMs) {
-        this.checkoutOutboxWorkerDelayMs = checkoutOutboxWorkerDelayMs;
     }
 
     public int getCheckoutOutboxBatchSize() {

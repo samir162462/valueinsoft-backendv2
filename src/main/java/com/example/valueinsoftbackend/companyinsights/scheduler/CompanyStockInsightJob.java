@@ -52,7 +52,7 @@ public class CompanyStockInsightJob {
             zone = "${vls.company-insights.stock.zone:Africa/Cairo}"
     )
     public void drainDirtyQueue() {
-        if (!properties.isEnabled()) {
+        if (!properties.isEnabled() || !properties.isScheduledJobsEnabled()) {
             return;
         }
         List<Long> companies = dirtyQueueService.readyCompanies();

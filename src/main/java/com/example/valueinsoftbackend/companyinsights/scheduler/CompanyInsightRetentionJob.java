@@ -35,7 +35,7 @@ public class CompanyInsightRetentionJob {
             zone = "${vls.company-insights.retention.zone:Africa/Cairo}"
     )
     public void runDailyRetention() {
-        if (!properties.isEnabled()) {
+        if (!properties.isEnabled() || !properties.isScheduledJobsEnabled()) {
             return;
         }
         // company_id = 0 sentinel: this is a global (all-company) maintenance job.

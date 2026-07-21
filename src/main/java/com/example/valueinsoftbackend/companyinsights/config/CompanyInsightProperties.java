@@ -13,6 +13,12 @@ public class CompanyInsightProperties {
     /** Master switch for the whole feature (jobs + APIs). */
     private boolean enabled = true;
 
+    /**
+     * Opt-in switch for recurring database jobs. Disabled by default so an idle deployment
+     * allows serverless Postgres to scale to zero. Manual API operations remain available.
+     */
+    private boolean scheduledJobsEnabled = false;
+
     /** Number of trailing days re-closed on each daily aggregation run (late orders/returns). */
     private int trailingRecloseDays = 3;
 
@@ -40,6 +46,14 @@ public class CompanyInsightProperties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public boolean isScheduledJobsEnabled() {
+        return scheduledJobsEnabled;
+    }
+
+    public void setScheduledJobsEnabled(boolean scheduledJobsEnabled) {
+        this.scheduledJobsEnabled = scheduledJobsEnabled;
     }
 
     public int getTrailingRecloseDays() {
