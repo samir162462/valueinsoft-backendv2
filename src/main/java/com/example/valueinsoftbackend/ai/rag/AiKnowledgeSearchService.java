@@ -24,13 +24,31 @@ public class AiKnowledgeSearchService {
     }
 
     public List<AiKnowledgeSearchResult> search(Long companyId, String question, int limit) {
+        return search(companyId, null, Set.of(), question, limit);
+    }
+
+    public List<AiKnowledgeSearchResult> search(Long companyId,
+                                                String language,
+                                                Set<String> allowedModules,
+                                                String question,
+                                                int limit) {
         Set<String> terms = tokenize(question);
         if (terms.isEmpty()) {
             return List.of();
         }
 
-        return chunkRepository.findActiveChunks(companyId, null, 500)
+        Set<String> normalizedModules = allowedModules == null
+                ? Set.of()
+                : allowedModules.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(value -> value.trim().toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+
+        return chunkRepository.findActiveChunks(companyId, language, 500)
                 .stream()
+                .filter(chunk -> normalizedModules.isEmpty()
+                        || chunk.module() == null
+                        || normalizedModules.contains(chunk.module().trim().toLowerCase(Locale.ROOT)))
                 .map(chunk -> new AiKnowledgeSearchResult(chunk, score(chunk, terms)))
                 .filter(result -> result.score() > 0)
                 .sorted(Comparator.comparingInt(AiKnowledgeSearchResult::score).reversed())

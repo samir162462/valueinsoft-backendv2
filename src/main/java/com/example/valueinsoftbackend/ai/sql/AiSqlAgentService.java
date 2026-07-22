@@ -60,12 +60,12 @@ public class AiSqlAgentService {
             log.debug("AI SQL plan generated conversationId={} sqlLength={}", conversationId, generatedSql == null ? 0 : generatedSql.length());
             String validatedSql = sqlValidator.validate(generatedSql, context.companyId(), branchId);
             log.info(
-                    "AI SQL SELECT approved conversationId={} companyId={} branchId={} userId={} sql={}",
+                    "AI SQL SELECT approved conversationId={} companyId={} branchId={} userId={} sqlLength={}",
                     conversationId,
                     context.companyId(),
                     branchId,
                     context.userId(),
-                    oneLine(validatedSql)
+                    validatedSql.length()
             );
             List<Map<String, Object>> rows = sqlExecutor.execute(validatedSql, context.companyId(), branchId);
             log.info(
@@ -98,12 +98,12 @@ public class AiSqlAgentService {
             return new AiSqlAnswer(answer, validatedSql, rows.size(), summary.providerName(), summary.providerCode());
         } catch (RuntimeException exception) {
             log.warn(
-                    "AI SQL SELECT rejected conversationId={} companyId={} branchId={} userId={} sql={} reason={}",
+                    "AI SQL SELECT rejected conversationId={} companyId={} branchId={} userId={} sqlLength={} reason={}",
                     conversationId,
                     context.companyId(),
                     branchId,
                     context.userId(),
-                    generatedSql == null ? "" : oneLine(generatedSql),
+                    generatedSql == null ? 0 : generatedSql.length(),
                     exception.getMessage()
             );
             auditService.logToolCall(
@@ -158,9 +158,8 @@ public class AiSqlAgentService {
                     : "";
             return new AiSqlPlan(sql);
         } catch (RuntimeException exception) {
-            log.warn("AI SQL plan parse failed. Raw response length={} snippet={}",
-                    response.answer() == null ? 0 : response.answer().length(),
-                    snippet(response.answer()));
+            log.warn("AI SQL plan parse failed responseLength={}",
+                    response.answer() == null ? 0 : response.answer().length());
             throw new AiSqlValidationException("The model did not return a valid SQL plan.");
         }
     }
@@ -204,24 +203,8 @@ public class AiSqlAgentService {
         return text.trim();
     }
 
-    private String snippet(String value) {
-        if (value == null) {
-            return "";
-        }
-        String normalized = value.trim().replaceAll("\\s+", " ");
-        return normalized.length() <= 240 ? normalized : normalized.substring(0, 240) + "...";
-    }
-
     private long elapsedMs(long startedAt) {
         return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000L);
-    }
-
-    private String oneLine(String sql) {
-        if (sql == null) {
-            return "";
-        }
-        String normalized = sql.trim().replaceAll("\\s+", " ");
-        return normalized.length() <= 2_000 ? normalized : normalized.substring(0, 2_000) + "...";
     }
 
     public record AiSqlAnswer(

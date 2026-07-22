@@ -88,20 +88,6 @@ public class AiUsageLogRepository {
                 ));
     }
 
-    public long countUserRequestsSince(long companyId, long userId, LocalDateTime since) {
-        Long count = jdbcTemplate.queryForObject("""
-                SELECT COUNT(*)
-                FROM public.ai_usage_log
-                WHERE company_id = :companyId
-                  AND user_id = :userId
-                  AND created_at >= :since
-                """, new MapSqlParameterSource()
-                .addValue("companyId", companyId)
-                .addValue("userId", userId)
-                .addValue("since", Timestamp.valueOf(since)), Long.class);
-        return count == null ? 0L : count;
-    }
-
     public long sumCompanyTokensSince(long companyId, LocalDateTime since) {
         Long total = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(total_tokens), 0)

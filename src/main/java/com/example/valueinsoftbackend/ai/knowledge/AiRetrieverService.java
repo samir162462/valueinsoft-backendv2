@@ -6,6 +6,9 @@ import com.example.valueinsoftbackend.ai.embedding.AiEmbeddingResult;
 import com.example.valueinsoftbackend.ai.embedding.AiEmbeddingService;
 import com.example.valueinsoftbackend.ai.rag.AiKnowledgeSearchResult;
 import com.example.valueinsoftbackend.ai.rag.AiKnowledgeSearchService;
+import com.example.valueinsoftbackend.ai.service.AiModelClient;
+import com.example.valueinsoftbackend.ai.service.AiModelRequest;
+import com.example.valueinsoftbackend.ai.service.AiModelResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -23,15 +26,18 @@ public class AiRetrieverService {
     private final AiEmbeddingService embeddingService;
     private final AiKnowledgeChunkRepository chunkRepository;
     private final AiKnowledgeSearchService keywordSearchService;
+    private final AiModelClient modelClient;
 
     public AiRetrieverService(AiProperties aiProperties,
                               AiEmbeddingService embeddingService,
                               AiKnowledgeChunkRepository chunkRepository,
-                              AiKnowledgeSearchService keywordSearchService) {
+                              AiKnowledgeSearchService keywordSearchService,
+                              AiModelClient modelClient) {
         this.aiProperties = aiProperties;
         this.embeddingService = embeddingService;
         this.chunkRepository = chunkRepository;
         this.keywordSearchService = keywordSearchService;
+        this.modelClient = modelClient;
     }
 
     public List<AiRetrievedChunk> retrieve(AiRetrievalRequest request) {
@@ -52,6 +58,12 @@ public class AiRetrieverService {
                     normalized.topK(),
                     chunks.size());
             logRetrievedChunks(chunks, "SEMANTIC_VECTOR", normalized.query());
+            if (chunks.isEmpty()
+                    && normalized.allowKeywordFallback()
+                    && ragProperties().isKeywordFallbackEnabled()) {
+                log.info("AI semantic retrieval returned no chunks; trying grounded keyword retrieval");
+                return keywordFallback(normalized);
+            }
             return chunks;
         } catch (AiEmbeddingException exception) {
             if (normalized.allowKeywordFallback() && ragProperties().isKeywordFallbackEnabled()) {
@@ -115,14 +127,54 @@ public class AiRetrieverService {
             return List.of();
         }
         try {
-            List<AiRetrievedChunk> chunks = keywordSearchService.search(request.companyId(), request.query(), request.topK()).stream()
+            String expandedQuery = expandCrossLanguageQuery(request.query());
+            List<AiRetrievedChunk> chunks = keywordSearchService.search(
+                            request.companyId(),
+                            request.language(),
+                            request.allowedModules(),
+                            expandedQuery,
+                            request.topK())
+                    .stream()
                     .map(this::fromKeywordResult)
                     .toList();
             logRetrievedChunks(chunks, "KEYWORD_FALLBACK", request.query());
             return chunks;
         } catch (RuntimeException exception) {
-            log.warn("AI keyword fallback retrieval failed safely: {}", safeMessage(exception));
-            return List.of();
+            log.warn("AI keyword fallback retrieval failed: {}", safeMessage(exception));
+            throw exception;
+        }
+    }
+
+    private String expandCrossLanguageQuery(String query) {
+        if (query == null || query.isBlank() || query.codePoints().allMatch(codePoint -> codePoint < 128)) {
+            return query;
+        }
+        try {
+            AiModelResponse response = modelClient.generate(new AiModelRequest(
+                    """
+                    Convert the user's multilingual ValueInSoft question into concise English search keywords.
+                    Return only space-separated keywords, with no explanation, punctuation, markdown, or answer.
+                    Preserve important module concepts such as product, inventory, POS, supplier, customer, shift, sales, payment, and receipt.
+                    """,
+                    query,
+                    "RAG_QUERY_EXPANSION",
+                    "",
+                    "",
+                    null
+            ));
+            String expansion = response == null || response.answer() == null
+                    ? ""
+                    : response.answer().replaceAll("[^\\p{L}\\p{Nd}\\s-]", " ").replaceAll("\\s+", " ").trim();
+            if (expansion.isBlank()) {
+                return query;
+            }
+            log.info("AI RAG multilingual query expansion completed originalLength={} expandedLength={}",
+                    query.length(), expansion.length());
+            return query + " " + expansion;
+        } catch (RuntimeException exception) {
+            log.warn("AI RAG multilingual query expansion unavailable; using original query errorType={}",
+                    exception.getClass().getSimpleName());
+            return query;
         }
     }
 
@@ -184,19 +236,19 @@ public class AiRetrieverService {
 
     private void logRetrievedChunks(List<AiRetrievedChunk> chunks, String retrievalMethod, String query) {
         if (chunks == null || chunks.isEmpty()) {
-            log.info("RAG Retrieval [Method: {}, Query: '{}'] - No data was retrieved.", retrievalMethod, query);
+            log.info("AI RAG retrieval method={} queryLength={} resultCount=0",
+                    retrievalMethod, query == null ? 0 : query.length());
             return;
         }
-        log.info("RAG Retrieval [Method: {}, Query: '{}'] - Retrieved {} chunk(s):", retrievalMethod, query, chunks.size());
+        log.info("AI RAG retrieval method={} queryLength={} resultCount={}",
+                retrievalMethod, query == null ? 0 : query.length(), chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
             AiRetrievedChunk chunk = chunks.get(i);
-            log.info("  [{}] Title: \"{}\" | Similarity: {} | Module: {} | Chunk ID: {} | Preview: \"{}\"",
+            log.debug("AI RAG result position={} similarity={} module={} chunkId={}",
                     i + 1,
-                    chunk.documentTitle(),
                     chunk.similarity(),
                     chunk.module(),
-                    chunk.chunkId(),
-                    chunk.contentPreview());
+                    chunk.chunkId());
         }
     }
 }

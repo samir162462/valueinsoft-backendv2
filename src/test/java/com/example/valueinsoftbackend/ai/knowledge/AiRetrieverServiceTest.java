@@ -7,6 +7,8 @@ import com.example.valueinsoftbackend.ai.embedding.AiEmbeddingService;
 import com.example.valueinsoftbackend.ai.rag.AiDocumentChunkRecord;
 import com.example.valueinsoftbackend.ai.rag.AiKnowledgeSearchResult;
 import com.example.valueinsoftbackend.ai.rag.AiKnowledgeSearchService;
+import com.example.valueinsoftbackend.ai.service.AiModelClient;
+import com.example.valueinsoftbackend.ai.service.AiModelResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -26,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -38,6 +41,7 @@ class AiRetrieverServiceTest {
     private AiEmbeddingService embeddingService;
     private AiKnowledgeChunkRepository chunkRepository;
     private AiKnowledgeSearchService keywordSearchService;
+    private AiModelClient modelClient;
     private AiRetrieverService service;
 
     @BeforeEach
@@ -47,7 +51,8 @@ class AiRetrieverServiceTest {
         embeddingService = mock(AiEmbeddingService.class);
         chunkRepository = mock(AiKnowledgeChunkRepository.class);
         keywordSearchService = mock(AiKnowledgeSearchService.class);
-        service = new AiRetrieverService(properties, embeddingService, chunkRepository, keywordSearchService);
+        modelClient = mock(AiModelClient.class);
+        service = new AiRetrieverService(properties, embeddingService, chunkRepository, keywordSearchService, modelClient);
     }
 
     @Test
@@ -74,8 +79,41 @@ class AiRetrieverServiceTest {
         when(embeddingService.embedQuery(anyString()))
                 .thenReturn(new AiEmbeddingResult(0, "query", queryVector, "test", "test-embedding", 768));
         when(chunkRepository.vectorSearch(any(), eq(queryVector))).thenReturn(List.of());
+        when(keywordSearchService.search(eq(1L), eq("en"), eq(Set.of("inventory")), anyString(), eq(3)))
+                .thenReturn(List.of());
 
         assertEquals(List.of(), service.retrieve(request(3, 0.8)));
+        verify(keywordSearchService).search(eq(1L), eq("en"), eq(Set.of("inventory")), anyString(), eq(3));
+    }
+
+    @Test
+    void fallsBackToGroundedKeywordSearchWhenVectorCorpusHasNoEmbeddedMatches() {
+        float[] queryVector = vector();
+        when(embeddingService.embedQuery(anyString()))
+                .thenReturn(new AiEmbeddingResult(0, "query", queryVector, "test", "test-embedding", 768));
+        when(chunkRepository.vectorSearch(any(), eq(queryVector))).thenReturn(List.of());
+        when(keywordSearchService.search(
+                eq(1L), eq("en"), eq(Set.of("help", "dashboard")), contains("Company dashboard"), eq(5)))
+                .thenReturn(List.of(keywordResult()));
+
+        AiRetrievalRequest pageExplanationRequest = new AiRetrievalRequest(
+                1L,
+                Set.of(10L),
+                null,
+                Set.of("help", "dashboard"),
+                "en",
+                "Explain the current ValueInSoft page in Arabic. Page: Company dashboard. View ID: CompanyDashboardPage.",
+                5,
+                0.6,
+                true,
+                true
+        );
+
+        List<AiRetrievedChunk> results = service.retrieve(pageExplanationRequest);
+
+        assertEquals(1, results.size());
+        verify(keywordSearchService).search(
+                eq(1L), eq("en"), eq(Set.of("help", "dashboard")), contains("Company dashboard"), eq(5));
     }
 
     @Test
@@ -86,7 +124,9 @@ class AiRetrieverServiceTest {
         when(chunkRepository.vectorSearch(any(), eq(queryVector))).thenThrow(
                 new BadSqlGrammarException("vector", "select", new SQLException("type \"vector\" does not exist"))
         );
-        when(keywordSearchService.search(eq(1L), anyString(), eq(5))).thenReturn(List.of(keywordResult()));
+        when(keywordSearchService.search(
+                eq(1L), eq("en"), eq(Set.of("inventory")), anyString(), eq(5)))
+                .thenReturn(List.of(keywordResult()));
 
         List<AiRetrievedChunk> results = service.retrieve(request(null, null));
 
@@ -100,12 +140,64 @@ class AiRetrieverServiceTest {
         when(embeddingService.embedQuery(anyString())).thenThrow(
                 new AiEmbeddingException("AI embeddings are disabled. Set vls.ai.embedding.enabled=true.")
         );
-        when(keywordSearchService.search(eq(1L), anyString(), eq(5))).thenReturn(List.of(keywordResult()));
+        when(keywordSearchService.search(
+                eq(1L), eq("en"), eq(Set.of("inventory")), anyString(), eq(5)))
+                .thenReturn(List.of(keywordResult()));
 
         List<AiRetrievedChunk> results = service.retrieve(request(null, null));
 
         assertEquals(1, results.size());
         verify(chunkRepository, never()).vectorSearch(any(), any());
+    }
+
+    @Test
+    void keywordInfrastructureFailureIsNotMisreportedAsNoMatch() {
+        when(embeddingService.embedQuery(anyString())).thenThrow(
+                new AiEmbeddingException("embedding provider unavailable")
+        );
+        BadSqlGrammarException databaseFailure = new BadSqlGrammarException(
+                "keyword",
+                "select",
+                new SQLException("indeterminate datatype")
+        );
+        when(keywordSearchService.search(
+                eq(1L), eq("en"), eq(Set.of("inventory")), anyString(), eq(5)))
+                .thenThrow(databaseFailure);
+
+        BadSqlGrammarException exception = assertThrows(
+                BadSqlGrammarException.class,
+                () -> service.retrieve(request(null, null))
+        );
+
+        assertEquals(databaseFailure, exception);
+    }
+
+    @Test
+    void expandsArabicQuestionWithRealModelBeforeKeywordFallback() {
+        when(embeddingService.embedQuery(anyString())).thenThrow(
+                new AiEmbeddingException("embedding provider unavailable")
+        );
+        when(modelClient.generate(any())).thenReturn(
+                new AiModelResponse("add product inventory", "deepseek-chat", false, "deepseek", "DS")
+        );
+        when(keywordSearchService.search(
+                eq(1L), eq("ar"), eq(Set.of("inventory")), anyString(), eq(5)))
+                .thenReturn(List.of(keywordResult()));
+
+        AiRetrievalRequest arabicRequest = new AiRetrievalRequest(
+                1L, Set.of(10L), 10L, Set.of("inventory"), "ar", "كيف أضيف منتج؟",
+                5, 0.6, true, true
+        );
+        List<AiRetrievedChunk> results = service.retrieve(arabicRequest);
+
+        assertEquals(1, results.size());
+        verify(modelClient).generate(any());
+        verify(keywordSearchService).search(
+                eq(1L),
+                eq("ar"),
+                eq(Set.of("inventory")),
+                org.mockito.ArgumentMatchers.argThat(query -> query.contains("add product inventory")),
+                eq(5));
     }
 
     @Test
@@ -124,7 +216,7 @@ class AiRetrieverServiceTest {
         );
 
         assertThrows(AiKnowledgeIngestionException.class, () -> service.retrieve(invalid));
-        verify(keywordSearchService, never()).search(any(), anyString(), anyInt());
+        verify(keywordSearchService, never()).search(any(), any(), any(), anyString(), anyInt());
     }
 
     private AiRetrievalRequest request(Integer topK, Double threshold) {

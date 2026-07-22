@@ -6,7 +6,6 @@ import com.example.valueinsoftbackend.ai.provider.AiProviderException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -22,8 +21,6 @@ import reactor.core.publisher.Flux;
 @Primary
 @Slf4j
 public class AiRouterService implements AiModelClient {
-
-    private static final String DEFAULT_FAILURE_MESSAGE = "AI response is temporarily unavailable. Try again shortly.";
 
     private final Map<String, AiProvider> providers;
     private final AiProperties aiProperties;
@@ -53,7 +50,7 @@ public class AiRouterService implements AiModelClient {
                     selectedProvider,
                     "Selected AI provider is not supported.");
             logProviderFailure(selectedProvider, selectedProvider, request, exception, 0, false);
-            return safeFailureResponse(exception, selectedProvider);
+            throw exception;
         }
 
         long startedAt = System.nanoTime();
@@ -62,13 +59,16 @@ public class AiRouterService implements AiModelClient {
                     requestId(),
                     selectedProvider,
                     request == null ? null : request.mode());
-            AiModelResponse response = provider.generate(request).withProvider(provider.getName());
+            AiModelResponse response = requireRealResponse(
+                    provider.generate(request).withProvider(provider.getName()),
+                    provider.getName()
+            );
             logProviderSuccess(selectedProvider, provider.getName(), response.modelName(), startedAt, false);
             return response;
         } catch (AiProviderException exception) {
             logProviderFailure(selectedProvider, provider.getName(), request, exception, startedAt, false);
             if (!shouldFallback(exception, selectedProvider)) {
-                return safeFailureResponse(exception, selectedProvider);
+                throw exception;
             }
             return tryFallback(request, selectedProvider, exception);
         }
@@ -98,8 +98,20 @@ public class AiRouterService implements AiModelClient {
                 if (fallbackResponse != null) {
                     return fallbackResponse;
                 }
+                throw new AiProviderException(
+                        AiProviderException.Category.PROVIDER_BAD_RESPONSE,
+                        selectedProvider,
+                        "The selected AI provider did not return a real model answer."
+                );
             }
-            return response;
+            if (response == null) {
+                throw new AiProviderException(
+                        AiProviderException.Category.PROVIDER_BAD_RESPONSE,
+                        selectedProvider,
+                        "The selected AI provider returned no answer."
+                );
+            }
+            return requireRealResponse(response, selectedProvider);
         } catch (Exception exception) {
             log.warn("Gemini function calling failed with exception. Attempting non-functional provider routing fallback.", exception);
             AiModelResponse fallbackResponse = tryFallbackRouting(request);
@@ -168,7 +180,7 @@ public class AiRouterService implements AiModelClient {
                     selectedProvider,
                     fallbackProviderName,
                     primaryException.getCategory());
-            return safeFailureResponse(primaryException, selectedProvider);
+            throw primaryException;
         }
 
         long startedAt = System.nanoTime();
@@ -178,12 +190,15 @@ public class AiRouterService implements AiModelClient {
                     selectedProvider,
                     fallbackProviderName,
                     primaryException.getCategory());
-            AiModelResponse response = fallbackProvider.generate(request).withProvider(fallbackProvider.getName());
+            AiModelResponse response = requireRealResponse(
+                    fallbackProvider.generate(request).withProvider(fallbackProvider.getName()),
+                    fallbackProvider.getName()
+            );
             logProviderSuccess(selectedProvider, fallbackProvider.getName(), response.modelName(), startedAt, true);
             return response;
         } catch (AiProviderException fallbackException) {
             logProviderFailure(selectedProvider, fallbackProvider.getName(), request, fallbackException, startedAt, true);
-            return safeFailureResponse(fallbackException, fallbackProviderName);
+            throw fallbackException;
         }
     }
 
@@ -197,6 +212,20 @@ public class AiRouterService implements AiModelClient {
         }
         String fallbackProvider = normalizeProvider(aiProperties.getFallbackProvider());
         return !fallbackProvider.isBlank() && !fallbackProvider.equals(selectedProvider);
+    }
+
+    private AiModelResponse requireRealResponse(AiModelResponse response, String providerName) {
+        if (response == null
+                || response.fallback()
+                || response.answer() == null
+                || response.answer().isBlank()) {
+            throw new AiProviderException(
+                    AiProviderException.Category.PROVIDER_BAD_RESPONSE,
+                    providerName,
+                    "The AI provider did not return a real model answer."
+            );
+        }
+        return response;
     }
 
     private String selectedProvider(AiModelRequest request) {
@@ -235,27 +264,6 @@ public class AiRouterService implements AiModelClient {
                 startedAt == 0 ? 0 : latencyMs(startedAt),
                 fallbackUsed,
                 safeDetail(exception));
-    }
-
-    private AiModelResponse safeFailureResponse(AiProviderException exception, String providerName) {
-        String message = exception.getCategory() == AiProviderException.Category.VALIDATION_ERROR
-                || exception.getCategory() == AiProviderException.Category.UNSUPPORTED_PROVIDER
-                ? Optional.ofNullable(exception.getSafeMessage())
-                        .filter(value -> !value.isBlank())
-                        .orElse(DEFAULT_FAILURE_MESSAGE)
-                : DEFAULT_FAILURE_MESSAGE;
-        return new AiModelResponse(message, modelFor(providerName), true, providerName, AiModelResponse.providerCodeFor(providerName));
-    }
-
-    private String modelFor(String providerName) {
-        String normalizedProvider = normalizeProvider(providerName);
-        if ("deepseek".equals(normalizedProvider) && aiProperties.getDeepseek() != null) {
-            return aiProperties.getDeepseek().getModel();
-        }
-        if ("gemini".equals(normalizedProvider) && aiProperties.getGemini() != null) {
-            return aiProperties.getGemini().getModel();
-        }
-        return aiProperties.getModel();
     }
 
     private static String normalizeProvider(String provider) {

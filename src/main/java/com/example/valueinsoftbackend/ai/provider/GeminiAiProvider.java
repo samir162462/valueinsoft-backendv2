@@ -101,17 +101,14 @@ public class GeminiAiProvider implements AiProvider {
     public AiModelResponse generateWithFunctions(AiModelRequest request, List<ToolCallback> functions) {
         if (chatModel == null) {
             log.debug("Gemini model skipped because no ChatModel bean is loaded mode={} configuredModel={}", request.mode(), modelName());
-            return fallbackResponse("AI engine not loaded correctly.");
+            throw new AiProviderException(
+                    AiProviderException.Category.PROVIDER_BAD_RESPONSE,
+                    PROVIDER_NAME,
+                    "Gemini AI engine is not loaded."
+            );
         }
         if (functions == null || functions.isEmpty() || !aiProperties.isFunctionCallingEnabled()) {
-            try {
-                return generate(request);
-            } catch (AiProviderException exception) {
-                log.error("Gemini model call without functions failed category={} detail={}",
-                        exception.getCategory(),
-                        safeDetail(exception));
-                return fallbackResponse("AI response timed out or is temporarily unavailable. Try again shortly.");
-            }
+            return generate(request);
         }
 
         try {
@@ -120,20 +117,25 @@ public class GeminiAiProvider implements AiProvider {
                     functions.size());
             AiModelResponse modelResponse = CompletableFuture.supplyAsync(() -> callModelWithFunctions(request, functions))
                     .orTimeout(Math.max(1, timeoutMs()), TimeUnit.MILLISECONDS)
-                    .exceptionally(exception -> {
-                        log.error("Gemini model call with functions failed category={} detail={}",
-                                exceptionCategory(unwrap(exception)),
-                                safeDetail(unwrap(exception)));
-                        return fallbackResponse("AI response timed out or is temporarily unavailable. Try again shortly.");
-                    })
                     .join();
             usageMeteringContext.record(modelResponse);
             return modelResponse;
         } catch (RuntimeException exception) {
-            log.error("Gemini model call with functions runtime exception category={} detail={}",
-                    exceptionCategory(unwrap(exception)),
-                    safeDetail(unwrap(exception)));
-            return fallbackResponse("AI response timed out or is temporarily unavailable. Try again shortly.");
+            Throwable cause = unwrap(exception);
+            if (cause instanceof TimeoutException) {
+                throw new AiProviderException(
+                        AiProviderException.Category.PROVIDER_TIMEOUT,
+                        PROVIDER_NAME,
+                        "Gemini response timed out.",
+                        cause
+                );
+            }
+            throw new AiProviderException(
+                    AiProviderException.Category.UNKNOWN_ERROR,
+                    PROVIDER_NAME,
+                    "Gemini response is temporarily unavailable.",
+                    cause
+            );
         }
     }
 
@@ -257,10 +259,6 @@ public class GeminiAiProvider implements AiProvider {
         }
     }
 
-    private AiModelResponse fallbackResponse(String message) {
-        return new AiModelResponse(message, modelName(), true, PROVIDER_NAME, AiModelResponse.providerCodeFor(PROVIDER_NAME));
-    }
-
     private int timeoutMs() {
         if (aiProperties.getRequestTimeoutMs() > 0) {
             return aiProperties.getRequestTimeoutMs();
@@ -289,15 +287,4 @@ public class GeminiAiProvider implements AiProvider {
         return current;
     }
 
-    private static String exceptionCategory(Throwable exception) {
-        return exception instanceof TimeoutException ? "timeout" : exception.getClass().getSimpleName();
-    }
-
-    private static String safeDetail(Throwable exception) {
-        String message = exception.getMessage();
-        if (message == null || message.isBlank()) {
-            return exception.getClass().getSimpleName();
-        }
-        return message.length() > 180 ? message.substring(0, 180) + "..." : message;
-    }
 }

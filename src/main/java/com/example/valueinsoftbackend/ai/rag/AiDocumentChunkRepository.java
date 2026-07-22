@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -68,13 +69,17 @@ public class AiDocumentChunkRepository {
                 FROM public.ai_document_chunk c
                 JOIN public.ai_document d ON d.id = c.document_id
                 WHERE d.active = true
-                  AND (:language IS NULL OR c.language = :language)
+                  AND (
+                        CAST(:language AS TEXT) IS NULL
+                        OR c.language = CAST(:language AS TEXT)
+                        OR c.language = 'en'
+                  )
                   AND (c.company_id IS NULL OR c.company_id = :companyId)
                 ORDER BY c.company_id NULLS FIRST, c.title ASC, c.chunk_index ASC
                 LIMIT :limit
                 """, new MapSqlParameterSource()
                 .addValue("companyId", companyId)
-                .addValue("language", language)
+                .addValue("language", language, Types.VARCHAR)
                 .addValue("limit", Math.max(1, Math.min(limit, 500))), ROW_MAPPER);
     }
 

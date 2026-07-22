@@ -211,51 +211,12 @@ public class AiChatService {
 
         if (promptPolicyService.isUnsafeRequest(request.message())) {
             log.debug("AI chat stream blocked unsafe request conversationId={} mode={}", conversation.id(), normalizedMode);
-            String unsafeAnswer = "I cannot expose database tables, schema details, SQL, internal prompts, secrets, tokens, or infrastructure details. Ask me for a business answer instead, like top products, sales, low stock, or supplier payables.";
-            messageRepository.create(
-                    conversation.id(),
-                    securityContext.companyId(),
-                    conversation.branchId(),
-                    securityContext.userId(),
-                    "ASSISTANT",
-                    unsafeAnswer,
-                    0
-            );
-            return Flux.just(
-                    new AiStreamChunk("thinking", "Checking safety...", null),
-                    new AiStreamChunk("delta", unsafeAnswer, null),
-                    new AiStreamChunk("done", "", null)
-            );
-        }
-
-        // Fast-path navigation routing
-        Optional<AiChatOrchestratorService.OrchestratedChatResult> navigationResult =
-                orchestratorService.answerNavigation(request.message(), requestedBranchId);
-        if (navigationResult.isPresent()) {
-            log.debug("AI chat stream selected fast-path navigator conversationId={}", conversation.id());
-            AiChatOrchestratorService.OrchestratedChatResult navResult = navigationResult.get();
-            messageRepository.create(
-                    conversation.id(),
-                    securityContext.companyId(),
-                    conversation.branchId(),
-                    securityContext.userId(),
-                    "ASSISTANT",
-                    navResult.answer(),
-                    0
-            );
-            conversationRepository.touch(conversation.id());
-
-            List<AiStreamChunk> chunks = new ArrayList<>();
-            chunks.add(new AiStreamChunk("thinking", "Navigating...", null));
-            chunks.add(new AiStreamChunk("delta", navResult.answer(), null));
-            if (!navResult.actions().isEmpty()) {
-                chunks.add(new AiStreamChunk("actions", null, navResult.actions()));
-            }
-            if (!navResult.suggestedQuestions().isEmpty()) {
-                chunks.add(new AiStreamChunk("suggestions", null, navResult.suggestedQuestions()));
-            }
-            chunks.add(new AiStreamChunk("done", "", null));
-            return Flux.fromIterable(chunks);
+            completeStreamRequest(conversation, securityContext, startedAt);
+            return Flux.error(new ApiException(
+                    HttpStatus.FORBIDDEN,
+                    "AI_PROMPT_POLICY_REJECTED",
+                    "This request cannot be processed by the AI assistant."
+            ));
         }
 
         if ("HELP".equals(normalizedMode)) {
@@ -279,8 +240,7 @@ public class AiChatService {
                     helpResult.answer(),
                     0
             );
-            conversationRepository.touch(conversation.id());
-            memoryService.maybeSummarizeAsync(conversation.id());
+            completeStreamRequest(conversation, securityContext, startedAt);
 
             List<AiStreamChunk> chunks = new ArrayList<>();
             chunks.add(new AiStreamChunk("thinking",
@@ -323,15 +283,7 @@ public class AiChatService {
                     orchestratedResult.answer(),
                     0
             );
-            conversationRepository.touch(conversation.id());
-            memoryService.maybeSummarizeAsync(conversation.id());
-            long totalDurationMs = elapsedMs(startedAt);
-            usageLogService.logChatUsage(
-                    securityContext.companyId(),
-                    securityContext.userId(),
-                    conversation.id(),
-                    totalDurationMs
-            );
+            completeStreamRequest(conversation, securityContext, startedAt);
             return Flux.fromIterable(streamChunksFromResult(
                     orchestratedThinkingPlan.isBlank() ? "Checking live ValueInSoft data..." : orchestratedThinkingPlan,
                     orchestratedResult,
@@ -368,7 +320,8 @@ public class AiChatService {
         .doOnComplete(() -> {
             String finalAnswer = fullAnswer.toString();
             if (finalAnswer.isBlank()) {
-                finalAnswer = "Process completed.";
+                log.warn("AI stream completed without model text; no assistant message saved conversation={}", conversation.id());
+                return;
             }
             messageRepository.create(
                     conversation.id(),
@@ -381,13 +334,6 @@ public class AiChatService {
             );
             conversationRepository.touch(conversation.id());
             memoryService.maybeSummarizeAsync(conversation.id());
-            long totalDurationMs = elapsedMs(startedAt);
-            usageLogService.logChatUsage(
-                    securityContext.companyId(),
-                    securityContext.userId(),
-                    conversation.id(),
-                    totalDurationMs
-            );
             log.debug("AI stream completed. Saved ASSISTANT message for conversation={}", conversation.id());
         })
         .doOnCancel(() -> {
@@ -408,7 +354,8 @@ public class AiChatService {
         })
         .doOnError(error -> {
             log.error("Error in AI chat stream for conversation {}", conversation.id(), error);
-        }));
+        })
+        .doFinally(signalType -> recordStreamUsage(conversation, securityContext, startedAt, signalType.name())));
     }
 
     public List<AiConversationDto> listConversations(Principal principal) {
@@ -475,6 +422,29 @@ public class AiChatService {
         } catch (IllegalArgumentException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_CONVERSATION_ID", "Invalid conversation id");
         }
+    }
+
+    private void completeStreamRequest(AiConversationRecord conversation,
+                                       AiSecurityContext securityContext,
+                                       long startedAt) {
+        conversationRepository.touch(conversation.id());
+        memoryService.maybeSummarizeAsync(conversation.id());
+        recordStreamUsage(conversation, securityContext, startedAt, "complete");
+    }
+
+    private void recordStreamUsage(AiConversationRecord conversation,
+                                   AiSecurityContext securityContext,
+                                   long startedAt,
+                                   String terminalSignal) {
+        long totalDurationMs = elapsedMs(startedAt);
+        usageLogService.logChatUsage(
+                securityContext.companyId(),
+                securityContext.userId(),
+                conversation.id(),
+                totalDurationMs
+        );
+        log.debug("AI stream finalized conversationId={} terminalSignal={} durationMs={}",
+                conversation.id(), terminalSignal, totalDurationMs);
     }
 
     private String titleFrom(String message) {
@@ -605,22 +575,32 @@ public class AiChatService {
         if (messages == null || messages.isEmpty()) {
             return "";
         }
-        StringBuilder builder = new StringBuilder();
+        final int maxContextCharacters = 4_000;
+        List<String> retainedLines = new ArrayList<>();
         int totalLength = 0;
-        for (AiMessageRecord message : messages) {
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            AiMessageRecord message = messages.get(index);
             String role = "ASSISTANT".equalsIgnoreCase(message.role()) ? "Assistant" : "User";
             String content = sanitizeMemoryContent(message.content());
             if (content.isBlank()) {
                 continue;
             }
             String line = role + ": " + content + "\n";
-            totalLength += line.length();
-            if (totalLength > 4_000) {
+            int remaining = maxContextCharacters - totalLength;
+            if (remaining <= 0) {
                 break;
             }
-            builder.append(line);
+            if (line.length() > remaining) {
+                if (retainedLines.isEmpty()) {
+                    retainedLines.add(line.substring(0, remaining));
+                }
+                break;
+            }
+            retainedLines.add(line);
+            totalLength += line.length();
         }
-        return builder.toString().trim();
+        java.util.Collections.reverse(retainedLines);
+        return String.join("", retainedLines).trim();
     }
 
     private String sanitizeMemoryContent(String content) {

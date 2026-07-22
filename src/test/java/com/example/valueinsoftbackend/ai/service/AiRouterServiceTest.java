@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class AiRouterServiceTest {
 
@@ -97,7 +97,7 @@ class AiRouterServiceTest {
     }
 
     @Test
-    void fallbackDoesNotTriggerForValidationOrUnsupportedProvider() {
+    void validationAndUnsupportedProviderFailuresAreErrorsNotAnswers() {
         for (AiProviderException.Category category : List.of(
                 AiProviderException.Category.VALIDATION_ERROR,
                 AiProviderException.Category.UNSUPPORTED_PROVIDER)) {
@@ -107,12 +107,39 @@ class AiRouterServiceTest {
             FakeProvider deepseek = FakeProvider.success("deepseek", "fallback-answer", "deepseek-chat");
             AiRouterService router = new AiRouterService(List.of(gemini, deepseek), properties, null);
 
-            AiModelResponse response = router.generate(request);
+            AiProviderException exception = assertThrows(AiProviderException.class, () -> router.generate(request));
 
-            assertTrue(response.fallback());
+            assertEquals(category, exception.getCategory());
             assertEquals(1, gemini.calls);
             assertEquals(0, deepseek.calls);
         }
+    }
+
+    @Test
+    void providerOutageWithoutFallbackIsAnErrorNotACannedAnswer() {
+        AiProperties properties = properties("gemini", false);
+        FakeProvider gemini = FakeProvider.failure("gemini", AiProviderException.Category.PROVIDER_TIMEOUT);
+        AiRouterService router = new AiRouterService(List.of(gemini), properties, null);
+
+        AiProviderException exception = assertThrows(AiProviderException.class, () -> router.generate(request));
+
+        assertEquals(AiProviderException.Category.PROVIDER_TIMEOUT, exception.getCategory());
+        assertEquals(1, gemini.calls);
+    }
+
+    @Test
+    void providerMarkedFallbackResponseIsRejectedAsAnError() {
+        AiProperties properties = properties("gemini", false);
+        FakeProvider gemini = new FakeProvider(
+                "gemini",
+                new AiModelResponse("prepared fallback", "gemini-test", true, "gemini", "GEM"),
+                null
+        );
+        AiRouterService router = new AiRouterService(List.of(gemini), properties, null);
+
+        AiProviderException exception = assertThrows(AiProviderException.class, () -> router.generate(request));
+
+        assertEquals(AiProviderException.Category.PROVIDER_BAD_RESPONSE, exception.getCategory());
     }
 
     @Test
