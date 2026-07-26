@@ -134,7 +134,8 @@ public class SecurityConfiguration {
                 "Accept",
                 "Origin",
                 "X-Session-Id",
-                "X-Client-Channel"));
+                "X-Client-Channel",
+                "Last-Event-ID"));
         configuration.setExposedHeaders(List.of("Authorization"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
