@@ -221,6 +221,9 @@ public class DbCompany {
                 SQLPosReceiptSequences(schemaName, databaseOwner)
         ));
         statements.addAll(SQLModernInventoryFoundation(schemaName, companyId, databaseOwner));
+        // Notification Center tenant tables and indexes are Flyway-owned (V173/V174).
+        // The database function is the single source of truth for both migrated and new tenants.
+        statements.add("SELECT public.notification_bootstrap_tenant('" + schemaName + "')");
         // Client trade-in foundation (party/condition columns, payable subledger,
         // payments, condition audit). Defined in V133; safe to re-run.
         statements.add("SELECT public.ensure_client_tradein_foundation_for_tenant('" + schemaName + "', " + companyId + ")");

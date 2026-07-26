@@ -27,12 +27,17 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
         ensurePasswordResetRequiredColumn();
 
         List<String> tenantSchemas = jdbcTemplate.queryForList(
-                "SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'c\\_%' ESCAPE '\\'",
+                "SELECT schema_name FROM information_schema.schemata " +
+                        "WHERE schema_name ~ '^c_[0-9]+$' ORDER BY schema_name",
                 String.class
         );
+        boolean notificationBootstrapAvailable = notificationBootstrapAvailable();
 
         for (String schemaName : tenantSchemas) {
             widenUsersPasswordColumn(schemaName);
+            if (notificationBootstrapAvailable) {
+                bootstrapNotificationTenant(schemaName);
+            }
         }
     }
 
@@ -78,5 +83,22 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
 
         jdbcTemplate.execute("ALTER TABLE public.users ADD COLUMN password_reset_required BOOLEAN NOT NULL DEFAULT FALSE");
         log.info("Added public.users.password_reset_required for admin password reset lifecycle");
+    }
+
+    private void bootstrapNotificationTenant(String schemaName) {
+        String validatedSchema = TenantSqlIdentifiers.requireSchemaName(schemaName);
+        jdbcTemplate.execute("SELECT public.notification_bootstrap_tenant('" + validatedSchema + "')");
+        log.debug("Verified Notification Center schema objects for {}", validatedSchema);
+    }
+
+    private boolean notificationBootstrapAvailable() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.routines " +
+                        "WHERE routine_schema = ? AND routine_name = ?",
+                Integer.class,
+                "public",
+                "notification_bootstrap_tenant"
+        );
+        return count != null && count > 0;
     }
 }

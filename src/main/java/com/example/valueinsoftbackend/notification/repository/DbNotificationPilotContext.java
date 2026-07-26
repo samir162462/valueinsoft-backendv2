@@ -43,13 +43,25 @@ public class DbNotificationPilotContext {
                 : principalName.trim();
         List<Integer> ids = jdbc.query(
                 """
-                SELECT "userId"
+                SELECT id AS "userId"
                 FROM public.users
                 WHERE "userName" = :userName
                 """,
                 new MapSqlParameterSource("userName", normalized),
                 (rs, rowNum) -> rs.getInt("userId"));
         return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    public String companyCurrency(int companyId) {
+        List<String> currencies = jdbc.query(
+                """
+                SELECT currency
+                FROM public."Company"
+                WHERE id = :companyId
+                """,
+                new MapSqlParameterSource("companyId", companyId),
+                (rs, rowNum) -> rs.getString("currency"));
+        return currencies.isEmpty() ? null : currencies.get(0);
     }
 
     public List<LowStockProduct> lowStockProducts(int companyId,

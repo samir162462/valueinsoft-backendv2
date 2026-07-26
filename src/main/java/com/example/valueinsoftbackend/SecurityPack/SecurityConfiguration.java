@@ -75,7 +75,15 @@ public class SecurityConfiguration {
                                 "/actuator/health/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html"
+                                "/swagger-ui.html",
+                                // SSE stream: the browser's EventSource cannot send an
+                                // Authorization header, so this endpoint authenticates
+                                // itself with a single-use 30-second ticket redeemed in
+                                // NotificationStreamController. It is NOT unauthenticated —
+                                // the ticket is bound to one user, company and session, and
+                                // the capability is re-checked before the stream opens.
+                                // Only GET is exempted; /stream/ticket stays bearer-only.
+                                "/api/v1/notifications/stream"
                         ).permitAll()
                         .anyRequest().authenticated()
                 );
@@ -119,7 +127,14 @@ public class SecurityConfiguration {
 
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type", "Accept", "Origin"));
+        configuration.setAllowedHeaders(Arrays.asList(
+                "Authorization",
+                "Cache-Control",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Session-Id",
+                "X-Client-Channel"));
         configuration.setExposedHeaders(List.of("Authorization"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -18,6 +18,7 @@ import com.example.valueinsoftbackend.Model.Request.OrderPeriodRequest;
 import com.example.valueinsoftbackend.loyalty.dto.LoyaltyRecordedEarn;
 import com.example.valueinsoftbackend.loyalty.dto.LoyaltyReversalResult;
 import com.example.valueinsoftbackend.loyalty.service.LoyaltyService;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import com.example.valueinsoftbackend.util.RequestTimestampParser;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.http.HttpStatus;
@@ -43,6 +44,7 @@ public class OrderService {
     private final DbBranchSettings dbBranchSettings;
     private final LoyaltyService loyaltyService;
     private ArCreditNoteService arCreditNoteService;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     public OrderService(DbPosOrder dbPosOrder,
             com.example.valueinsoftbackend.DatabaseRequests.DbPOS.DbPosShiftPeriod dbPosShiftPeriod,
@@ -61,6 +63,12 @@ public class OrderService {
     @Autowired
     void setArCreditNoteService(ArCreditNoteService arCreditNoteService) {
         this.arCreditNoteService = arCreditNoteService;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     @Transactional
@@ -110,6 +118,9 @@ public class OrderService {
         }
 
         enqueueFinancePosSaleAfterCommit(companyId, order, result);
+        if (notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterPosSale(companyId, order, result);
+        }
 
         log.info("Saved order {} for company {} branch {} with {} items", result.orderId(), companyId,
                 order.getBranchId(), order.getOrderDetails().size());
@@ -289,6 +300,10 @@ public class OrderService {
                 inventoryMovementId,
                 cashMovementId,
                 returnTime);
+        if (!context.hasOtherActiveItems() && notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterOrderVoided(
+                    companyId, request.getBranchId(), context);
+        }
 
         log.info(
                 "Bounced back order detail {} for company {} branch {} to {}. Reason: {}",

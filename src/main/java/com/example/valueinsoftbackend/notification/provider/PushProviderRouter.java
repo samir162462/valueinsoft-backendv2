@@ -93,6 +93,9 @@ public class PushProviderRouter {
                 breaker.success();
             }
             return response;
+        } catch (RuntimeException exception) {
+            breaker.failure();
+            return PushProviderResponse.transport(exception, Duration.ZERO);
         } finally {
             plaintext = null;
             inflight.arriveAndDeregister();

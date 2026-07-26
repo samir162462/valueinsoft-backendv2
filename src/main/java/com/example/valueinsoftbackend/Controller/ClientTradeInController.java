@@ -3,8 +3,10 @@ package com.example.valueinsoftbackend.Controller;
 import com.example.valueinsoftbackend.Model.Request.ClientTradeInPaymentRequest;
 import com.example.valueinsoftbackend.Service.client.ClientTradeInService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -32,11 +34,18 @@ public class ClientTradeInController {
 
     private final ClientTradeInService clientTradeInService;
     private final AuthorizationService authorizationService;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     public ClientTradeInController(ClientTradeInService clientTradeInService,
                                    AuthorizationService authorizationService) {
         this.clientTradeInService = clientTradeInService;
         this.authorizationService = authorizationService;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     @GetMapping("/{companyId}/{clientId}/summary")
@@ -87,6 +96,16 @@ public class ClientTradeInController {
                 principal.getName(), companyId, body.getBranchId(), "clients.payment.create");
         Map<String, Object> response = clientTradeInService.payClient(companyId, principal.getName(), body);
         boolean replay = Boolean.TRUE.equals(response.get("idempotentReplay"));
+        if (notificationPilotIntegrationService != null && response.get("paymentId") instanceof Number paymentId) {
+            notificationPilotIntegrationService.afterFinancePaymentSent(
+                    companyId,
+                    body.getBranchId(),
+                    paymentId.longValue(),
+                    "client_trade_in_payment",
+                    body.getAmount(),
+                    null,
+                    principal.getName());
+        }
         return ResponseEntity.status(replay ? HttpStatus.OK : HttpStatus.CREATED).body(response);
     }
 }

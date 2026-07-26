@@ -2,9 +2,11 @@ package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Model.HR.Employee;
 import com.example.valueinsoftbackend.Model.HR.EmployeeShift;
+import com.example.valueinsoftbackend.Model.HR.AnnualLeaveRequestCreateRequest;
 import com.example.valueinsoftbackend.Model.HR.Shift;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.HRService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -46,6 +48,19 @@ public class HRController {
     @GetMapping("/{companyId}/my-employee-record")
     public ResponseEntity<Employee> getMyEmployeeRecord(@PathVariable int companyId, Principal principal) {
         return ResponseEntity.ok(hrService.getEmployeeByUsername(companyId, principal.getName()));
+    }
+
+    @PostMapping("/{companyId}/{branchId}/leave-requests")
+    public ResponseEntity<Long> createAnnualLeaveRequest(
+            @PathVariable int companyId,
+            @PathVariable int branchId,
+            @Valid @RequestBody AnnualLeaveRequestCreateRequest request,
+            Principal principal) {
+        authorizationService.assertAuthenticatedCapability(
+                principal.getName(), companyId, branchId, "hr.leave.self");
+        return ResponseEntity.ok(
+                hrService.createAnnualLeaveRequest(
+                        companyId, branchId, request, principal.getName()));
     }
 
     @GetMapping("/{companyId}/{branchId}/shifts")

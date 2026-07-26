@@ -15,8 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -97,8 +99,48 @@ public class NotificationPilotIntegrationService {
                     shiftId,
                     actorUserId,
                     Long.toString(shiftId),
+                    displayName(actorName),
                     context.branchName(companyId, branchId));
         });
+    }
+
+    public void afterShiftOpened(int companyId, int branchId, long shiftId, String actorName) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        afterCommit("opened shift " + shiftId, () -> {
+            Integer actorUserId = context.userId(actorName);
+            if (actorUserId == null) {
+                log.warn("Shift {} opened, but notification actor '{}' could not be resolved",
+                        shiftId, actorName);
+                return;
+            }
+            producer.shiftOpened(
+                    companyId,
+                    branchId,
+                    shiftId,
+                    actorUserId,
+                    Long.toString(shiftId),
+                    displayName(actorName),
+                    context.branchName(companyId, branchId));
+        });
+    }
+
+    /**
+     * The principal name as a person would read it.
+     *
+     * <p>Principals arrive as {@code "username : something"} in places, which is why
+     * {@code DbNotificationPilotContext.userId} splits on that separator before looking the
+     * user up. The same normalisation is applied here so the notification says "sam closed
+     * shift 412" rather than "sam : 42 closed shift 412".
+     */
+    private static String displayName(String principalName) {
+        if (principalName == null || principalName.isBlank()) {
+            return null;
+        }
+        return principalName.contains(" : ")
+                ? principalName.split(" : ", 2)[0].trim()
+                : principalName.trim();
     }
 
     public void afterOrderVoided(int companyId,
@@ -138,6 +180,78 @@ public class NotificationPilotIntegrationService {
                     candidate.getDueAmount(),
                     dueDate);
         });
+    }
+
+    public void afterFinancePaymentReceived(int companyId,
+                                            int branchId,
+                                            long transactionId,
+                                            String sourceType,
+                                            BigDecimal amount,
+                                            String currencyCode,
+                                            String actorName) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        afterCommit("received payment " + sourceType + ":" + transactionId, () -> {
+            String actorLabel = actorLabel(actorName);
+            producer.financePaymentReceived(
+                    companyId,
+                    branchId,
+                    transactionId,
+                    context.userId(actorName),
+                    sourceType,
+                    normalizedAmount(amount),
+                    resolveCurrency(companyId, currencyCode),
+                    actorLabel);
+        });
+    }
+
+    public void afterFinancePaymentSent(int companyId,
+                                        int branchId,
+                                        long transactionId,
+                                        String sourceType,
+                                        BigDecimal amount,
+                                        String currencyCode,
+                                        String actorName) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        afterCommit("sent payment " + sourceType + ":" + transactionId, () -> {
+            String actorLabel = actorLabel(actorName);
+            producer.financePaymentSent(
+                    companyId,
+                    branchId,
+                    transactionId,
+                    context.userId(actorName),
+                    sourceType,
+                    normalizedAmount(amount),
+                    resolveCurrency(companyId, currencyCode),
+                    actorLabel);
+        });
+    }
+
+    public void afterPosPaymentReceived(int companyId,
+                                        int branchId,
+                                        long orderId,
+                                        String transactionId,
+                                        BigDecimal amount,
+                                        String settlementStatus,
+                                        String actorName) {
+        if (!properties.isEnabled() || amount == null || amount.signum() <= 0) {
+            return;
+        }
+        afterCommit("POS payment for order " + orderId, () -> producer.posPaymentReceived(
+                companyId,
+                branchId,
+                orderId,
+                context.userId(actorName),
+                transactionId == null || transactionId.isBlank()
+                        ? "POS-" + orderId
+                        : transactionId.trim(),
+                normalizedAmount(amount),
+                resolveCurrency(companyId, null),
+                actorLabel(actorName),
+                normalizedSettlementStatus(settlementStatus)));
     }
 
     public void afterLeaveRequested(long companyId,
@@ -202,6 +316,42 @@ public class NotificationPilotIntegrationService {
                     companyId, branchId, DEFAULT_LOW_STOCK_THRESHOLD, exception.getMessage());
         }
         return DEFAULT_LOW_STOCK_THRESHOLD;
+    }
+
+    private String resolveCurrency(int companyId, String requestedCurrency) {
+        if (requestedCurrency != null && !requestedCurrency.isBlank()) {
+            return requestedCurrency.trim().toUpperCase(Locale.ROOT);
+        }
+        try {
+            String companyCurrency = context.companyCurrency(companyId);
+            return companyCurrency == null || companyCurrency.isBlank()
+                    ? "N/A"
+                    : companyCurrency.trim().toUpperCase(Locale.ROOT);
+        } catch (RuntimeException exception) {
+            log.warn("Could not resolve currency for company {}: {}", companyId, exception.getMessage());
+            return "N/A";
+        }
+    }
+
+    private BigDecimal normalizedAmount(BigDecimal amount) {
+        return amount == null ? BigDecimal.ZERO : amount.stripTrailingZeros();
+    }
+
+    private String actorLabel(String actorName) {
+        if (actorName == null || actorName.isBlank()) {
+            return "Unknown user";
+        }
+        String normalized = actorName.contains(" : ")
+                ? actorName.split(" : ", 2)[0]
+                : actorName;
+        return normalized.trim();
+    }
+
+    private String normalizedSettlementStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "RECORDED";
+        }
+        return status.trim().toUpperCase(Locale.ROOT);
     }
 
     private void afterCommit(String description, Runnable notificationWork) {

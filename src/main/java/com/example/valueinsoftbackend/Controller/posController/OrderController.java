@@ -6,9 +6,12 @@ import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.Model.Request.BounceBackOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.CreateOrderRequest;
 import com.example.valueinsoftbackend.Model.Request.OrderPeriodRequest;
+import com.example.valueinsoftbackend.Model.Response.CreateOrderResult;
+import com.example.valueinsoftbackend.Service.finance.PaymentTypeClassifier;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.security.TenantScopeGuard;
 import com.example.valueinsoftbackend.Service.OrderService;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.ArrayList;
 
@@ -28,6 +32,7 @@ public class OrderController {
     private final OrderService orderService;
     private final AuthorizationService authorizationService;
     private final TenantScopeGuard tenantScopeGuard;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     @Autowired
     public OrderController(DbPosOrder dbPosOrder,
@@ -38,6 +43,12 @@ public class OrderController {
         this.orderService = orderService;
         this.authorizationService = authorizationService;
         this.tenantScopeGuard = tenantScopeGuard;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     @PostMapping("/{companyId}/saveOrder")
@@ -52,7 +63,9 @@ public class OrderController {
                 newOrderShiftIn.branchId(),
                 "pos.sale.create"
         );
-        return ResponseEntity.status(201).body(orderService.createOrder(newOrderShiftIn, scope.companyId()).orderId());
+        CreateOrderResult result = orderService.createOrder(newOrderShiftIn, scope.companyId());
+        notifyPosPayment(scope.companyId(), newOrderShiftIn, result, principal.getName());
+        return ResponseEntity.status(201).body(result.orderId());
     }
 
     @PostMapping("/v2/pos/{companyId}/orders")
@@ -68,8 +81,34 @@ public class OrderController {
                 newOrderShiftIn.branchId(),
                 "pos.sale.create"
         );
-        com.example.valueinsoftbackend.Model.Response.CreateOrderResult result = orderService.createOrder(newOrderShiftIn, scope.companyId());
+        CreateOrderResult result = orderService.createOrder(newOrderShiftIn, scope.companyId());
+        notifyPosPayment(scope.companyId(), newOrderShiftIn, result, principal.getName());
         return ResponseEntity.status(result.idempotencyHit() ? 200 : 201).body(result);
+    }
+
+    private void notifyPosPayment(int companyId,
+                                  CreateOrderRequest request,
+                                  CreateOrderResult result,
+                                  String actorName) {
+        if (notificationPilotIntegrationService == null || result.idempotencyHit()) {
+            return;
+        }
+        boolean receivable = PaymentTypeClassifier.classify(request.orderType()).category()
+                == PaymentTypeClassifier.Category.RECEIVABLE;
+        BigDecimal amount = receivable
+                ? request.paidNowAmount()
+                : BigDecimal.valueOf(request.orderTotal());
+        if (amount == null || amount.signum() <= 0) {
+            return;
+        }
+        notificationPilotIntegrationService.afterPosPaymentReceived(
+                companyId,
+                request.branchId(),
+                result.orderId(),
+                result.receiptNumber(),
+                amount,
+                receivable ? "PARTIAL" : "FULL",
+                actorName);
     }
 
     @PostMapping(path = {"/getOrders", "/{companyId}/getOrders"})
@@ -149,4 +188,3 @@ public class OrderController {
         return orderService.bounceBackProduct(data, scope.companyId());
     }
 }
-

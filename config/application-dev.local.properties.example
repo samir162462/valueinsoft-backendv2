@@ -32,3 +32,38 @@ vls.ai.deepseek.api-key=CHANGE_ME
 
 # WhatsApp token encryption key (32 bytes)
 vls.whatsapp.encryption-key=CHANGE_ME_32_BYTE_KEY
+
+# =====================================================================
+# Notification Center  (NOTIFICATION_CENTER_PLAN.md)
+# =====================================================================
+# Master switch. Leave false until Phase 2 workers exist; turning it on with no
+# credentials configured is harmless (providers stay disabled) but pointless.
+valueinsoft.notification.enabled=false
+
+# --- FCM HTTP v1 -----------------------------------------------------
+# Create a service account with the "Firebase Cloud Messaging API Admin" role,
+# download its JSON key, then base64 it as a single line:
+#   Windows : certutil -encodehex -f service-account.json out.b64 0x40000001
+#   macOS   : base64 -i service-account.json | tr -d '\n'
+#   Linux   : base64 -w0 service-account.json
+valueinsoft.notification.fcm.enabled=false
+valueinsoft.notification.fcm.project-id=CHANGE_ME
+valueinsoft.notification.fcm.service-account-json-base64=CHANGE_ME_BASE64
+valueinsoft.notification.fcm.credential-expires-at=
+
+# --- APNs HTTP/2 -----------------------------------------------------
+# Apple Developer > Keys > new key with "Apple Push Notifications service (APNs)".
+# The .p8 downloads once and cannot be re-downloaded. Base64 it the same way.
+valueinsoft.notification.apns.enabled=false
+valueinsoft.notification.apns.team-id=CHANGE_ME_10_CHARS
+valueinsoft.notification.apns.key-id=CHANGE_ME_10_CHARS
+valueinsoft.notification.apns.private-key-base64=CHANGE_ME_BASE64
+valueinsoft.notification.apns.credential-probe-topic=com.example.valueinsoft
+
+# --- Push-token encryption -------------------------------------------
+# Push tokens are credentials: encrypted at rest, searchable only by peppered hash.
+# Generate a 32-byte key and a pepper:
+#   openssl rand -base64 32
+valueinsoft.notification.cipher.active-key-id=k1
+valueinsoft.notification.cipher.keys.k1=CHANGE_ME_BASE64_32_BYTES
+valueinsoft.notification.cipher.token-hash-pepper=CHANGE_ME_BASE64_32_BYTES

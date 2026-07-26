@@ -12,10 +12,13 @@ import com.example.valueinsoftbackend.Model.HR.AttendanceMonthEmployee;
 import com.example.valueinsoftbackend.Model.HR.AttendanceMonthResponse;
 import com.example.valueinsoftbackend.Model.HR.AttendanceSelfStatus;
 import com.example.valueinsoftbackend.Model.HR.AnnualLeavePeriod;
+import com.example.valueinsoftbackend.Model.HR.AnnualLeaveRequestCreateRequest;
 import com.example.valueinsoftbackend.Model.HR.Employee;
 import com.example.valueinsoftbackend.Model.HR.EmployeeShift;
 import com.example.valueinsoftbackend.Model.HR.Shift;
 import com.example.valueinsoftbackend.Model.User;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -47,12 +50,19 @@ public class HRService {
     private final DbUsers dbUsers;
     private final DbBranch dbBranch;
     private final PasswordEncoder passwordEncoder;
+    private NotificationPilotIntegrationService notificationPilot;
 
     public HRService(DbHR dbHR, DbUsers dbUsers, DbBranch dbBranch, PasswordEncoder passwordEncoder) {
         this.dbHR = dbHR;
         this.dbUsers = dbUsers;
         this.dbBranch = dbBranch;
         this.passwordEncoder = passwordEncoder;
+    }
+
+    @Autowired(required = false)
+    public void configureLeaveRequestNotifications(
+            NotificationPilotIntegrationService notificationPilot) {
+        this.notificationPilot = notificationPilot;
     }
 
     @Transactional
@@ -162,6 +172,48 @@ public class HRService {
     public List<Shift> getShifts(int companyId, int branchId, String actor) {
         ensureBranchWorkspace(companyId, branchId, actor);
         return dbHR.getAllShifts(companyId, branchId);
+    }
+
+    @Transactional
+    public long createAnnualLeaveRequest(int companyId,
+                                         int branchId,
+                                         AnnualLeaveRequestCreateRequest request,
+                                         String actor) {
+        assertBranchBelongsToCompany(companyId, branchId);
+        if (request == null || request.startDate() == null || request.endDate() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "LEAVE_DATES_REQUIRED",
+                    "Leave start and end dates are required");
+        }
+        if (request.endDate().isBefore(request.startDate())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "LEAVE_DATES_INVALID",
+                    "Leave end date cannot be before its start date");
+        }
+        String notes = request.notes() == null || request.notes().isBlank()
+                ? null
+                : request.notes().trim();
+        if (notes != null && notes.length() > 2000) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "LEAVE_NOTES_TOO_LONG",
+                    "Leave notes cannot exceed 2000 characters");
+        }
+
+        User user = resolveRequiredUser(actor);
+        Employee employee = dbHR.getEmployeeByUser(companyId, branchId, user.getUserId());
+        if (employee == null || !employee.isActive()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EMPLOYEE_NOT_ACTIVE",
+                    "The authenticated user is not an active employee in this branch");
+        }
+
+        long requestId = dbHR.addAnnualLeaveRequest(
+                companyId,
+                branchId,
+                user.getUserId(),
+                request.startDate(),
+                request.endDate(),
+                notes,
+                actor);
+        publishLeaveRequestNotification(
+                companyId, branchId, requestId, user.getUserId(), employee);
+        return requestId;
     }
 
     @Transactional
@@ -803,6 +855,29 @@ public class HRService {
         User user = resolveUser(principalName);
         if (user == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "Authenticated user was not found");
         return user;
+    }
+
+    private void publishLeaveRequestNotification(int companyId,
+                                                 int branchId,
+                                                 long requestId,
+                                                 int actorUserId,
+                                                 Employee employee) {
+        if (notificationPilot == null) {
+            return;
+        }
+        String employeeName = (employee.getFirstName() == null ? "" : employee.getFirstName().trim())
+                + (employee.getLastName() == null || employee.getLastName().isBlank()
+                ? ""
+                : " " + employee.getLastName().trim());
+        if (employeeName.isBlank()) {
+            employeeName = Integer.toString(actorUserId);
+        }
+        notificationPilot.afterLeaveRequested(
+                companyId,
+                branchId,
+                requestId,
+                actorUserId,
+                employeeName);
     }
 
     private User resolveUser(String principalName) {

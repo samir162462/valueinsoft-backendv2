@@ -34,6 +34,20 @@ public class NotificationAudienceResolver {
         return count == null ? 0 : count;
     }
 
+    public int countBounded(long companyId,
+                            Integer branchId,
+                            String typeKey,
+                            String requiredCapability,
+                            int limit) {
+        if (!hasExplicitRoute(companyId, typeKey)) {
+            return countBounded(companyId, branchId, requiredCapability, limit);
+        }
+        String sql = "SELECT COUNT(*) FROM (" + routedAudienceSql() + " LIMIT ?) bounded";
+        Integer count = jdbc.queryForObject(sql, Integer.class,
+                companyId, typeKey, branchId, branchId, 0, limit);
+        return count == null ? 0 : count;
+    }
+
     public List<AudienceMember> fetchBatch(long companyId,
                                            Integer branchId,
                                            String requiredCapability,
@@ -58,6 +72,81 @@ public class NotificationAudienceResolver {
                 companyId, requiredCapability, branchId,
                 companyId, requiredCapability, branchId,
                 cursor, limit);
+    }
+
+    public List<AudienceMember> fetchBatch(long companyId,
+                                           Integer branchId,
+                                           String typeKey,
+                                           String requiredCapability,
+                                           int cursor,
+                                           int limit) {
+        if (!hasExplicitRoute(companyId, typeKey)) {
+            return fetchBatch(companyId, branchId, requiredCapability, cursor, limit);
+        }
+        String sql = """
+                SELECT audience.id,
+                       COALESCE((
+                           SELECT nd.locale FROM public.notification_device nd
+                           WHERE nd.user_id = audience.id AND nd.company_id = ?
+                             AND nd.status = 'active'
+                           ORDER BY nd.last_seen_at DESC, nd.device_id DESC LIMIT 1
+                       ), 'en') AS locale
+                FROM (%s LIMIT ?) audience
+                """.formatted(routedAudienceSql());
+        return jdbc.query(sql, (rs, rowNum) ->
+                        new AudienceMember(rs.getInt("id"), rs.getString("locale")),
+                companyId,
+                companyId, typeKey, branchId, branchId, cursor, limit);
+    }
+
+    /**
+     * Notification routing controls who receives an event. It intentionally does not grant
+     * the event's underlying module capability; deep-link endpoints still enforce that.
+     */
+    public boolean canReceive(long companyId,
+                              int userId,
+                              Integer branchId,
+                              String typeKey,
+                              String requiredCapability) {
+        if (!hasExplicitRoute(companyId, typeKey)) {
+            return userHasCapability(companyId, userId, branchId, requiredCapability);
+        }
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM public.notification_company_route_target target
+                    WHERE target.company_id = ?
+                      AND target.type_key = ?
+                      AND EXISTS (
+                        SELECT 1
+                        FROM public.tenant_role_assignments membership
+                        WHERE membership.tenant_id = target.company_id
+                          AND membership.user_id = ?
+                          AND membership.status = 'active'
+                      )
+                      AND (
+                        (target.target_kind = 'user' AND target.user_id = ?)
+                        OR
+                        (
+                          target.target_kind = 'role'
+                          AND EXISTS (
+                            SELECT 1
+                            FROM public.tenant_role_assignments a
+                            WHERE a.tenant_id = target.company_id
+                              AND a.user_id = ?
+                              AND a.role_id = target.role_id
+                              AND a.status = 'active'
+                              AND (
+                                CAST(? AS INTEGER) IS NULL
+                                OR a.scope_type = 'company'
+                                OR a.scope_branch_id = ?
+                              )
+                          )
+                        )
+                      )
+                )
+                """, Boolean.class,
+                companyId, typeKey, userId, userId, userId, branchId, branchId));
     }
 
     public boolean userHasCapability(long companyId,
@@ -136,6 +225,55 @@ public class NotificationAudienceResolver {
                       )
                     )
                   )
+                  AND u.id > ?
+                ORDER BY u.id
+                """;
+    }
+
+    private boolean hasExplicitRoute(long companyId, String typeKey) {
+        return typeKey != null && Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM public.notification_company_route
+                    WHERE company_id = ? AND type_key = ?
+                )
+                """, Boolean.class, companyId, typeKey));
+    }
+
+    private static String routedAudienceSql() {
+        return """
+                SELECT DISTINCT u.id
+                FROM public.users u
+                JOIN public.tenant_role_assignments membership
+                  ON membership.user_id = u.id
+                 AND membership.tenant_id = ?
+                 AND membership.status = 'active'
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM public.notification_company_route_target target
+                    WHERE target.company_id = membership.tenant_id
+                      AND target.type_key = ?
+                      AND (
+                        (target.target_kind = 'user' AND target.user_id = u.id)
+                        OR
+                        (
+                          target.target_kind = 'role'
+                          AND EXISTS (
+                            SELECT 1
+                            FROM public.tenant_role_assignments role_assignment
+                            WHERE role_assignment.tenant_id = target.company_id
+                              AND role_assignment.user_id = u.id
+                              AND role_assignment.role_id = target.role_id
+                              AND role_assignment.status = 'active'
+                              AND (
+                                CAST(? AS INTEGER) IS NULL
+                                OR role_assignment.scope_type = 'company'
+                                OR role_assignment.scope_branch_id = ?
+                              )
+                          )
+                        )
+                      )
+                )
                   AND u.id > ?
                 ORDER BY u.id
                 """;

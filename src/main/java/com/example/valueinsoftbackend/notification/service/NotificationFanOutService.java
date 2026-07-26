@@ -118,7 +118,7 @@ public class NotificationFanOutService {
                 jdbc.execute("SET LOCAL statement_timeout = "
                         + properties.getFanOut().getProbeTimeoutMs());
                 int bounded = audience.countBounded(companyId, event.branchId(),
-                        type.requiredCapability(), threshold + 1);
+                        event.typeKey(), type.requiredCapability(), threshold + 1);
                 String mode = bounded <= threshold ? SINGLE : CURSOR;
                 jobs.decideMode(job, mode, bounded);
                 return Optional.of(new NotificationFanOutJob(
@@ -213,6 +213,37 @@ public class NotificationFanOutService {
         throw new IllegalStateException("Unreachable aggregation retry state");
     }
 
+    /**
+     * Materialises one event for one user, reusing exactly the ordinary fan-out pipeline —
+     * render, aggregate, push (NC-7.6).
+     *
+     * <p>The broadcast materialisation worker calls this per snapshotted target rather than
+     * reimplementing the loop above. Duplicating it would mean two aggregation call sites
+     * that drift, and the aggregation ordering in {@link NotificationAggregationService} is
+     * precisely the thing that must not be reimplemented casually (ADR-14).
+     *
+     * @return the recipient uuid the target should record, and how many push outbox rows were
+     *         created. Zero outbox rows is normal: the user may have no active device, or
+     *         their preferences may have suppressed the push while the feed row still exists.
+     */
+    public SingleUserResult materializeSingleUser(long companyId, int userId, String locale,
+                                                  NotificationEvent event,
+                                                  NotificationCatalogEntry type) {
+        RenderedNotification rendered = renderer.render(event, type, locale);
+        NotificationAggregationService.Outcome outcome =
+                aggregation.apply(companyId, userId, event, type, rendered);
+        if (outcome.alreadyApplied() || pushMaterialization == null) {
+            return new SingleUserResult(outcome.recipientUuid(), 0);
+        }
+        int created = pushMaterialization.materialize(
+                companyId, userId, outcome.recipientId(), outcome.recipientUuid(),
+                outcome.aggregateCount(), event, type, rendered);
+        return new SingleUserResult(outcome.recipientUuid(), created);
+    }
+
+    public record SingleUserResult(java.util.UUID recipientUuid, int outboxCreated) {
+    }
+
     private BatchResult materializeBatch(NotificationFanOutJob job) {
         NotificationEvent event = events.require(job.companyId(), job.eventId());
         NotificationCatalogEntry type = catalog.requireActive(event.typeKey());
@@ -221,7 +252,8 @@ public class NotificationFanOutService {
                 ? properties.getFanOut().getSingleBatchThreshold() + 1
                 : properties.getFanOut().getBatchSize();
         List<AudienceMember> members = audience.fetchBatch(
-                job.companyId(), event.branchId(), type.requiredCapability(), cursor, limit);
+                job.companyId(), event.branchId(), event.typeKey(),
+                type.requiredCapability(), cursor, limit);
         int created = 0;
         int lastCursor = cursor;
         for (AudienceMember member : members) {

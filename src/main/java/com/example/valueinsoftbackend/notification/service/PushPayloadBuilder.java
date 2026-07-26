@@ -111,6 +111,8 @@ public class PushPayloadBuilder {
             result.put("data", data);
             result.put("android", Map.of(
                     "priority", "critical".equals(event.priority()) ? "high" : "normal",
+                    "collapse_key", recipientUuid.toString(),
+                    "ttl", "86400s",
                     "notification", Map.of(
                             "channel_id", "vls_" + catalog.category(),
                             "tag", recipientUuid.toString())));

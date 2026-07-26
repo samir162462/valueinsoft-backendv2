@@ -2,6 +2,9 @@ package com.example.valueinsoftbackend.notification.provider;
 
 import com.example.valueinsoftbackend.notification.config.ApnsProperties;
 import io.jsonwebtoken.Jwts;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -38,6 +41,18 @@ public class ApnsPushProvider implements PushProvider {
         this.streams = new Semaphore(properties.getMaxConcurrentStreams());
     }
 
+    @Autowired
+    public ApnsPushProvider(ApnsProperties properties, MeterRegistry meters) {
+        this(properties);
+        Gauge.builder("notification.apns.inflight", streams,
+                        semaphore -> properties.getMaxConcurrentStreams()
+                                - semaphore.availablePermits())
+                .register(meters);
+        Gauge.builder("notification.apns.jwt.age_seconds", this,
+                        provider -> provider.jwtAgeSeconds())
+                .register(meters);
+    }
+
     @Override
     public String provider() {
         return "apns";
@@ -64,7 +79,7 @@ public class ApnsPushProvider implements PushProvider {
             String host = properties.hostFor(request.device().apnsEnvironment());
             String tokenPath = URLEncoder.encode(
                     request.credential(), StandardCharsets.UTF_8);
-            HttpResponse<String> response = client.send(
+            HttpRequest.Builder httpRequest =
                     HttpRequest.newBuilder(URI.create(host + "/3/device/" + tokenPath))
                             .timeout(Duration.ofSeconds(properties.getRequestTimeoutSeconds()))
                             .header("authorization", "bearer " + jwt())
@@ -75,10 +90,14 @@ public class ApnsPushProvider implements PushProvider {
                             .header("apns-expiration", Long.toString(
                                     Instant.now().plusSeconds(
                                             request.outbox().ttlSeconds()).getEpochSecond()))
-                            .header("apns-collapse-id", request.outbox().collapseKey())
                             .POST(HttpRequest.BodyPublishers.ofString(
-                                    request.outbox().payloadJson()))
-                            .build(),
+                                    request.outbox().payloadJson()));
+            if (request.outbox().collapseKey() != null
+                    && !request.outbox().collapseKey().isBlank()) {
+                httpRequest.header("apns-collapse-id", request.outbox().collapseKey());
+            }
+            HttpResponse<String> response = client.send(
+                    httpRequest.build(),
                     HttpResponse.BodyHandlers.ofString());
             return new PushProviderResponse(
                     response.statusCode(), response.body(), response.headers().map(),
@@ -144,7 +163,9 @@ public class ApnsPushProvider implements PushProvider {
         jwtLock.lock();
         try {
             Instant now = Instant.now();
-            if (!now.isBefore(lastForcedRefresh.plus(Duration.ofMinutes(
+            CachedJwt current = cachedJwt;
+            Instant floorFrom = current == null ? lastForcedRefresh : current.issuedAt();
+            if (!now.isBefore(floorFrom.plus(Duration.ofMinutes(
                     properties.getJwtForcedRefreshFloorMinutes())))) {
                 cachedJwt = null;
                 lastForcedRefresh = now;
@@ -179,7 +200,7 @@ public class ApnsPushProvider implements PushProvider {
                         .signWith(privateKey(), Jwts.SIG.ES256)
                         .compact();
                 cachedJwt = new CachedJwt(
-                        value, now.plus(Duration.ofMinutes(
+                        value, now, now.plus(Duration.ofMinutes(
                                 properties.getJwtRefreshMinutes())));
                 return value;
             } catch (Exception exception) {
@@ -202,6 +223,13 @@ public class ApnsPushProvider implements PushProvider {
                 new PKCS8EncodedKeySpec(Base64.getDecoder().decode(normalized)));
     }
 
-    private record CachedJwt(String value, Instant expiresAt) {
+    private double jwtAgeSeconds() {
+        CachedJwt current = cachedJwt;
+        return current == null ? 0
+                : Math.max(0, Duration.between(
+                        current.issuedAt(), Instant.now()).toSeconds());
+    }
+
+    private record CachedJwt(String value, Instant issuedAt, Instant expiresAt) {
     }
 }

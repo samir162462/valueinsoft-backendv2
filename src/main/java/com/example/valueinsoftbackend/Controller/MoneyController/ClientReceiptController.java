@@ -8,6 +8,8 @@ import com.example.valueinsoftbackend.Model.Request.CreateClientReceiptRequest;
 import com.example.valueinsoftbackend.Model.Sales.ClientReceipt;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.Service.client.ClientReceiptService;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,11 +25,18 @@ public class ClientReceiptController {
 
     private final ClientReceiptService clientReceiptService;
     private final AuthorizationService authorizationService;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     public ClientReceiptController(ClientReceiptService clientReceiptService,
                                    AuthorizationService authorizationService) {
         this.clientReceiptService = clientReceiptService;
         this.authorizationService = authorizationService;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     @GetMapping("/{companyId}/{clientId}")
@@ -74,6 +83,17 @@ public class ClientReceiptController {
                 clientReceipt.getBranchId(),
                 "finance.entry.create"
         );
-        return clientReceiptService.addClientReceipt(companyId, clientReceipt);
+        ClientReceipt created = clientReceiptService.addClientReceipt(companyId, clientReceipt);
+        if (notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterFinancePaymentReceived(
+                    companyId,
+                    created.getBranchId(),
+                    created.getCrId(),
+                    "client_receipt",
+                    created.getAmount(),
+                    clientReceipt.getCurrencyCode(),
+                    principal.getName());
+        }
+        return created;
     }
 }

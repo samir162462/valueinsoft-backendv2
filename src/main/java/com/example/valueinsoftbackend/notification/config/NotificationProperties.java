@@ -136,6 +136,8 @@ public class NotificationProperties {
     public static class Broadcast {
         private int targetInsertChunkSize = 5_000;
         private int batchSize = 500;
+        private long planningPollDelayMs = 5_000L;
+        private long materializationPollDelayMs = 2_000L;
         private int planningLeaseSeconds = 900;
         private int batchLeaseSeconds = 600;
         private int batchMaxAttempts = 5;

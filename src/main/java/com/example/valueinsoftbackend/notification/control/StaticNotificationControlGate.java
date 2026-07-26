@@ -1,8 +1,8 @@
 package com.example.valueinsoftbackend.notification.control;
 
 import com.example.valueinsoftbackend.notification.config.NotificationControlProperties;
+import com.example.valueinsoftbackend.notification.config.NotificationProperties;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -17,20 +17,25 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * change — injection is always by the {@link NotificationControlGate} interface.
  */
 @Component
-@ConditionalOnProperty(name = "valueinsoft.notification.enabled", havingValue = "true")
 @Slf4j
 public class StaticNotificationControlGate implements NotificationControlGate {
 
     private final NotificationControlProperties properties;
+    private final NotificationProperties notificationProperties;
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
-    public StaticNotificationControlGate(NotificationControlProperties properties) {
+    public StaticNotificationControlGate(NotificationControlProperties properties,
+                                         NotificationProperties notificationProperties) {
         this.properties = properties;
+        this.notificationProperties = notificationProperties;
         log.info("Notification control gate: static configuration (Redis-backed gate not present)");
     }
 
     @Override
     public boolean isEnabled(ControlComponent component) {
+        if (!notificationProperties.isEnabled()) {
+            return false;
+        }
         // A component that cannot be switched off is always on, regardless of the master
         // switch — otherwise a timed disable could never re-enable itself (invariant B-17).
         if (!component.switchable()) {

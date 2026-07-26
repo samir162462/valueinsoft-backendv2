@@ -28,6 +28,38 @@ public final class TenantSqlIdentifiers {
         return "c_" + companyId;
     }
 
+    // -------------------------------------------------------
+    // Notification Center tenant objects
+    // -------------------------------------------------------
+
+    public static String notificationEventTable(long companyId) {
+        return companySchema(companyId) + ".notification_event";
+    }
+
+    public static String notificationFanOutJobTable(long companyId) {
+        return companySchema(companyId) + ".notification_fanout_job";
+    }
+
+    public static String notificationRecipientTable(long companyId) {
+        return companySchema(companyId) + ".notification_recipient";
+    }
+
+    public static String notificationRecipientEventTable(long companyId) {
+        return companySchema(companyId) + ".notification_recipient_event";
+    }
+
+    public static String notificationFeedChangeTable(long companyId) {
+        return companySchema(companyId) + ".notification_feed_change";
+    }
+
+    public static String notificationRecipientAuditTable(long companyId) {
+        return companySchema(companyId) + ".notification_recipient_audit";
+    }
+
+    public static String notificationFeedChangeSequence(long companyId) {
+        return companySchema(companyId) + ".notification_feed_change_seq";
+    }
+
     public static String expensesTable(int companyId, boolean isStatic) {
         return companySchema(companyId) + "." + (isStatic ? "\"ExpensesStatic\"" : "\"Expenses\"");
     }

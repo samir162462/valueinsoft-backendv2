@@ -49,8 +49,8 @@ public class NotificationSummaryService {
         long sequence = 0;
         Instant lastEvent = null;
         for (DbNotificationFeed.SummaryRow row : feed.summaryRows(companyId, userId)) {
-            if (!audience.userHasCapability(companyId, userId, row.branchId(),
-                    row.requiredCapability())) {
+            if (!audience.canReceive(companyId, userId, row.branchId(),
+                    row.typeKey(), row.requiredCapability())) {
                 continue;
             }
             if ("unseen".equals(row.state())) {

@@ -137,6 +137,11 @@
 			<artifactId>gson</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>com.ibm.icu</groupId>
+			<artifactId>icu4j</artifactId>
+			<version>78.3</version>
+		</dependency>
+		<dependency>
 			<groupId>com.github.jsqlparser</groupId>
 			<artifactId>jsqlparser</artifactId>
 			<version>4.9</version>

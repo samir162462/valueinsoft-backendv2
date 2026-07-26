@@ -11,7 +11,9 @@ import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.Shift.Shift;
 import com.example.valueinsoftbackend.Model.Shift.ShiftPeriod;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ public class ShiftService {
     private final DbPosOrder dbPosOrder;
     private final ClientReceiptService clientReceiptService;
     private final FinanceOperationalPostingService financeOperationalPostingService;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     public ShiftService(DbPosShiftPeriod dbPosShiftPeriod, 
                         DbPosOrder dbPosOrder,
@@ -47,6 +50,12 @@ public class ShiftService {
         this.dbPosOrder = dbPosOrder;
         this.clientReceiptService = clientReceiptService;
         this.financeOperationalPostingService = financeOperationalPostingService;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     // ── lifecycle ───────────────────────────────────────
@@ -87,6 +96,10 @@ public class ShiftService {
                 "SHIFT_OPENED", principalName, null, null,
                 "{\"openingFloat\":" + openingFloat + "}"
         );
+        if (notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterShiftOpened(
+                    companyId, shift.getBranchId(), shift.getShiftId(), principalName);
+        }
 
         log.info("Opened shift {} for company {} branch {} by {}",
                 shift.getShiftId(), companyId, request.branchId(), principalName);
@@ -274,6 +287,10 @@ public class ShiftService {
                         ",\"variance\":" + variance +
                         "}"
         );
+        if (notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterShiftClosed(
+                    companyId, shift.getBranchId(), shiftId, principalName);
+        }
 
         log.info("Closed shift {} with variance {}", shiftId, variance);
         Shift closedShift = dbPosShiftPeriod.getShiftById(companyId, shiftId);

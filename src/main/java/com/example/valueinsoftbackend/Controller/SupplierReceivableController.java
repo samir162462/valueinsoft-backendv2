@@ -2,9 +2,11 @@ package com.example.valueinsoftbackend.Controller;
 
 import com.example.valueinsoftbackend.Service.openitems.SupplierReceivableService;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +19,17 @@ import java.util.Map;
 public class SupplierReceivableController {
     private final SupplierReceivableService service;
     private final AuthorizationService authorization;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     public SupplierReceivableController(SupplierReceivableService service, AuthorizationService authorization) {
         this.service = service;
         this.authorization = authorization;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     @PostMapping("/{companyId}/{branchId}/{supplierId}/receipts")
@@ -30,6 +39,16 @@ public class SupplierReceivableController {
         authorization.assertAuthenticatedCapability(principal.getName(), companyId, branchId, "suppliers.openitems.allocate");
         long receiptId = service.collectPayment(companyId, branchId, supplierId, request.amount(),
                 request.currencyCode(), request.paymentMethod(), request.idempotencyKey(), principal.getName());
+        if (notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterFinancePaymentReceived(
+                    companyId,
+                    branchId,
+                    receiptId,
+                    "supplier_collection",
+                    request.amount(),
+                    request.currencyCode(),
+                    principal.getName());
+        }
         return ResponseEntity.ok(Map.of("receiptId", receiptId, "status", "POSTED"));
     }
 

@@ -6,6 +6,7 @@ import com.example.valueinsoftbackend.notification.model.RenderedNotification;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationFeedChange;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationRecipient;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationRecipientEvent;
+import com.example.valueinsoftbackend.notification.stream.NotificationStreamPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -16,13 +17,28 @@ public class NotificationAggregationService {
     private final DbNotificationRecipient recipients;
     private final DbNotificationRecipientEvent lineage;
     private final DbNotificationFeedChange changes;
+    private final NotificationStreamPublisher streams;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public NotificationAggregationService(DbNotificationRecipient recipients,
                                           DbNotificationRecipientEvent lineage,
-                                          DbNotificationFeedChange changes) {
+                                          DbNotificationFeedChange changes,
+                                          NotificationStreamPublisher streams) {
         this.recipients = recipients;
         this.lineage = lineage;
         this.changes = changes;
+        this.streams = streams;
+    }
+
+    /**
+     * Convenience overload without the stream publisher, for tests and for deployments with
+     * no Redis. Live delivery is a latency optimisation — the feed row and its change-log
+     * entry are written either way, so a client still converges through replay.
+     */
+    public NotificationAggregationService(DbNotificationRecipient recipients,
+                                          DbNotificationRecipientEvent lineage,
+                                          DbNotificationFeedChange changes) {
+        this(recipients, lineage, changes, new NotificationStreamPublisher());
     }
 
     /**
@@ -96,6 +112,13 @@ public class NotificationAggregationService {
         // STEP 7: state audit.
         recipients.audit(companyId, targetId, userId, catalog.category(), previousState,
                 "unseen", "system");
+
+        // STEP 8: live-stream hint, published after commit (NC-6.5, §C-16). Publishing here
+        // rather than inside the transaction is what stops a woken client reading a row this
+        // transaction has not committed yet. Losing the hint costs latency, not data — the
+        // change log makes it recoverable on the next reconnect.
+        streams.publishAfterCommit(companyId, userId, changeSequence, targetId);
+
         return new Outcome(targetId, recipientUuid, lineageSequence, created, false);
     }
 

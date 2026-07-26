@@ -62,7 +62,10 @@ class PushPayloadBuilderTest {
         NotificationCatalogEntry catalog = new NotificationCatalogEntry(
                 event.typeKey(), "inventory", "normal", "allowed",
                 null, 600, "/inventory/{subjectId}", null,
-                180, 300, true);
+                180, 300, true,
+                // Phase 5 additions: defaultChannelInApp, userMutable,
+                // bypassesQuietHours, producerRateLimitPerMin.
+                true, true, false, null);
         RenderedNotification rendered = new RenderedNotification(
                 "Low stock", "Sensitive rendered body", preview, "en",
                 1, "rendered", "/inventory/9", "stock:9",

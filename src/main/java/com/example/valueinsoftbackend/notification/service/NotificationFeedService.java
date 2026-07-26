@@ -8,6 +8,7 @@ import com.example.valueinsoftbackend.notification.repository.DbNotificationFeed
 import com.example.valueinsoftbackend.notification.repository.DbNotificationFeedChange;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationRecipient;
 import com.example.valueinsoftbackend.notification.repository.NotificationAudienceResolver;
+import com.example.valueinsoftbackend.notification.stream.NotificationStreamPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,19 +25,37 @@ public class NotificationFeedService {
     private final NotificationAudienceResolver audience;
     private final NotificationCursorCodec cursors;
     private final NotificationSummaryService summaries;
+    private final NotificationStreamPublisher streams;
 
+    /**
+     * Convenience overload without the stream publisher, for tests and for deployments with
+     * no Redis — see {@link NotificationAggregationService} for why this is safe.
+     */
     public NotificationFeedService(DbNotificationFeed feed,
                                    DbNotificationFeedChange changes,
                                    DbNotificationRecipient recipients,
                                    NotificationAudienceResolver audience,
                                    NotificationCursorCodec cursors,
                                    NotificationSummaryService summaries) {
+        this(feed, changes, recipients, audience, cursors, summaries,
+                new NotificationStreamPublisher());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public NotificationFeedService(DbNotificationFeed feed,
+                                   DbNotificationFeedChange changes,
+                                   DbNotificationRecipient recipients,
+                                   NotificationAudienceResolver audience,
+                                   NotificationCursorCodec cursors,
+                                   NotificationSummaryService summaries,
+                                   NotificationStreamPublisher streams) {
         this.feed = feed;
         this.changes = changes;
         this.recipients = recipients;
         this.audience = audience;
         this.cursors = cursors;
         this.summaries = summaries;
+        this.streams = streams;
     }
 
     public NotificationFeedPage page(long companyId, int userId, String cursor,
@@ -48,8 +67,8 @@ public class NotificationFeedService {
         List<NotificationFeedItem> visible = new ArrayList<>(size);
         for (int i = 0; i < Math.min(size, raw.size()); i++) {
             NotificationFeedItem item = raw.get(i);
-            if (audience.userHasCapability(companyId, userId, item.branchId(),
-                    item.requiredCapability())) {
+            if (audience.canReceive(companyId, userId, item.branchId(),
+                    item.typeKey(), item.requiredCapability())) {
                 visible.add(item);
             }
         }
@@ -83,6 +102,9 @@ public class NotificationFeedService {
             changes.insert(companyId, sequence, userId, row.recipientId(), "seen", null);
             recipients.audit(companyId, row.recipientId(), userId, row.category(),
                     row.state(), "seen", normalizeChannel(channel));
+            // NC-6.12: a state change made on one device must reach the user's other
+            // devices live, not only on their next reconnect. Published after commit.
+            streams.publishAfterCommit(companyId, userId, sequence, row.recipientId());
         }
         summaries.invalidateAfterCommit(companyId, userId);
     }
@@ -109,6 +131,7 @@ public class NotificationFeedService {
             changes.insert(companyId, sequence, userId, row.recipientId(), "read", null);
             recipients.audit(companyId, row.recipientId(), userId, row.category(),
                     row.state(), "read", normalizeChannel(channel));
+            streams.publishAfterCommit(companyId, userId, sequence, row.recipientId());
         }
         summaries.invalidateAfterCommit(companyId, userId);
     }
@@ -121,6 +144,7 @@ public class NotificationFeedService {
         changes.insert(companyId, sequence, userId, row.recipientId(), "clicked", null);
         recipients.audit(companyId, row.recipientId(), userId, row.category(),
                 row.state(), "clicked", normalizeChannel(channel));
+        streams.publishAfterCommit(companyId, userId, sequence, row.recipientId());
         summaries.invalidateAfterCommit(companyId, userId);
     }
 
@@ -135,12 +159,13 @@ public class NotificationFeedService {
         changes.insert(companyId, sequence, userId, row.recipientId(), "archived", null);
         recipients.audit(companyId, row.recipientId(), userId, row.category(),
                 row.state(), "archived", normalizeChannel(channel));
+        streams.publishAfterCommit(companyId, userId, sequence, row.recipientId());
         summaries.invalidateAfterCommit(companyId, userId);
     }
 
     private void assertVisible(long companyId, int userId, NotificationFeedItem item) {
-        if (!audience.userHasCapability(companyId, userId, item.branchId(),
-                item.requiredCapability())) {
+        if (!audience.canReceive(companyId, userId, item.branchId(),
+                item.typeKey(), item.requiredCapability())) {
             throw new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND",
                     "Notification not found");
         }

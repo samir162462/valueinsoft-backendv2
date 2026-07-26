@@ -10,6 +10,7 @@ import com.example.valueinsoftbackend.Service.client.ClientReceiptService;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.loyalty.dto.LoyaltyRecordedEarn;
 import com.example.valueinsoftbackend.loyalty.service.LoyaltyService;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class PosSalePostingService {
     private ClientReceiptService clientReceiptService;
     private com.example.valueinsoftbackend.Service.openitems.SupplierReceivableService supplierReceivableService;
     private com.example.valueinsoftbackend.Service.openitems.CreditControlService creditControlService;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     public PosSalePostingService(DbPosOrder dbPosOrder,
             DbPosShiftPeriod dbPosShiftPeriod,
@@ -65,6 +67,12 @@ public class PosSalePostingService {
     @Autowired(required = false)
     void setCreditControlService(com.example.valueinsoftbackend.Service.openitems.CreditControlService creditControlService) {
         this.creditControlService = creditControlService;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     public com.example.valueinsoftbackend.Model.Response.CreateOrderResult postSale(int companyId, Order order) {
@@ -170,6 +178,9 @@ public class PosSalePostingService {
         }
 
         enqueueFinancePosSaleAfterCommit(companyId, order, result, onSuccess, onFailure);
+        if (notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterPosSale(companyId, order, result);
+        }
         log.info("Saved order {} for company {} branch {} with {} items",
                 result.orderId(), companyId, order.getBranchId(), order.getOrderDetails().size());
         return result;

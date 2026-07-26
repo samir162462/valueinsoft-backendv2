@@ -1,6 +1,7 @@
 package com.example.valueinsoftbackend.notification.service;
 
 import com.example.valueinsoftbackend.notification.config.NotificationProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ThreadLocalRandom;
@@ -11,6 +12,7 @@ public class NotificationBackoffPolicy {
     private final NotificationProperties properties;
     private final DoubleSupplier random;
 
+    @Autowired
     public NotificationBackoffPolicy(NotificationProperties properties) {
         this(properties, () -> ThreadLocalRandom.current().nextDouble());
     }

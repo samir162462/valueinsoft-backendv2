@@ -6,6 +6,7 @@ import com.example.valueinsoftbackend.DatabaseRequests.DbUsers;
 import com.example.valueinsoftbackend.Model.Branch;
 import com.example.valueinsoftbackend.Model.HR.Employee;
 import com.example.valueinsoftbackend.Model.HR.EmployeeShift;
+import com.example.valueinsoftbackend.Model.HR.AnnualLeaveRequestCreateRequest;
 import com.example.valueinsoftbackend.Model.HR.AnnualLeavePeriod;
 import com.example.valueinsoftbackend.Model.HR.AttendanceDay;
 import com.example.valueinsoftbackend.Model.HR.AttendanceLog;
@@ -13,6 +14,7 @@ import com.example.valueinsoftbackend.Model.HR.AttendanceMonthResponse;
 import com.example.valueinsoftbackend.Model.HR.AttendanceSelfStatus;
 import com.example.valueinsoftbackend.Model.HR.Shift;
 import com.example.valueinsoftbackend.Model.User;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -133,6 +135,37 @@ class HRServiceTest {
         assertTrue(updated.isActive());
         assertEquals("sam", updated.getUpdatedBy());
         assertEquals(updated, saved);
+    }
+
+    @Test
+    void annualLeaveRequestPersistsAndInvokesLiveNotificationIntegration() {
+        User user = new User(42, "sam", "ignored", "sam@example.com", "Sam", "Employee",
+                "01000000000", "Employee", 1, BRANCH_ID, null);
+        Employee employee = new Employee(
+                7, COMPANY_ID, BRANCH_ID, "42", "hash", "Sam", "Employee",
+                42, true, null, "system", null, "system");
+        NotificationPilotIntegrationService notifications =
+                Mockito.mock(NotificationPilotIntegrationService.class);
+        service.configureLeaveRequestNotifications(notifications);
+        LocalDate start = LocalDate.now().plusDays(7);
+        LocalDate end = start.plusDays(2);
+
+        when(dbUsers.getUser("sam")).thenReturn(user);
+        when(dbHR.getEmployeeByUser(COMPANY_ID, BRANCH_ID, 42)).thenReturn(employee);
+        when(dbHR.addAnnualLeaveRequest(
+                COMPANY_ID, BRANCH_ID, 42, start, end, "family trip", "sam"))
+                .thenReturn(7001L);
+        long requestId = service.createAnnualLeaveRequest(
+                COMPANY_ID,
+                BRANCH_ID,
+                new AnnualLeaveRequestCreateRequest(start, end, " family trip "),
+                "sam");
+
+        assertEquals(7001L, requestId);
+        verify(dbHR).addAnnualLeaveRequest(
+                COMPANY_ID, BRANCH_ID, 42, start, end, "family trip", "sam");
+        verify(notifications).afterLeaveRequested(
+                COMPANY_ID, BRANCH_ID, 7001L, 42, "Sam Employee");
     }
 
     @Test

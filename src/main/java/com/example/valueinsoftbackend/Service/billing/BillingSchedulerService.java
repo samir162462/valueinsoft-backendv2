@@ -21,7 +21,9 @@ import com.example.valueinsoftbackend.Service.InvoiceService;
 import com.example.valueinsoftbackend.Service.payment.PaymentAttemptService;
 import com.example.valueinsoftbackend.Service.payment.PaymentProvider;
 import com.example.valueinsoftbackend.Service.payment.PaymentProviderResolver;
+import com.example.valueinsoftbackend.notification.producer.NotificationPilotIntegrationService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,7 @@ public class BillingSchedulerService {
     private final PaymentProviderResolver paymentProviderResolver;
     private final BillingProperties billingProperties;
     private final BillingInvoicePaymentService billingInvoicePaymentService;
+    private NotificationPilotIntegrationService notificationPilotIntegrationService;
 
     public BillingSchedulerService(DbBillingWriteModels dbBillingWriteModels,
                                    DbBillingAdminReadModels dbBillingAdminReadModels,
@@ -65,6 +68,12 @@ public class BillingSchedulerService {
         this.paymentProviderResolver = paymentProviderResolver;
         this.billingProperties = billingProperties;
         this.billingInvoicePaymentService = billingInvoicePaymentService;
+    }
+
+    @Autowired(required = false)
+    void setNotificationPilotIntegrationService(
+            NotificationPilotIntegrationService notificationPilotIntegrationService) {
+        this.notificationPilotIntegrationService = notificationPilotIntegrationService;
     }
 
     @Transactional
@@ -465,6 +474,9 @@ public class BillingSchedulerService {
                 candidate.getBillingInvoiceId(),
                 nextAttemptNumber
         );
+        if (notificationPilotIntegrationService != null) {
+            notificationPilotIntegrationService.afterInvoiceOverdue(candidate, dunningRunId);
+        }
         return true;
     }
 

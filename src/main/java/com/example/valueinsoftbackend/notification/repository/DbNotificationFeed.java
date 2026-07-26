@@ -97,7 +97,7 @@ public class DbNotificationFeed {
 
     public List<SummaryRow> summaryRows(long companyId, int userId) {
         return jdbc.query("""
-                SELECT r.state, r.last_event_at, r.change_sequence, r.branch_id,
+                SELECT r.state, r.last_event_at, r.change_sequence, r.branch_id, r.type_key,
                        c.required_capability
                 FROM %s r
                 JOIN public.notification_type_catalog c ON c.type_key = r.type_key
@@ -106,8 +106,66 @@ public class DbNotificationFeed {
                 (rs, rowNum) -> new SummaryRow(
                         rs.getString("state"), rs.getTimestamp("last_event_at").toInstant(),
                         rs.getLong("change_sequence"), nullableInt(rs, "branch_id"),
+                        rs.getString("type_key"),
                         rs.getString("required_capability")),
                 userId);
+    }
+
+    /**
+     * SSE replay (NC-6.6, ADR-11).
+     *
+     * <p>Driven by the append-only change log, <strong>not</strong> by the recipient table.
+     * That is the whole point of the log: aggregation <em>updates</em> an existing recipient
+     * row without minting a new id, so a client that replayed on {@code recipient_id} would
+     * never learn that an item it already holds had changed — the exact case aggregation is
+     * built to produce.
+     *
+     * <p>The join returns the recipient's state <em>at query time</em>, so three changes to
+     * one item replay as three events all carrying its current content. The client upserts by
+     * {@code recipientUuid}, so that converges correctly and is cheaper than deduplicating
+     * here.
+     */
+    public List<NotificationFeedItem> replaySince(long companyId, int userId,
+                                                  long sinceChangeSequence, int limit) {
+        return jdbc.query("""
+                        SELECT r.*, c.required_capability
+                        FROM %s ch
+                        JOIN %s r ON r.recipient_id = ch.recipient_id
+                        JOIN public.notification_type_catalog c ON c.type_key = r.type_key
+                        WHERE ch.user_id = ? AND ch.change_sequence > ?
+                        ORDER BY ch.change_sequence
+                        LIMIT ?
+                        """.formatted(
+                                TenantSqlIdentifiers.notificationFeedChangeTable(companyId),
+                                TenantSqlIdentifiers.notificationRecipientTable(companyId)),
+                (rs, rowNum) -> mapItem(rs), userId, sinceChangeSequence, limit);
+    }
+
+    /**
+     * Oldest change still retained for this user. A {@code Last-Event-ID} below this means the
+     * client slept through the retention window and cannot be caught up incrementally — the
+     * stream answers with a single {@code reset} instead of silently skipping changes.
+     * Returns 0 when the log is empty, which correctly means "nothing to reset for".
+     */
+    public long minRetainedChangeSequence(long companyId, int userId) {
+        Long value = jdbc.queryForObject("""
+                SELECT COALESCE(MIN(change_sequence), 0)
+                FROM %s
+                WHERE user_id = ?
+                """.formatted(TenantSqlIdentifiers.notificationFeedChangeTable(companyId)),
+                Long.class, userId);
+        return value == null ? 0L : value;
+    }
+
+    /** Count of pending changes, used to decide reset-versus-replay without fetching rows. */
+    public long pendingChangeCount(long companyId, int userId, long sinceChangeSequence) {
+        Long value = jdbc.queryForObject("""
+                SELECT COUNT(*)
+                FROM %s
+                WHERE user_id = ? AND change_sequence > ?
+                """.formatted(TenantSqlIdentifiers.notificationFeedChangeTable(companyId)),
+                Long.class, userId, sinceChangeSequence);
+        return value == null ? 0L : value;
     }
 
     public LockedRecipient lock(long companyId, int userId, UUID uuid) {
@@ -210,6 +268,6 @@ public class DbNotificationFeed {
     }
 
     public record SummaryRow(String state, Instant lastEventAt, long changeSequence,
-                             Integer branchId, String requiredCapability) {}
+                             Integer branchId, String typeKey, String requiredCapability) {}
     public record LockedRecipient(long recipientId, String category, String state) {}
 }

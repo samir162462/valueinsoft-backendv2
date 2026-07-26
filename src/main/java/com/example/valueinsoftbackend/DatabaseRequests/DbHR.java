@@ -439,6 +439,34 @@ public class DbHR {
         ), args);
     }
 
+    public long addAnnualLeaveRequest(int companyId,
+                                      int branchId,
+                                      int userId,
+                                      LocalDate startDate,
+                                      LocalDate endDate,
+                                      String notes,
+                                      String actor) {
+        String sql = "INSERT INTO " + TenantSqlIdentifiers.hrLeaveRequestTable(companyId) +
+                " (company_id, branch_id, user_id, leave_type, start_date, end_date, status," +
+                " notes, created_by, updated_by)" +
+                " VALUES (?, ?, ?, 'ANNUAL', ?, ?, 'PENDING', ?, ?, ?) RETURNING id";
+        Long id = jdbcTemplate.queryForObject(
+                sql,
+                Long.class,
+                companyId,
+                branchId,
+                userId,
+                Date.valueOf(startDate),
+                Date.valueOf(endDate),
+                notes,
+                actor,
+                actor);
+        if (id == null) {
+            throw new IllegalStateException("Annual leave request id was not generated");
+        }
+        return id;
+    }
+
     public List<AttendanceLog> getAttendanceLogs(int companyId, int employeeId, java.sql.Date date) {
         String sql = "SELECT * FROM " + TenantSqlIdentifiers.hrAttendanceLogTable(companyId) + 
                 " WHERE employee_id = ? AND action_time::date = ? ORDER BY action_time ASC";

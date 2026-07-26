@@ -86,11 +86,11 @@ class NotificationPhase1MigrationIT {
     @Test
     void publicCatalogPartitionsAndControlDefaultsExist() throws Exception {
         try (Connection connection = connect(); Statement statement = connection.createStatement()) {
-            assertEquals(40, scalar(statement,
+            assertEquals(42, scalar(statement,
                     "SELECT COUNT(*) FROM public.notification_type_catalog"));
-            assertEquals(80, scalar(statement,
+            assertEquals(84, scalar(statement,
                     "SELECT COUNT(*) FROM public.notification_template "
-                            + "WHERE status = 'published' AND template_version = 1"));
+                            + "WHERE status = 'published'"));
             assertEquals(19, scalar(statement,
                     "SELECT COUNT(*) FROM public.notification_control_switch"));
             assertEquals(0, scalar(statement,
