@@ -5,6 +5,8 @@ import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.Model.Response.CreateOrderResult;
 import com.example.valueinsoftbackend.notification.config.NotificationProperties;
+import com.example.valueinsoftbackend.notification.control.NotificationComponent;
+import com.example.valueinsoftbackend.notification.control.NotificationControlGate;
 import com.example.valueinsoftbackend.notification.model.AudienceMember;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationPilotContext;
 import com.example.valueinsoftbackend.notification.repository.NotificationAudienceResolver;
@@ -23,6 +25,7 @@ import java.util.Set;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class NotificationPilotIntegrationServiceTest {
@@ -90,6 +93,55 @@ class NotificationPilotIntegrationServiceTest {
         verify(context, never()).branchName(12, 3);
         verify(producer, never()).lowStock(
                 12, 3, 77L, "501:77", "Phone", 3, "Downtown");
+    }
+
+    @Test
+    void runtimeMasterSwitchDoesNotRegisterCallbacksOrQueryNotificationContext() {
+        NotificationProperties properties = new NotificationProperties();
+        properties.setEnabled(true);
+        NotificationPilotProducer producer = mock(NotificationPilotProducer.class);
+        DbNotificationPilotContext context = mock(DbNotificationPilotContext.class);
+        DbBranchSettings settings = mock(DbBranchSettings.class);
+        NotificationAudienceResolver audience = mock(NotificationAudienceResolver.class);
+        NotificationControlGate controls = mock(NotificationControlGate.class);
+        when(controls.isEnabled(NotificationComponent.PUBLISH)).thenReturn(false);
+        NotificationPilotIntegrationService service =
+                new NotificationPilotIntegrationService(properties, producer, context, settings);
+        service.configureLeaveAudience(audience);
+        service.configureControlGate(controls);
+
+        TransactionSynchronizationManager.initSynchronization();
+        service.afterShiftOpened(12, 3, 501, "cashier");
+        service.afterFinancePaymentReceived(
+                12, 3, 90, "client_receipt", BigDecimal.TEN, null, "cashier");
+        service.afterLeaveRequested(12, 3, 80, 7, "Employee");
+
+        org.assertj.core.api.Assertions.assertThat(
+                TransactionSynchronizationManager.getSynchronizations()).isEmpty();
+        verifyNoInteractions(producer, context, settings, audience);
+    }
+
+    @Test
+    void runtimeShutdownBeforeCommitPreventsDeferredContextQueries() {
+        NotificationProperties properties = new NotificationProperties();
+        properties.setEnabled(true);
+        NotificationPilotProducer producer = mock(NotificationPilotProducer.class);
+        DbNotificationPilotContext context = mock(DbNotificationPilotContext.class);
+        DbBranchSettings settings = mock(DbBranchSettings.class);
+        NotificationControlGate controls = mock(NotificationControlGate.class);
+        when(controls.isEnabled(NotificationComponent.PUBLISH)).thenReturn(true, false);
+        NotificationPilotIntegrationService service =
+                new NotificationPilotIntegrationService(properties, producer, context, settings);
+        service.configureControlGate(controls);
+
+        TransactionSynchronizationManager.initSynchronization();
+        service.afterShiftClosed(12, 3, 501, "cashier");
+        for (TransactionSynchronization synchronization :
+                TransactionSynchronizationManager.getSynchronizations()) {
+            synchronization.afterCommit();
+        }
+
+        verifyNoInteractions(producer, context, settings);
     }
 
     @Test

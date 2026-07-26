@@ -7,6 +7,8 @@ import com.example.valueinsoftbackend.Model.Order;
 import com.example.valueinsoftbackend.Model.OrderDetails;
 import com.example.valueinsoftbackend.Model.Response.CreateOrderResult;
 import com.example.valueinsoftbackend.notification.config.NotificationProperties;
+import com.example.valueinsoftbackend.notification.control.NotificationComponent;
+import com.example.valueinsoftbackend.notification.control.NotificationControlGate;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationPilotContext;
 import com.example.valueinsoftbackend.notification.repository.NotificationAudienceResolver;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ public class NotificationPilotIntegrationService {
     private final DbNotificationPilotContext context;
     private final DbBranchSettings branchSettings;
     private NotificationAudienceResolver audience;
+    private NotificationControlGate controlGate;
 
     public NotificationPilotIntegrationService(NotificationProperties properties,
                                                NotificationPilotProducer producer,
@@ -51,8 +54,13 @@ public class NotificationPilotIntegrationService {
         this.audience = audience;
     }
 
+    @Autowired(required = false)
+    public void configureControlGate(NotificationControlGate controlGate) {
+        this.controlGate = controlGate;
+    }
+
     public void afterPosSale(int companyId, Order order, CreateOrderResult result) {
-        if (!properties.isEnabled() || result.idempotencyHit()) {
+        if (!publishingEnabled() || result.idempotencyHit()) {
             return;
         }
         Set<Long> productIds = new LinkedHashSet<>();
@@ -83,7 +91,7 @@ public class NotificationPilotIntegrationService {
     }
 
     public void afterShiftClosed(int companyId, int branchId, long shiftId, String actorName) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("closed shift " + shiftId, () -> {
@@ -105,7 +113,7 @@ public class NotificationPilotIntegrationService {
     }
 
     public void afterShiftOpened(int companyId, int branchId, long shiftId, String actorName) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("opened shift " + shiftId, () -> {
@@ -146,7 +154,7 @@ public class NotificationPilotIntegrationService {
     public void afterOrderVoided(int companyId,
                                  int branchId,
                                  DbPosOrder.OrderBounceBackContext orderContext) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("voided order " + orderContext.getOrderId(), () -> {
@@ -167,7 +175,7 @@ public class NotificationPilotIntegrationService {
     }
 
     public void afterInvoiceOverdue(BillingOverdueInvoiceCandidate candidate, long dunningRunId) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("overdue invoice " + candidate.getBillingInvoiceId(), () -> {
@@ -189,7 +197,7 @@ public class NotificationPilotIntegrationService {
                                             BigDecimal amount,
                                             String currencyCode,
                                             String actorName) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("received payment " + sourceType + ":" + transactionId, () -> {
@@ -213,7 +221,7 @@ public class NotificationPilotIntegrationService {
                                         BigDecimal amount,
                                         String currencyCode,
                                         String actorName) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("sent payment " + sourceType + ":" + transactionId, () -> {
@@ -237,7 +245,7 @@ public class NotificationPilotIntegrationService {
                                         BigDecimal amount,
                                         String settlementStatus,
                                         String actorName) {
-        if (!properties.isEnabled() || amount == null || amount.signum() <= 0) {
+        if (!publishingEnabled() || amount == null || amount.signum() <= 0) {
             return;
         }
         afterCommit("POS payment for order " + orderId, () -> producer.posPaymentReceived(
@@ -259,7 +267,7 @@ public class NotificationPilotIntegrationService {
                                     long leaveRequestId,
                                     int actorUserId,
                                     String employeeName) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("leave request " + leaveRequestId, () -> {
@@ -288,7 +296,7 @@ public class NotificationPilotIntegrationService {
                                     int actorUserId,
                                     int managerUserId,
                                     String employeeName) {
-        if (!properties.isEnabled()) {
+        if (!publishingEnabled()) {
             return;
         }
         afterCommit("leave request " + leaveRequestId, () -> producer.leaveRequested(
@@ -356,6 +364,12 @@ public class NotificationPilotIntegrationService {
 
     private void afterCommit(String description, Runnable notificationWork) {
         Runnable isolated = () -> {
+            // Re-check after commit: the runtime module may have been turned off while the
+            // business transaction was in progress. Do not resolve users, branches,
+            // currencies, audiences, or templates after that shutdown.
+            if (!publishingEnabled()) {
+                return;
+            }
             try {
                 notificationWork.run();
             } catch (RuntimeException exception) {
@@ -373,5 +387,11 @@ public class NotificationPilotIntegrationService {
                 isolated.run();
             }
         });
+    }
+
+    private boolean publishingEnabled() {
+        return properties.isEnabled()
+                && (controlGate == null
+                || controlGate.isEnabled(NotificationComponent.PUBLISH));
     }
 }

@@ -3,6 +3,8 @@ package com.example.valueinsoftbackend.notification.controller;
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
 import com.example.valueinsoftbackend.Service.security.AuthorizationService;
 import com.example.valueinsoftbackend.notification.config.NotificationProperties;
+import com.example.valueinsoftbackend.notification.control.NotificationComponent;
+import com.example.valueinsoftbackend.notification.control.NotificationControlGate;
 import com.example.valueinsoftbackend.notification.model.NotificationAdmin.DeliveryRow;
 import com.example.valueinsoftbackend.notification.model.NotificationAdmin.DeviceInventorySummary;
 import com.example.valueinsoftbackend.notification.model.NotificationAdmin.RetryResult;
@@ -40,13 +42,16 @@ public class NotificationAdminController {
     private static final String RETRY = "notification.admin.retry";
 
     private final NotificationProperties properties;
+    private final NotificationControlGate controls;
     private final AuthorizationService authorization;
     private final NotificationAdminService admin;
 
     public NotificationAdminController(NotificationProperties properties,
+                                       NotificationControlGate controls,
                                        AuthorizationService authorization,
                                        NotificationAdminService admin) {
         this.properties = properties;
+        this.controls = controls;
         this.authorization = authorization;
         this.admin = admin;
     }
@@ -122,7 +127,8 @@ public class NotificationAdminController {
      * here — and the name is what an auditor reading the trail actually wants to see.
      */
     private String requirePlatformCapability(Principal principal, String capability) {
-        if (!properties.isEnabled()) {
+        if (!properties.isEnabled()
+                || !controls.isEnabled(NotificationComponent.MODULE)) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
                     "NOTIFICATION_DISABLED", "Notification module is disabled");
         }

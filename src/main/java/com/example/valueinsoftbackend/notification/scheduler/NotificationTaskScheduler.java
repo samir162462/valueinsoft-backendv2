@@ -175,7 +175,13 @@ public class NotificationTaskScheduler implements SmartLifecycle {
         log.info("Notification worker parked: {} — no further executions scheduled", task.workerName());
     }
 
-    private void runGuarded(NotificationWorkerTask task) {
+    void runGuarded(NotificationWorkerTask task) {
+        // A callback may already have been dequeued when reconcile() cancels its future.
+        // Re-check the in-memory/Redis control snapshot at the cycle boundary so that race
+        // cannot enter worker repository code after the switch has been turned off.
+        if (!controlGate.isEnabled(task.component())) {
+            return;
+        }
         try {
             task.runCycle();
         } catch (Exception ex) {

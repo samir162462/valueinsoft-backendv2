@@ -8,8 +8,10 @@ import com.example.valueinsoftbackend.notification.model.NotificationRequest;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationEvent;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationFanOutJob;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class NotificationPublisher {
@@ -18,6 +20,7 @@ public class NotificationPublisher {
     private final NotificationIdempotencyService idempotency;
     private final DbNotificationEvent events;
     private final DbNotificationFanOutJob jobs;
+    private TransactionTemplate transactions;
 
     public NotificationPublisher(NotificationProperties properties,
                                  ObjectProvider<NotificationControlGate> gateProvider,
@@ -31,7 +34,16 @@ public class NotificationPublisher {
         this.jobs = jobs;
     }
 
-    @Transactional
+    /**
+     * Configure the transaction boundary programmatically so both disable gates run before
+     * Spring borrows a database connection. An {@code @Transactional} annotation on this
+     * method would start the transaction before the first line executes.
+     */
+    @Autowired
+    void configureTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactions = new TransactionTemplate(transactionManager);
+    }
+
     public NotificationPublishResult publish(NotificationRequest request) {
         if (!properties.isEnabled()) {
             return NotificationPublishResult.suppressedResult();
@@ -41,6 +53,19 @@ public class NotificationPublisher {
             return NotificationPublishResult.suppressedResult();
         }
 
+        if (transactions == null) {
+            // Directly constructed unit/integration fixtures are not Spring-managed and
+            // therefore have no transaction manager. Production always takes the branch below.
+            return persist(request);
+        }
+        NotificationPublishResult result = transactions.execute(status -> persist(request));
+        if (result == null) {
+            throw new IllegalStateException("Notification publish transaction returned no result");
+        }
+        return result;
+    }
+
+    private NotificationPublishResult persist(NotificationRequest request) {
         byte[] fingerprint = idempotency.fingerprint(request);
         var inserted = events.insert(request, fingerprint);
         if (inserted.isPresent()) {

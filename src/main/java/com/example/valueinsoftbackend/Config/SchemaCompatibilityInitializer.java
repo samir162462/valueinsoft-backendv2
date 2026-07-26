@@ -2,6 +2,7 @@ package com.example.valueinsoftbackend.Config;
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.example.valueinsoftbackend.notification.config.NotificationProperties;
 import com.example.valueinsoftbackend.util.TenantSqlIdentifiers;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -16,9 +17,12 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
     private static final int PASSWORD_COLUMN_LENGTH = 100;
 
     private final JdbcTemplate jdbcTemplate;
+    private final NotificationProperties notificationProperties;
 
-    public SchemaCompatibilityInitializer(JdbcTemplate jdbcTemplate) {
+    public SchemaCompatibilityInitializer(JdbcTemplate jdbcTemplate,
+                                          NotificationProperties notificationProperties) {
         this.jdbcTemplate = jdbcTemplate;
+        this.notificationProperties = notificationProperties;
     }
 
     @Override
@@ -31,7 +35,8 @@ public class SchemaCompatibilityInitializer implements ApplicationRunner {
                         "WHERE schema_name ~ '^c_[0-9]+$' ORDER BY schema_name",
                 String.class
         );
-        boolean notificationBootstrapAvailable = notificationBootstrapAvailable();
+        boolean notificationBootstrapAvailable = notificationProperties.isEnabled()
+                && notificationBootstrapAvailable();
 
         for (String schemaName : tenantSchemas) {
             widenUsersPasswordColumn(schemaName);
