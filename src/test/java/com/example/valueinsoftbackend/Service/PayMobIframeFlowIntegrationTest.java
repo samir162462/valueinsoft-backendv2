@@ -7,6 +7,10 @@ import com.example.valueinsoftbackend.Model.Request.PayMobTransactionCallbackReq
 import com.example.valueinsoftbackend.OnlinePayment.OPModel.TransactionProcessedCallback;
 import com.example.valueinsoftbackend.OnlinePayment.PayMobProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +19,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.StringJoiner;
@@ -24,7 +30,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -46,13 +51,39 @@ class PayMobIframeFlowIntegrationTest {
     @Autowired
     private PayMobProperties payMobProperties;
 
+    private HttpServer payMobServer;
+
+    @BeforeEach
+    void startPayMobServer() throws IOException {
+        payMobServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        payMobServer.createContext(
+                "/api/auth/tokens",
+                exchange -> respondCreated(exchange, "{\"token\":\"test-auth-token\"}"));
+        payMobServer.createContext(
+                "/api/ecommerce/orders",
+                exchange -> respondCreated(exchange, "{\"id\":424242}"));
+        payMobServer.createContext(
+                "/api/acceptance/payment_keys",
+                exchange -> respondCreated(exchange, "{\"token\":\"test-payment-token\"}"));
+        payMobServer.start();
+
+        payMobProperties.setBaseUrl(
+                "http://127.0.0.1:" + payMobServer.getAddress().getPort());
+        payMobProperties.setAuthToken("test-api-key");
+        payMobProperties.setHmacSecret("test-hmac-secret");
+        payMobProperties.setCardIntegrationId(1234);
+        payMobProperties.setCardIFrameId(5678);
+    }
+
+    @AfterEach
+    void stopPayMobServer() {
+        if (payMobServer != null) {
+            payMobServer.stop(0);
+        }
+    }
+
     @Test
     void iframeAcceptFlowCreatesProviderOrderPaymentKeyUrlAndValidatesCallback() throws Exception {
-        assertConfigured(payMobProperties.getAuthToken(), "vls.paymob.auth-token");
-        assertConfigured(payMobProperties.getHmacSecret(), "vls.paymob.hmac-secret");
-        assumeTrue(payMobProperties.getCardIntegrationId() > 0, "vls.paymob.card-integration-id must be configured");
-        assumeTrue(payMobProperties.getCardIFrameId() > 0, "vls.paymob.card-iframe-id must be configured");
-
         DbBillingWriteModels dbBillingWriteModels = mock(DbBillingWriteModels.class);
         PayMobService payMobService = new PayMobService(payMobProperties, dbBillingWriteModels, new ObjectMapper());
 
@@ -99,8 +130,14 @@ class PayMobIframeFlowIntegrationTest {
         assertTrue(callback.isSuccess());
     }
 
-    private void assertConfigured(String value, String propertyName) {
-        assumeTrue(value != null && !value.isBlank(), propertyName + " must be configured for PayMob iframe integration test");
+    private static void respondCreated(HttpExchange exchange, String body) throws IOException {
+        exchange.getRequestBody().readAllBytes();
+        byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(201, payload.length);
+        try (var responseBody = exchange.getResponseBody()) {
+            responseBody.write(payload);
+        }
     }
 
     private PayMobTransactionCallbackRequest buildValidCallbackRequest(int providerOrderId) {

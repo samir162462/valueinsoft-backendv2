@@ -11,6 +11,7 @@ import com.example.valueinsoftbackend.notification.control.NotificationComponent
 import com.example.valueinsoftbackend.notification.scheduler.NotificationWorkSignal;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,13 +34,13 @@ public class NotificationDeliveryResultService {
                                              DbNotificationDevice devices,
                                              NotificationBackoffPolicy backoff,
                                              MeterRegistry meters,
-                                             NotificationWorkSignal workSignal) {
+                                             ObjectProvider<NotificationWorkSignal> workSignalProvider) {
         this.outbox = outbox;
         this.attempts = attempts;
         this.devices = devices;
         this.backoff = backoff;
         this.meters = meters;
-        this.workSignal = workSignal;
+        this.workSignal = workSignalProvider.getIfAvailable();
     }
 
     NotificationDeliveryResultService(DbNotificationPushOutbox outbox,
@@ -47,7 +48,12 @@ public class NotificationDeliveryResultService {
                                       DbNotificationDevice devices,
                                       NotificationBackoffPolicy backoff,
                                       MeterRegistry meters) {
-        this(outbox, attempts, devices, backoff, meters, null);
+        this.outbox = outbox;
+        this.attempts = attempts;
+        this.devices = devices;
+        this.backoff = backoff;
+        this.meters = meters;
+        this.workSignal = null;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
