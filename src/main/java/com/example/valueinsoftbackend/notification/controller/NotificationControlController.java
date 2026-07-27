@@ -1,11 +1,12 @@
 package com.example.valueinsoftbackend.notification.controller;
 
 import com.example.valueinsoftbackend.ExceptionPack.ApiException;
-import com.example.valueinsoftbackend.Service.security.AuthorizationService;
+import com.example.valueinsoftbackend.Service.platform.PlatformAuthorizationService;
 import com.example.valueinsoftbackend.notification.config.NotificationProperties;
 import com.example.valueinsoftbackend.notification.control.NotificationComponent;
 import com.example.valueinsoftbackend.notification.control.NotificationControlPreset;
 import com.example.valueinsoftbackend.notification.control.NotificationControlService;
+import com.example.valueinsoftbackend.notification.control.NotificationOperatingWindowService;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationControl;
 import com.example.valueinsoftbackend.notification.scheduler.NotificationTaskScheduler;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -51,20 +53,23 @@ public class NotificationControlController {
     private static final String TOGGLE_MODULE = "notification.control.toggle.module";
 
     private final NotificationProperties properties;
-    private final AuthorizationService authorization;
+    private final PlatformAuthorizationService platformAuthorization;
     private final ObjectProvider<NotificationControlService> controlProvider;
     private final ObjectProvider<NotificationTaskScheduler> schedulerProvider;
+    private final ObjectProvider<NotificationOperatingWindowService> operatingWindowProvider;
     private final DbNotificationControl repository;
 
     public NotificationControlController(NotificationProperties properties,
-                                         AuthorizationService authorization,
+                                         PlatformAuthorizationService platformAuthorization,
                                          ObjectProvider<NotificationControlService> controlProvider,
                                          ObjectProvider<NotificationTaskScheduler> schedulerProvider,
+                                         ObjectProvider<NotificationOperatingWindowService> operatingWindowProvider,
                                          DbNotificationControl repository) {
         this.properties = properties;
-        this.authorization = authorization;
+        this.platformAuthorization = platformAuthorization;
         this.controlProvider = controlProvider;
         this.schedulerProvider = schedulerProvider;
+        this.operatingWindowProvider = operatingWindowProvider;
         this.repository = repository;
     }
 
@@ -111,6 +116,12 @@ public class NotificationControlController {
     public List<DbNotificationControl.ControlState> audit(Principal principal) {
         requireCapability(principal, VIEW);
         return repository.findAll();
+    }
+
+    @GetMapping("/operating-window")
+    public NotificationOperatingWindowService.WindowView operatingWindow(Principal principal) {
+        requireCapability(principal, VIEW);
+        return requireOperatingWindow().view();
     }
 
     // ── Write ──────────────────────────────────────────────────────────────
@@ -216,6 +227,20 @@ public class NotificationControlController {
         return requireControl().resyncFromDatabase();
     }
 
+    @PutMapping("/operating-window")
+    public NotificationOperatingWindowService.WindowView updateOperatingWindow(
+            Principal principal,
+            @Valid @RequestBody OperatingWindowRequest body) {
+        requireCapability(principal, TOGGLE_COMPONENT);
+        try {
+            return requireOperatingWindow().update(
+                    body.enabled(), body.quietStart(), body.quietEnd(), body.timezone());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "NOTIFICATION_OPERATING_WINDOW_INVALID", exception.getMessage());
+        }
+    }
+
     // ── Plumbing ───────────────────────────────────────────────────────────
 
     private NotificationComponent parseComponent(String key) {
@@ -237,12 +262,23 @@ public class NotificationControlController {
         return control;
     }
 
+    private NotificationOperatingWindowService requireOperatingWindow() {
+        NotificationOperatingWindowService operatingWindow =
+                operatingWindowProvider.getIfAvailable();
+        if (operatingWindow == null) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "NOTIFICATION_OPERATING_WINDOW_UNAVAILABLE",
+                    "The notification resource saver is not active on this instance");
+        }
+        return operatingWindow;
+    }
+
     private void requireCapability(Principal principal, String capability) {
         if (!properties.isEnabled()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
                     "NOTIFICATION_DISABLED", "Notification module is disabled at tier 0");
         }
-        authorization.assertAuthenticatedCapability(principalName(principal), null, null, capability);
+        platformAuthorization.requirePlatformCapability(principalName(principal), capability);
     }
 
     private static String principalName(Principal principal) {
@@ -301,6 +337,14 @@ public class NotificationControlController {
             @Size(max = 500) String reason,
             /** Must be the literal "STOP" for a preset that loses notifications. */
             @Size(max = 20) String confirmation
+    ) {
+    }
+
+    public record OperatingWindowRequest(
+            boolean enabled,
+            @Size(min = 5, max = 8) String quietStart,
+            @Size(min = 5, max = 8) String quietEnd,
+            @Size(min = 1, max = 100) String timezone
     ) {
     }
 }

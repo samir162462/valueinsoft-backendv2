@@ -32,6 +32,25 @@ public interface NotificationWorkerTask {
     /** One unit of work. Exceptions are logged by the scheduler and do not unschedule the task. */
     void runCycle();
 
+    /**
+     * Queue consumers opt into wake/drain/park operation. Periodic maintenance tasks keep their
+     * ordinary fixed-delay schedule outside the operating quiet window.
+     */
+    default boolean eventDriven() {
+        return false;
+    }
+
+    /**
+     * Runs one event-driven drain cycle.
+     *
+     * @return true when the worker filled its bounded batch and should remain armed; false when
+     *         it observed an empty/partially drained queue and may park until the next signal.
+     */
+    default boolean runEventDrivenCycle() {
+        runCycle();
+        return true;
+    }
+
     /** Stable name for logs and the {@code notification.worker.parked} gauge. */
     default String workerName() {
         return component().key();

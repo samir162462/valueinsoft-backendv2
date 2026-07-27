@@ -40,6 +40,16 @@ vls.whatsapp.encryption-key=CHANGE_ME_32_BYTE_KEY
 # credentials configured is harmless (providers stay disabled) but pointless.
 valueinsoft.notification.enabled=false
 
+# --- Resource-saving worker mode -------------------------------------
+# FANOUT and DISPATCH wake through Redis, drain their queues, then park.
+# The platform quiet window parks every notification database worker while
+# business events remain durably queued for delivery when the window ends.
+valueinsoft.notification.resource-saver.event-driven=true
+valueinsoft.notification.resource-saver.quiet-window-enabled=false
+valueinsoft.notification.resource-saver.quiet-start=22:00
+valueinsoft.notification.resource-saver.quiet-end=07:00
+valueinsoft.notification.resource-saver.timezone=Africa/Cairo
+
 # --- FCM HTTP v1 -----------------------------------------------------
 # Create a service account with the "Firebase Cloud Messaging API Admin" role,
 # download its JSON key, then base64 it as a single line:

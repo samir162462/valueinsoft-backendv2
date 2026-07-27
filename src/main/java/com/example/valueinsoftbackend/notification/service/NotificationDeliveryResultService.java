@@ -7,12 +7,16 @@ import com.example.valueinsoftbackend.notification.provider.PushProviderResponse
 import com.example.valueinsoftbackend.notification.repository.DbNotificationDeliveryAttempt;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationDevice;
 import com.example.valueinsoftbackend.notification.repository.DbNotificationPushOutbox;
+import com.example.valueinsoftbackend.notification.control.NotificationComponent;
+import com.example.valueinsoftbackend.notification.scheduler.NotificationWorkSignal;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.time.Duration;
 
 @Service
 public class NotificationDeliveryResultService {
@@ -21,17 +25,29 @@ public class NotificationDeliveryResultService {
     private final DbNotificationDevice devices;
     private final NotificationBackoffPolicy backoff;
     private final MeterRegistry meters;
+    private final NotificationWorkSignal workSignal;
 
+    @Autowired
     public NotificationDeliveryResultService(DbNotificationPushOutbox outbox,
                                              DbNotificationDeliveryAttempt attempts,
                                              DbNotificationDevice devices,
                                              NotificationBackoffPolicy backoff,
-                                             MeterRegistry meters) {
+                                             MeterRegistry meters,
+                                             NotificationWorkSignal workSignal) {
         this.outbox = outbox;
         this.attempts = attempts;
         this.devices = devices;
         this.backoff = backoff;
         this.meters = meters;
+        this.workSignal = workSignal;
+    }
+
+    NotificationDeliveryResultService(DbNotificationPushOutbox outbox,
+                                      DbNotificationDeliveryAttempt attempts,
+                                      DbNotificationDevice devices,
+                                      NotificationBackoffPolicy backoff,
+                                      MeterRegistry meters) {
+        this(outbox, attempts, devices, backoff, meters, null);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -53,6 +69,10 @@ public class NotificationDeliveryResultService {
                             ? response.body()
                             : response.transportError().getClass().getSimpleName(),
                     delay);
+            if (!dead && workSignal != null) {
+                workSignal.signalAfterCommit(
+                        NotificationComponent.DISPATCH, Duration.ofSeconds(delay));
+            }
             applyDeviceAction(device, decision);
         }
         meters.counter("notification.push.result",
@@ -73,6 +93,10 @@ public class NotificationDeliveryResultService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void requeue(PushOutboxItem item, String reason, int delaySeconds) {
         outbox.requeueWithoutAttempt(item, reason, delaySeconds);
+        if (workSignal != null) {
+            workSignal.signalAfterCommit(
+                    NotificationComponent.DISPATCH, Duration.ofSeconds(delaySeconds));
+        }
     }
 
     private void applyDeviceAction(NotificationDevice device,

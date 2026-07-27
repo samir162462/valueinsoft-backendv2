@@ -61,6 +61,16 @@ public class NotificationDispatchWorker implements NotificationWorkerTask {
 
     @Override
     public synchronized void runCycle() {
+        runEventDrivenCycle();
+    }
+
+    @Override
+    public boolean eventDriven() {
+        return true;
+    }
+
+    @Override
+    public synchronized boolean runEventDrivenCycle() {
         if (preflightRequired) {
             partitionMaintenance.runCycle();
             preflightRequired = false;
@@ -78,7 +88,7 @@ public class NotificationDispatchWorker implements NotificationWorkerTask {
                 properties.getDispatch().getClaimBatchSize(),
                 allowance);
         if (batchSize == 0) {
-            return;
+            return true;
         }
         var claimed = transactions.execute(status -> outbox.claim(
                 batchSize, workerId, properties.getDispatch().getLeaseSeconds()));
@@ -86,6 +96,7 @@ public class NotificationDispatchWorker implements NotificationWorkerTask {
             claimedInRateWindow += claimed.size();
             claimed.forEach(dispatch::dispatch);
         }
+        return claimed != null && claimed.size() == batchSize;
     }
 
     private void controlChanged() {

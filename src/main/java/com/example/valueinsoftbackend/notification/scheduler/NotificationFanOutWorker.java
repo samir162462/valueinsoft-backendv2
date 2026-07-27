@@ -16,13 +16,16 @@ import java.util.UUID;
 public class NotificationFanOutWorker implements NotificationWorkerTask {
     private final NotificationFanOutService service;
     private final NotificationProperties properties;
+    private final NotificationWorkSignal workSignal;
     private final String workerId = ManagementFactory.getRuntimeMXBean().getName()
             + ":" + UUID.randomUUID();
 
     public NotificationFanOutWorker(NotificationFanOutService service,
-                                    NotificationProperties properties) {
+                                    NotificationProperties properties,
+                                    NotificationWorkSignal workSignal) {
         this.service = service;
         this.properties = properties;
+        this.workSignal = workSignal;
     }
 
     @Override
@@ -37,7 +40,18 @@ public class NotificationFanOutWorker implements NotificationWorkerTask {
 
     @Override
     public void runCycle() {
+        runEventDrivenCycle();
+    }
+
+    @Override
+    public boolean eventDriven() {
+        return true;
+    }
+
+    @Override
+    public boolean runEventDrivenCycle() {
         int remaining = properties.getFanOut().getClaimBatchSize();
+        int processed = 0;
         for (long companyId : service.tenantIds()) {
             while (remaining > 0) {
                 var claimed = service.claimAndDecide(companyId, workerId);
@@ -45,11 +59,14 @@ public class NotificationFanOutWorker implements NotificationWorkerTask {
                     break;
                 }
                 service.materialize(claimed.get());
+                workSignal.signal(NotificationComponent.DISPATCH);
                 remaining--;
+                processed++;
             }
             if (remaining == 0) {
-                return;
+                return true;
             }
         }
+        return processed == properties.getFanOut().getClaimBatchSize();
     }
 }
