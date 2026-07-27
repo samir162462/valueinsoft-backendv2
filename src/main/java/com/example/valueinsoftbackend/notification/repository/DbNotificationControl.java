@@ -125,6 +125,35 @@ public class DbNotificationControl {
                         rs.getLong("control_version")));
     }
 
+    public List<ControlAudit> findAudit(int limit) {
+        return jdbc.query(
+                """
+                SELECT audit_id, scope, component_key, from_enabled, to_enabled,
+                       from_suppression, to_suppression, reason, disabled_until,
+                       actor_user_id, actor_ip::text AS actor_ip, control_version,
+                       queue_depth_at_change, occurred_at
+                FROM public.notification_control_audit
+                ORDER BY occurred_at DESC, audit_id DESC
+                LIMIT :limit
+                """,
+                new MapSqlParameterSource("limit", Math.max(1, Math.min(limit, 500))),
+                (rs, rowNum) -> new ControlAudit(
+                        rs.getLong("audit_id"),
+                        rs.getString("scope"),
+                        rs.getString("component_key"),
+                        (Boolean) rs.getObject("from_enabled"),
+                        rs.getBoolean("to_enabled"),
+                        rs.getString("from_suppression"),
+                        rs.getString("to_suppression"),
+                        rs.getString("reason"),
+                        rs.getObject("disabled_until", OffsetDateTime.class),
+                        rs.getInt("actor_user_id"),
+                        rs.getString("actor_ip"),
+                        rs.getLong("control_version"),
+                        (Integer) rs.getObject("queue_depth_at_change"),
+                        rs.getObject("occurred_at", OffsetDateTime.class)));
+    }
+
     private record PreviousState(boolean enabled, String suppressionMode) {
     }
 
@@ -136,5 +165,21 @@ public class DbNotificationControl {
                                OffsetDateTime disabledUntil,
                                int changedByUserId,
                                long controlVersion) {
+    }
+
+    public record ControlAudit(long auditId,
+                               String scope,
+                               String componentKey,
+                               Boolean fromEnabled,
+                               boolean toEnabled,
+                               String fromSuppression,
+                               String toSuppression,
+                               String reason,
+                               OffsetDateTime disabledUntil,
+                               int actorUserId,
+                               String actorIp,
+                               long controlVersion,
+                               Integer queueDepthAtChange,
+                               OffsetDateTime occurredAt) {
     }
 }

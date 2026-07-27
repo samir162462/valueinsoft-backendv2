@@ -15,6 +15,7 @@ import jakarta.validation.constraints.Size;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * The control plane API behind the platform-admin control screen (NC-7.18, §16.8).
@@ -113,9 +115,9 @@ public class NotificationControlController {
     }
 
     @GetMapping("/audit")
-    public List<DbNotificationControl.ControlState> audit(Principal principal) {
+    public List<DbNotificationControl.ControlAudit> audit(Principal principal) {
         requireCapability(principal, VIEW);
-        return repository.findAll();
+        return repository.findAudit(100);
     }
 
     @GetMapping("/operating-window")
@@ -145,6 +147,15 @@ public class NotificationControlController {
                     "NOTIFICATION_CONTROL_NOT_SWITCHABLE",
                     component.key() + " cannot be disabled — something has to be able to turn "
                             + "the system back on");
+        }
+        if ((component == NotificationComponent.MODULE
+                || component == NotificationComponent.PUBLISH)
+                && !body.enabled()
+                && !"STOP".equals(body.confirmation())) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "NOTIFICATION_CONTROL_CONFIRMATION_REQUIRED",
+                    "Disabling MODULE or PUBLISH loses notifications raised while it is off. "
+                            + "Type STOP to confirm.");
         }
 
         try {
@@ -241,6 +252,69 @@ public class NotificationControlController {
         }
     }
 
+    @PostMapping("/shutdown-schedules")
+    public NotificationOperatingWindowService.ScheduleView createShutdownSchedule(
+            Principal principal,
+            @RequestBody NotificationOperatingWindowService.ScheduleRequest body) {
+        requireCapability(principal, TOGGLE_COMPONENT);
+        try {
+            return requireOperatingWindow().create(body, 0);
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "NOTIFICATION_SHUTDOWN_SCHEDULE_INVALID", exception.getMessage());
+        }
+    }
+
+    @PutMapping("/shutdown-schedules/{scheduleUuid}")
+    public NotificationOperatingWindowService.ScheduleView updateShutdownSchedule(
+            Principal principal,
+            @PathVariable UUID scheduleUuid,
+            @RequestBody NotificationOperatingWindowService.ScheduleRequest body) {
+        requireCapability(principal, TOGGLE_COMPONENT);
+        try {
+            NotificationOperatingWindowService.ScheduleView updated =
+                    requireOperatingWindow().update(scheduleUuid, body, 0);
+            if (updated == null) {
+                throw new ApiException(HttpStatus.NOT_FOUND,
+                        "NOTIFICATION_SHUTDOWN_SCHEDULE_NOT_FOUND",
+                        "Shutdown schedule was not found: " + scheduleUuid);
+            }
+            return updated;
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "NOTIFICATION_SHUTDOWN_SCHEDULE_INVALID", exception.getMessage());
+        }
+    }
+
+    @DeleteMapping("/shutdown-schedules/{scheduleUuid}")
+    public void deleteShutdownSchedule(
+            Principal principal,
+            @PathVariable UUID scheduleUuid) {
+        requireCapability(principal, TOGGLE_COMPONENT);
+        try {
+            if (!requireOperatingWindow().delete(scheduleUuid)) {
+                throw new ApiException(HttpStatus.NOT_FOUND,
+                        "NOTIFICATION_SHUTDOWN_SCHEDULE_NOT_FOUND",
+                        "Shutdown schedule was not found: " + scheduleUuid);
+            }
+        } catch (IllegalStateException exception) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "NOTIFICATION_SHUTDOWN_SCHEDULE_INVALID", exception.getMessage());
+        }
+    }
+
+    @PostMapping("/shutdown-schedules/resync")
+    public List<NotificationOperatingWindowService.ScheduleView> resyncShutdownSchedules(
+            Principal principal) {
+        requireCapability(principal, TOGGLE_COMPONENT);
+        try {
+            return requireOperatingWindow().resyncSchedulesFromDatabase();
+        } catch (IllegalStateException exception) {
+            throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "NOTIFICATION_SHUTDOWN_SCHEDULE_RESYNC_FAILED", exception.getMessage());
+        }
+    }
+
     // ── Plumbing ───────────────────────────────────────────────────────────
 
     private NotificationComponent parseComponent(String key) {
@@ -329,7 +403,8 @@ public class NotificationControlController {
             boolean enabled,
             @Size(max = 20) String suppressionMode,
             @Size(max = 500) String reason,
-            OffsetDateTime disabledUntil
+            OffsetDateTime disabledUntil,
+            @Size(max = 20) String confirmation
     ) {
     }
 
